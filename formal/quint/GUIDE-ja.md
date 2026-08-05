@@ -14,6 +14,7 @@
 | `WitnessQuorum.qnt` | witness quorumの型、状態、action、property |
 | `WitnessQuorumModels.qnt` | safety/liveness構成とproducer/rosterのRed構成 |
 | `WitnessQuorumTests.qnt` | quorum、intruder、expiryの実行可能scenario |
+| `WitnessQuorumMbt.qnt` | 実Ed25519 MoonBit認証gateへ再生する決定的なITF trace driver |
 | `ConfigContracts.qnt` | 許可しない定数構成 |
 | `check*.sh` | scenario、正常検証、Red反例、設定契約をCIへ接続するscript |
 
@@ -90,6 +91,7 @@ import/flatten/TLC経路では`assume`だけでは無効構成がTLCの検査対
 just quint-scenarios
 just quint-config-contracts
 just quint-mbt
+just quint-witness-mbt
 just quint-check
 just quint-counterexamples
 just formal-check

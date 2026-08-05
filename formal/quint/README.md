@@ -23,7 +23,7 @@ bounded/inductive safetyへ選択的に使い、TLCのliveness gateとは区別�
 - `CheckpointDelivery.qnt` / `WitnessQuorum.qnt`: protocol本体とproperty
 - `*Models.qnt`: 正常構成とRed構成
 - `*Tests.qnt`: 代表的な正常・guard scenario
-- `CheckpointDeliveryMbt.qnt`: 実装へ再生する決定的なmodel-based testing trace
+- `CheckpointDeliveryMbt.qnt` / `WitnessQuorumMbt.qnt`: 実装へ再生する決定的なMBT trace
 - `ConfigContracts.qnt`: 許可しない定数構成
 - `check*.sh`: Quint CLIとCIの接続
 
@@ -126,6 +126,14 @@ outbox capacityは1である。したがって、epoch 1のACKが配送容量を
 残しても容量を消費しない」という意味を固定する。任意traceのrefinement proofではなく、crash、
 再送、ACK、容量再利用を横断する決定的なconformance testである。
 
+`WitnessQuorumMbt.qnt`は、有効なintruder応答、不正なroster witness署名、W1/W2/W3の正直な
+distinct approval、receiver advanceを12 stateで通過する。replayerは抽象的な`valid`を実Ed25519
+署名へ具体化し、MoonBitの汎用delivery authentication gateが順に`unknown_witness`、
+`invalid_witness_signature`、`under_quorum`、3承認成功を返すことを比較する。
+
+witness MBTは認証gateの射影であり、network soup自体やcollection SQLite、deadline、rate limitを
+実装へ再生するものではない。それらはWorkers integration testの責務として分離する。
+
 ## Apalache smoke
 
 Quint既定のApalache backendは、witness safety最大5 stepsで反例なし、producer署名gateを
@@ -142,6 +150,7 @@ just formal-check
 just quint-config-contracts
 just quint-scenarios
 just quint-mbt
+just quint-witness-mbt
 just quint-check
 just quint-counterexamples
 just quint-apalache-smoke
@@ -151,7 +160,8 @@ just quint-docs
 `quint-check`はtypecheck後、正常4構成をTLC backendと名前付きinvariantで検査する。
 `quint-scenarios`は6件の実行可能な代表traceを検査する。`quint-config-contracts`は無効な
 定数構成3件を拒否する。
-`quint-mbt`はITF traceを生成し、MoonBit policy + Node SQLiteへ再生する。
+`quint-mbt`はcheckpoint ITF traceをMoonBit policy + Node SQLiteへ再生し、
+`quint-witness-mbt`はwitness ITF traceを実暗号MoonBit認証gateへ再生する。
 `quint-counterexamples`はRed 7構成を検査する。`quint-apalache-smoke`はbounded checkで、
 authoritativeな`formal-check`には含めない。
 

@@ -424,6 +424,7 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | checkpoint transportの有限safety/liveness | Quint/TLC、bounded outbox込み11,340 distinct states | Model checked、capacity gate除去で反例 |
 | checkpoint traceの実装conformance | Quint ITFをMoonBit policy + Node SQLiteへstep replayし、event/head/未ACK outbox/authority射影を比較 | Deterministic MBT Tested |
 | witness collectionの有限safety/liveness | Quint/TLC、4 roster + 1 intruder、safety 30,720 / liveness 19,456 distinct states | Model checked |
+| witness認証gateの実装conformance | Quint ITFを実Ed25519 MoonBit delivery authenticationへstep replayし、accepted roster/status/receiver射影を比較 | Deterministic MBT Tested |
 | authority DB crash/restore | Durable Object local testのみ、Quint範囲外 | Partial |
 
 管理者限定の`x-audit-checkpoint-dispatch: deferred`はfault injectionとQueue互換試験だけに使う。
@@ -476,7 +477,7 @@ source独立性や全地域SLAと同一視してはならない。
 | model question | process-local runtimeを失った状態から、durable outboxだけでhistorical Duplicate ACKを回収できるか |
 | machine result | production tailで未初期化例外を観測。dispatch入口へruntime loadを移した後、同一entryはattempt 4の`Duplicate`で自動回復し、続くremote 20 runは20/20 `Accepted` |
 | decision | runtime初期化はHTTP handlerではなく、alarmを含む全checkpoint dispatchのpreconditionにする。ロード関数が返すbranded `LoadedCheckpointRuntime` capabilityをseal、receiver認証、witness収集、ACK gateの必須引数にする |
-| lock | TypeScript capability contract、偽造tokenを3同期gateで拒否するtest、direct dispatch integration test、42 Worker tests、remote direct/deferred ACK artifacts |
+| lock | TypeScript capability contract、偽造tokenを3同期gateで拒否するtest、direct dispatch integration test、43 Worker tests、remote direct/deferred ACK artifacts |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -503,7 +504,7 @@ source独立性や全地域SLAと同一視してはならない。
 | model question | durable lease中のrestart、1成功+1未認証/失敗、1成功+1署名済みforkで、backpressure・fair retry・fork evidenceは期待どおり残るか |
 | machine result | Node loopback 7 testsでMoonBit JS選択、2並列上限、restart lease、期限後retry、success/failure永続化、oversize拒否、署名済みfork quarantineを確認した。`timeout > lease`は構築時拒否に固定し、fork evidenceとquarantineの不一致はrestart時に破損として拒否した |
 | decision | route/lease/evidenceをSQLite state、選択/遷移をMoonBit policy、HTTPを交換可能I/Oへ分離する。HTTP到達や未認証bytesだけでcheat判定しない |
-| lock | `peer-checkpoint-transport.node-test.ts` 7 tests、Node package合計16 tests、`just test-node-audit-runtime`。Quint抽象への実装refinement testでありHTTP stack自体のmodel checkではない |
+| lock | `peer-checkpoint-transport.node-test.ts` 7 tests、Node package合計17 tests、`just test-node-audit-runtime`。Quint抽象への実装refinement testでありHTTP stack自体のmodel checkではない |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -522,6 +523,15 @@ source独立性や全地域SLAと同一視してはならない。
 | machine result | capacity 1のITF replayがepoch 2 sealで`concurrent_write`を再現した。未ACK countへ修正後、11 stateをMoonBit + SQLiteへ完走し、WorkersでもACK済み2 rowを保持したままhead epoch 1へ進んだ |
 | decision | `outbox_entry_count = pending + in_flight`とし、acknowledged履歴のretention上限を配送capacityから分離する |
 | lock | `just quint-mbt`、MoonBit/Node capacity reuse回帰test、Cloudflare direct ACK 2世代integration test |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | Quint `WitnessQuorum`はvalid roster responseだけをdistinct approvalへ加え、producer認証済みquorum以外でreceiverを進めない |
+| implementation observation | modelの抽象`response.valid`と実Ed25519の具体的なrefusal codeの対応はmodel checkとunit testの間で明示されていなかった |
+| model question | validなintruder、不正なroster署名、正直なW1/W2/W3を同じ順序で処理したとき、accepted setとreceiver gateは一致するか |
+| machine result | 12 stateのITF replayで順に`unknown_witness`、`invalid_witness_signature`、2回の`under_quorum`、3承認成功を得て、Quintのaccepted roster/status/receiver射影と一致した |
+| decision | Quintの`valid roster response`を「exact statementに対するprovision済みkeyの署名検証成功」へ具体化する。network、expiry、rate limitはこの射影外としてWorkers testへ残す |
+| lock | `WitnessQuorumMbt.qnt`、`quint-witness-mbt.ts`、`just quint-witness-mbt`を`formal-check`へ組み込む |
 
 ## 12. 受入テスト
 

@@ -5,9 +5,11 @@
   "scripts": {
     "build:moon": "moon build --target js --release",
     "pretest": "pnpm run build:moon",
+    "pretest:quint-witness-mbt": "pnpm run build:moon",
     "predeploy": "pnpm run build:moon",
     "predeploy:dry": "pnpm run build:moon",
     "test": "vitest run",
+    "test:quint-witness-mbt": "node scripts/quint-witness-mbt.ts",
     "typecheck": "tsc --noEmit",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

@@ -110,6 +110,16 @@ pnpm witness -- pvp <unit> <collection-id> <witness-id>
 このbridgeは`experimental_crypto`を使う未監査のreferenceであり、authority Worker routeへseedを
 送るAPIではない。本番では端末keystore/HSMと監査済み署名backendへ置換する。
 
+Quintのwitness protocolとの対応は、決定的なITF traceを実Ed25519 MoonBit認証gateへ再生して
+検査できる。intruder、不正署名、under-quorum、3 distinct approval、receiver gateを順に通す。
+
+```sh
+just quint-witness-mbt
+```
+
+これは認証gateのconformance testであり、SQLite collection、deadline、rate limit、network I/Oは
+通常のWorkers integration testで検査する。
+
 中央replayは全headを送らず、次だけをQueueへ送る。
 
 | mode | 明示reason | 自動reason |

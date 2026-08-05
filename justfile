@@ -92,6 +92,10 @@ quint-scenarios:
 quint-mbt:
   nix develop path:. --command sh formal/quint/check-mbt.sh
 
+# Replay a witness Quint trace against the real-crypto MoonBit authentication gate
+quint-witness-mbt:
+  nix develop path:. --command sh formal/quint/check-witness-mbt.sh
+
 # Render reference documentation from Quint docstrings
 quint-docs:
   nix develop path:. --command quint docs formal/quint/CheckpointDelivery.qnt
@@ -106,7 +110,7 @@ quint-apalache-smoke:
   nix develop path:. --command sh formal/quint/check-apalache-smoke.sh
 
 # Verify every authoritative protocol model and load-bearing guard
-formal-check: quint-config-contracts quint-scenarios quint-mbt quint-check quint-counterexamples
+formal-check: quint-config-contracts quint-scenarios quint-mbt quint-witness-mbt quint-check quint-counterexamples
 
 # Build WASM-GC
 build:
