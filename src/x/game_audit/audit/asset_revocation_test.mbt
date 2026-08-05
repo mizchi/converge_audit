@@ -1,0 +1,80 @@
+///|
+test "listing requires a clean authenticated asset lineage" {
+  assert_true(
+    asset_lineage_use_allowed(
+      creation_verified=true,
+      current_head_verified=true,
+      open_revocations=0,
+    ),
+  )
+  assert_false(
+    asset_lineage_use_allowed(
+      creation_verified=true,
+      current_head_verified=true,
+      open_revocations=1,
+    ),
+  )
+  assert_false(
+    asset_lineage_use_allowed(
+      creation_verified=false,
+      current_head_verified=true,
+      open_revocations=0,
+    ),
+  )
+  assert_false(
+    asset_lineage_use_allowed(
+      creation_verified=true,
+      current_head_verified=false,
+      open_revocations=0,
+    ),
+  )
+}
+
+///|
+test "lineage decisions require an exact monotonic ancestor head" {
+  assert_true(
+    asset_lineage_decision_allowed(
+      asset_exists=true,
+      ancestor_in_lineage=true,
+      expected_decision_matches=true,
+      revision_advances=true,
+      decision_changes_status=true,
+    ),
+  )
+  assert_false(
+    asset_lineage_decision_allowed(
+      asset_exists=true,
+      ancestor_in_lineage=false,
+      expected_decision_matches=true,
+      revision_advances=true,
+      decision_changes_status=true,
+    ),
+  )
+  assert_false(
+    asset_lineage_decision_allowed(
+      asset_exists=true,
+      ancestor_in_lineage=true,
+      expected_decision_matches=false,
+      revision_advances=true,
+      decision_changes_status=true,
+    ),
+  )
+  assert_false(
+    asset_lineage_decision_allowed(
+      asset_exists=true,
+      ancestor_in_lineage=true,
+      expected_decision_matches=true,
+      revision_advances=false,
+      decision_changes_status=true,
+    ),
+  )
+  assert_false(
+    asset_lineage_decision_allowed(
+      asset_exists=true,
+      ancestor_in_lineage=true,
+      expected_decision_matches=true,
+      revision_advances=true,
+      decision_changes_status=false,
+    ),
+  )
+}

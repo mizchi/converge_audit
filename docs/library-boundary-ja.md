@@ -51,6 +51,7 @@ deployment policyである。
 | `x/game_audit/replay`, `pvp_session`, `open_world` | ゲーム固有 | 状態遷移と合法性を解釈する |
 | `x/game_audit/inventory`, `market` | 実験的domain | asset生成・所有・出品規則を持つ |
 | `x/game_audit/wire`, `crypto`, `worker` | ゲームadapter | bundle schema、暗号backend、deploy用compositionを持つ |
+| `x/game_audit/quint_asset_driver` | 検証adapter | `quint_connect`のITFをgame asset policyへ射影する。runtime dependencyではない |
 
 inventory/marketは将来`x/provenance`へ分けられる可能性があるが、現時点では第2の独立した
 利用例がなく、game replay型にも依存するため安定した監査coreへ昇格させない。
@@ -100,6 +101,7 @@ protocol`または「検証可能なcheckpoint監査基盤」と呼ぶ。
 | vote競合が順序非依存にequivocationへ収束する | `src/audit/quorum` test | bounded実装テスト |
 | delivery capabilityは全trust factsを要求する | `src/audit/runtime_contract.mbtp`, `audit/delivery_auth` | predicate証明 + 実装テスト |
 | game actionが合法である | `src/x/game_audit/replay`以下 | gameごとの実装・テスト |
+| asset modelとMoonBit policyの観測状態が一致する | `AssetOwnershipModels.qnt` + `quint_asset_driver` | seed固定32 trace / 288 stateのMBT。storage refinementではない |
 
 Quintではcryptographic verificationをBooleanへ抽象化しており、暗号強度やSQLite/HTTPの
 実装そのものをmodel checkedしたとは主張しない。
@@ -120,6 +122,6 @@ game Workerは既存Cloudflare API互換のcomposition endpointを維持する�
 | source | `mizchi/converge`のCRDT coreを保ちつつ、敵対環境向けevent認証とcheckpoint監査を再利用可能にしたい |
 | observation | coreから監査層への逆依存はなく、audit adapterだけが`mizchi/converge/types`を必要とする |
 | model question | package identityと配置だけを変え、既存の安全性・liveness contractを保存できるか |
-| machine result | 307 MoonBit tests、200 proof goals、Quint/TLC正常4/破損7 module、Node 16 tests、Cloudflare 42 testsが移動後も通過 |
+| machine result | MoonBit test/proof、Quint/TLC正常・破損model、Node/Cloudflare integration suiteが移動後も通過 |
 | decision | mechanismをcompanion module `mizchi/converge_audit`へ抽出し、finalization/replay/trust値は`x/game_audit`へ残す |
 | lock | `just check-audit-boundary`, `moon test`, `just prove`, `just formal-check`, Node/Cloudflare adapter tests |

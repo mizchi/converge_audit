@@ -4,6 +4,10 @@ package "mizchi/converge_audit/x/game_audit/worker"
 // Values
 pub fn audit_acknowledge_checkpoint_outbox(Int, String, String, String, String, String, Int, String, String, Int, Int, String, String, String, String, String, Int, String, String, Bool) -> String
 
+pub fn audit_asset_lineage_decision_allowed(Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_asset_lineage_use_allowed(Bool, Bool, Int) -> Bool
+
 pub fn audit_benchmark_make_anchor_envelope(String, String, String, Int, String) -> String
 
 pub fn audit_benchmark_make_checkpoint_delivery_authentication(String, String, Array[String], Array[String], Int, Int, Int, String, String, String, String, String, Int, String, String, String) -> String

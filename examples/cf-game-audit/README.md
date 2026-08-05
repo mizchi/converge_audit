@@ -28,12 +28,58 @@ run固有Ed25519公開鍵はgenesisへcommitされ、item精算と`game-market-l
 `game-item-transfers`は旧ownerのhandoffと新ownerのacceptanceを同じ直前headへ署名し、per-asset owner versionを
 SQLite transactionで1だけ進める。current ownerだけが出品でき、active listing中のtransferは拒否する。
 `game-market-listing-cancellations`は出品時headに対するcurrent-owner署名を要求し、取消後はtransferを再許可する。
+管理者限定`game-asset-lineage-decisions`はorigin receiptまたは受理済みtransferをrevision付きで
+revoke/restoreする。未解決revocationはそのassetの全descendant listing/transferをfail-closedにし、
+active listingをtransaction内でquarantineする。appeal後もquarantine済みnonceは復活せず、fresh nonceを要求する。
 30Hz入力そのものは中央へ送らない。peer witnessとのowner head接続、価格精算は次段階である。詳細は
 [`docs/reference-hack-and-slash-game-ja.md`](../../docs/reference-hack-and-slash-game-ja.md)を参照する。
 
 UI変更は[VLMKit](https://mizchi.github.io/vlmkit/)向けの観測JSON、要求、locator制約を`specs/`に保存し、
 Playwrightで実ブラウザをgateする。LLM providerを設定した上で`pnpm ui:plan`、`pnpm ui:generate`を実行し、
 通常の回帰試験は`pnpm test:e2e`で再現できる。
+
+lineage decisionの管理API contractは次のとおり。`expected_revision`はancestorごとのCASで、初回は0、
+成功ごとに1進む。同じcanonical requestは同じ`decision_id`となり`duplicate`、古いrevisionは
+`stale_lineage_revision`、既に同じstatusなら`lineage_status_unchanged`になる。
+
+```http
+POST /v1/pve/:unit/game-asset-lineage-decisions
+Authorization: Bearer <ADMIN_TOKEN>
+Content-Type: application/json
+
+{
+  "asset_id": "...",
+  "ancestor_id": "<authority receipt id or accepted transfer id>",
+  "expected_revision": 0,
+  "outcome": "revoked",
+  "reason": "origin checkpoint challenge upheld"
+}
+```
+
+appealは同じendpointへ次revisionと`"outcome": "eligible"`を送る。API tokenは現状同一Cloudflare
+accountの管理境界であり、外部裁定者の署名certificateではない。
+
+open-worldの汎用inventoryは、同じCAS contractを次のendpointで使う。
+
+```http
+POST /v1/open/:unit/asset-lineage-decisions
+Authorization: Bearer <ADMIN_TOKEN>
+Content-Type: application/json
+
+{
+  "asset_id": "<verified asset id>",
+  "ancestor_id": "<asset id for origin, or current inventory checkpoint digest>",
+  "expected_revision": 0,
+  "outcome": "revoked",
+  "reason": "sample replay appealed"
+}
+```
+
+汎用側はverified originと現在の認証済みinventory headだけを裁定可能な祖先とする。未解決headを
+`(asset_id, status)` indexで数え、1件でもあればmarket listingと次headへの更新を拒否する。compact
+listing proofは中間transfer列を保持しないため、過去のinventory checkpointをtransfer祖先として
+送っても`ancestor_not_in_lineage`でfail-closedになる。中間transferのrevokeには認証済みtransition
+sliceまたはlineage proofの追加が必要である。
 
 ## Pattern mapping
 
@@ -68,7 +114,8 @@ SQLite tablesは`audit_config`、`anchor_head`、`anchor_history`、`anchor_fork
 送信元隔離用の`checkpoint_witness_source_windows`、reference game用の
 `reference_game_checkpoint_states`、`reference_game_item_receipts`、
 `reference_game_asset_ownership_heads`、`reference_game_item_transfers`、
-`reference_game_market_listings`、`reference_game_verification_source_windows`。gap endpointは
+`reference_game_market_listings`、`reference_game_asset_lineage_heads`、
+`reference_game_asset_lineage_decisions`、`reference_game_verification_source_windows`。gap endpointは
 保存済みhistoryから最大256 envelopeの連続pageだけを返す。
 
 checkpoint runtimeは、固定したboundary・初期head・必要destination集合・outbox容量に対して、
@@ -495,8 +542,10 @@ artifact:
 - reference gameのrun鍵seedはplayer-local IndexedDBへ保存する実験用custodyである。本番ではaccountへ登録した
   non-exportable keystore key、回復、rotation、失効へ置換する。
 - mode固有bundleの期待checkpointは現在、管理tokenで認証した要求に固定したdigestである。
-  current-owner proofとper-asset monotonic headは実装済み。transparency log headのremote witness、
-  private-key custody、ancestry revocation、multi-asset atomic head、pruningは未実装。
+  current-owner proof、per-asset monotonic head、reference PvEのorigin/transfer ancestry revocation、
+  汎用open-world inventoryのorigin/current-head revocationは実装済み。汎用側の中間transfer lineage proof、
+  transparency log headのremote witness、private-key custody、multi-asset atomic head、時間制appeal window、
+  pruningは未実装。
 - checkpoint outboxの直接DO RPC、lease/alarm retry、authority history、ACK保存はremote E2Eまで接続済み。
   Queue checkpoint consumerは後方互換経路として残す。敵対的peerからのproducer/witness署名はreceiver前の
   認証adapterへ接続済みだが、internal DO RPC自体は同一Cloudflare accountの認証済みchannelとして扱う。

@@ -80,9 +80,9 @@ just check-node-audit-runtime
 ```
 
 2026-08-05 時点で、汎用checkpoint policy/head/event-time/closure/ACK/atomic seal/delivery
-authenticationとvote semilatticeに39 goals、central replay artifact、公開PvP gate、
+authenticationとvote semilattice、およびcentral replay artifact、公開PvP gate、
 open-world transparency/中央検証、marketplace生成記録の永続化gateとcurrent-owner inventory
-head gate、cooldown/objective、raid clearを含むgame auditに161 goals、計200 proof goals。
+head gate、cooldown/objective、raid clearを含む全proof obligationが成功している。
 FNV/mockに加えて
 experimental SHA-256/Ed25519 adapterを実測するが、未監査なのでproduction securityの
 根拠にはしない。test総数は実行時の`moon test`出力をsource of truthとする。

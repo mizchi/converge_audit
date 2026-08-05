@@ -238,7 +238,13 @@ owner/version整合をすべて満たす場合だけtransactionで更新する�
 originまたはtransferが後からreject/revokeされた場合、descendant ownershipとlisting eligibilityを
 無効化し、appeal結果に応じて再計算する。
 
-状態: `Pending`。現状の`eligible`は完全なancestry保証ではない。
+状態: clean lineage predicateは`Proven`、revoke/appeal/listing quarantineの有限状態機械は
+`Model checked`。reference PvE Workerはorigin/transfer単位のrevision付きdecisionを履歴へ残し、
+未解決revocationを索引付きで判定してactive listingを同じtransactionでquarantineする。
+appeal後も旧nonceを自動復活させずfresh nonceを要求する経路まで`Tested locally`。
+汎用open-world inventoryもverified origin/current headに限り同じrevision付きdecision APIへ接続し、
+複数の未解決revokeがすべてappealされるまでlisting/head更新を拒否する経路が`Tested locally`。
+中間transferのlineage proof、外部裁定者の認証、appeal deadlineは`Pending`。
 
 ## 7. 永続化、配送、障害時動作
 
@@ -367,7 +373,7 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 1. 監査済みcrypto、key custody、rotation/revocation
 2. observer signing store、IndexedDB/mobile SQLite player DB、migration/fsync/暗号化at-rest
 3. remote witness/transparency socket fanoutと端末credential（pure retry/fork選択は実装済み）
-4. ancestry revocation、appeal window、multi-asset atomic checkpoint
+4. 汎用inventoryの中間transfer lineage proof、appeal window、multi-asset atomic checkpointを実装
 5. projectile/visibility、raid lootを含む実ゲームkernel完全化とmanifest/wire migration
 6. packet loss、partition、crash、Queue重複を含むfault-injection
 7. Quintモデルを複数authority shard、pruning/appealへ拡張（bounded outboxは完了）
@@ -380,12 +386,12 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 
 | source | expected claim | model/check | machine result | decision/lock |
 | --- | --- | --- | --- | --- |
-| `src/audit` | invalid policy、非exact head、late event、incomplete/conflicting closure、binding不一致ACK、非atomic seal、署名/quorum不足のdelivery、非収束vote mergeは受理不能 | MoonBit prove | 39 goals proved | `just prove-audit-core` |
-| `src/audit/runtime` | capabilityなしclosure、不完全seal、ACK不一致、local restart欠損、peer retry飢餓/fork raceを防ぐ | runtime contract | 20 tests passed | `just test-audit-runtime` |
-| `src/audit/layered` | arrival order/retryに依存せず、budget超過時は無変更 | runtime contract | 5 tests passed | `just test-audit-layered` |
-| `src/x/game_audit/audit` | game finality、replay、open-world、asset、cooldown/objective/raid clear gateがfail-closed | MoonBit prove | 161 goals proved | `just prove-game-audit` |
-| game runtime packages | game classifierと汎用classifierが等価 | bounded exhaustive test | 400 combinations passed | `moon test src/x/game_audit/policy` |
-| Cloudflare adapter | Queue成功だけでverifiedにならず、seal途中のfaultで部分commitせず、producer/witness認証失敗でsource/receiverを変更しない | workerd integration + pure metric/capability test | 42 tests passed | `pnpm --dir examples/cf-game-audit test` |
+| `src/audit` | invalid policy、非exact head、late event、incomplete/conflicting closure、binding不一致ACK、非atomic seal、署名/quorum不足のdelivery、非収束vote mergeは受理不能 | MoonBit prove | 全goal成功 | `just prove-audit-core` |
+| `src/audit/runtime` | capabilityなしclosure、不完全seal、ACK不一致、local restart欠損、peer retry飢餓/fork raceを防ぐ | runtime contract | 全suite成功 | `just test-audit-runtime` |
+| `src/audit/layered` | arrival order/retryに依存せず、budget超過時は無変更 | runtime contract | 全suite成功 | `just test-audit-layered` |
+| `src/x/game_audit/audit` | game finality、replay、open-world、asset、cooldown/objective/raid clear gateがfail-closed | MoonBit prove | 全goal成功 | `just prove-game-audit` |
+| game runtime packages | game classifierと汎用classifierが等価 | bounded exhaustive test | 全組合せsuite成功 | `moon test src/x/game_audit/policy` |
+| Cloudflare adapter | Queue成功だけでverifiedにならず、seal途中のfaultで部分commitせず、producer/witness認証失敗でsource/receiverを変更しない | workerd integration + pure metric/capability test | Worker/assets/Playwright suite成功 | `pnpm --dir examples/cf-game-audit test` |
 | checkpoint transport | durable bounded outbox、retry、exact-parentによりnetwork安定後authorityがlatest epochへ到達する | Quint/TLC、2 peer・2 epoch、crash/drop/partition | 11,340 distinct states、反例なし。capacity gateを外すbroken modelも反例 | `just formal-check` |
 | witness collection | producer/roster/quorum/expiry/fairnessなしにreadyやreceiver更新へ進まない | Quint/TLC、4 roster + 1 intruder | safety 30,720、liveness 19,456 distinct states、反例なし。2 broken gateは期待どおり反例 | `just formal-check` |
 | witness source isolation | 同一sourceのinvalid floodは別sourceのquorum quotaを消費せず、client指定bucketを信用しない | workerd integration + local 20 run + remote単一egress20 run | HMAC secret欠落時503、local別source quorum 20/20、remote 429回復後quorum 20/20。異なるremote source間公平性は未測定 | `pnpm --dir examples/cf-game-audit bench:witness` |

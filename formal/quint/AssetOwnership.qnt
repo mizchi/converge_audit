@@ -4,7 +4,7 @@
 // model checks only monotonic owner heads and the transfer/list/cancel guards.
 module assetOwnership {
   type Owner = O1 | O2 | O3
-  type ListingStatus = NeverListed | Active | Canceled
+  type ListingStatus = NeverListed | Active | Canceled | Quarantined
   type ListingNonce = N1 | N2 | N3
 
   type State = {
@@ -16,6 +16,9 @@ module assetOwnership {
     listingVersion: int,
     listingNonce: ListingNonce,
     canceledListingNonces: Set[ListingNonce],
+    revokedAncestors: Set[int],
+    lineageClean: bool,
+    lastTransferLineageClean: bool,
     lastSenderAuthenticated: bool,
     lastRecipientAuthenticated: bool,
   }
@@ -24,6 +27,8 @@ module assetOwnership {
   const enforceRecipientSignature: bool
   const enforceExactVersion: bool
   const blockTransferWhileListed: bool
+  const quarantineOnRevocation: bool
+  const blockUseOnRevocation: bool
 
   pure val Owners = Set(O1, O2, O3)
   pure val Versions = Set(0, 1, 2)
@@ -42,6 +47,9 @@ module assetOwnership {
       listingVersion: -1,
       listingNonce: N1,
       canceledListingNonces: Set(),
+      revokedAncestors: Set(),
+      lineageClean: true,
+      lastTransferLineageClean: true,
       lastSenderAuthenticated: true,
       lastRecipientAuthenticated: true,
     }
@@ -64,11 +72,13 @@ module assetOwnership {
     not(enforceSenderSignature) or senderAuthenticated,
     not(enforceRecipientSignature) or recipientAuthenticated,
     not(blockTransferWhileListed) or state.listingStatus != Active,
+    not(blockUseOnRevocation) or state.lineageClean,
     state' = {
       ...state,
       owner: recipient,
       ownerVersion: nextVersion,
       transferCount: state.transferCount + 1,
+      lastTransferLineageClean: state.lineageClean,
       lastSenderAuthenticated: senderAuthenticated,
       lastRecipientAuthenticated: recipientAuthenticated,
     },
@@ -85,6 +95,7 @@ module assetOwnership {
     seller == state.owner,
     ownerVersion == state.ownerVersion,
     ownerAuthenticated,
+    state.lineageClean,
     state.listingStatus != Active,
     not(nonce.in(state.canceledListingNonces)),
     state' = {
@@ -114,6 +125,42 @@ module assetOwnership {
       canceledListingNonces:
         state.canceledListingNonces.union(Set(state.listingNonce)),
     },
+  }
+
+  /// Revoke any origin/transfer node in the loaded linear ancestry. Descendant
+  /// ownership remains as evidence, but an active listing is quarantined and
+  /// its nonce can never be replayed.
+  action revokeAncestor(version: int): bool = all {
+    version.in(Versions),
+    version <= state.ownerVersion,
+    not(version.in(state.revokedAncestors)),
+    state' = {
+      ...state,
+      listingStatus:
+        if (quarantineOnRevocation and state.listingStatus == Active)
+          Quarantined
+        else state.listingStatus,
+      canceledListingNonces:
+        if (quarantineOnRevocation and state.listingStatus == Active)
+          state.canceledListingNonces.union(Set(state.listingNonce))
+        else state.canceledListingNonces,
+      revokedAncestors: state.revokedAncestors.union(Set(version)),
+      lineageClean: false,
+    },
+  }
+
+  /// A successful appeal removes exactly one revocation and recomputes the
+  /// lineage flag. Quarantined listings never reactivate implicitly.
+  action restoreAncestor(version: int): bool = {
+    val remaining = state.revokedAncestors.exclude(Set(version))
+    all {
+      version.in(state.revokedAncestors),
+      state' = {
+        ...state,
+        revokedAncestors: remaining,
+        lineageClean: remaining.size() == 0,
+      },
+    }
   }
 
   action transferSome = {
@@ -148,7 +195,23 @@ module assetOwnership {
     cancel(seller, version, authenticated)
   }
 
-  action step = any { transferSome, listSome, cancelSome }
+  action revokeSome = {
+    nondet version = Versions.oneOf()
+    revokeAncestor(version)
+  }
+
+  action restoreSome = {
+    nondet version = Versions.oneOf()
+    restoreAncestor(version)
+  }
+
+  action step = any {
+    transferSome,
+    listSome,
+    cancelSome,
+    revokeSome,
+    restoreSome,
+  }
 
   val typeOk = and {
     state.owner.in(Owners),
@@ -159,6 +222,7 @@ module assetOwnership {
     state.listingNonce.in(ListingNonces),
     state.listingVersion >= -1,
     state.listingVersion <= 2,
+    state.revokedAncestors.subseteq(Versions),
   }
 
   val ownerVersionAdvancesExactlyOnce =
@@ -170,16 +234,28 @@ module assetOwnership {
       state.lastRecipientAuthenticated,
     }
 
+  val transferRequiresCleanLineage =
+    state.transferCount > 0 implies state.lastTransferLineageClean
+
   val activeListingMatchesCurrentOwnerHead =
     state.listingStatus == Active implies and {
       state.listingOwner == state.owner,
       state.listingVersion == state.ownerVersion,
     }
 
+  val lineageFlagMatchesRevocations =
+    state.lineageClean == (state.revokedAncestors.size() == 0)
+
+  val activeListingRequiresCleanLineage =
+    state.listingStatus == Active implies state.lineageClean
+
   val safety = and {
     typeOk,
     ownerVersionAdvancesExactlyOnce,
     transferRequiresDualAuthentication,
+    transferRequiresCleanLineage,
     activeListingMatchesCurrentOwnerHead,
+    lineageFlagMatchesRevocations,
+    activeListingRequiresCleanLineage,
   }
 }

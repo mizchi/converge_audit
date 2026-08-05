@@ -6,11 +6,15 @@ import {
 }
 
 // Values
+pub fn accepted_asset_use_has_no_open_revocation(Bool, Bool, Int) -> Unit
+
 pub fn accepted_checkpoint_replay_has_exact_capability(Bool, Bool, Bool) -> Unit
 
 pub fn accepted_dodge_requires_every_condition(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn accepted_encounter_clear_requires_completion_and_survivor(Bool, Int) -> Unit
+
+pub fn accepted_lineage_decision_has_exact_ancestor_head(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn accepted_open_world_observer_certificate_has_quorum(Int, Int, Int) -> Unit
 
@@ -39,6 +43,10 @@ pub fn advanced_signing_anchor_head_requires_exact_parent(Bool, Bool, Bool, Int,
 pub fn already_defeated_pvp_target_cannot_score_again(Int, Int, Bool, Int, Int) -> Unit
 
 pub fn anchor_only_central_job_awaits_transcript(Bool, Bool, Bool) -> Unit
+
+pub fn asset_lineage_decision_allowed(asset_exists~ : Bool, ancestor_in_lineage~ : Bool, expected_decision_matches~ : Bool, revision_advances~ : Bool, decision_changes_status~ : Bool) -> Bool
+
+pub fn asset_lineage_use_allowed(creation_verified~ : Bool, current_head_verified~ : Bool, open_revocations~ : Int) -> Bool
 
 pub fn authorized_transfer_requires_every_condition(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
@@ -183,6 +191,8 @@ pub fn new_observer_signature_requires_empty_plan_slot(Bool, Bool, Bool) -> Unit
 pub fn next_signing_anchor_head_with_wrong_parent_is_a_fork(Int, Bool) -> Unit
 
 pub fn noncanonical_open_world_wire_is_rejected(Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn open_revocation_rejects_asset_use(Bool, Bool, Int, Bool) -> Unit
 
 pub fn open_world_ambiguous_conflict_evidence_is_invalid(Int, Int, Bool, Bool, Bool) -> Unit
 

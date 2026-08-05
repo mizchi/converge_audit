@@ -97,3 +97,15 @@ check_expected_failure \
   invariant \
   activeListingMatchesCurrentOwnerHead \
   "$audit_quint_tmp/asset-listing.log"
+check_expected_failure \
+  formal/quint/AssetOwnershipModels.qnt \
+  assetOwnershipBrokenRevocationPropagation \
+  invariant \
+  activeListingRequiresCleanLineage \
+  "$audit_quint_tmp/asset-revocation.log"
+check_expected_failure \
+  formal/quint/AssetOwnershipModels.qnt \
+  assetOwnershipBrokenRevokedTransfer \
+  invariant \
+  transferRequiresCleanLineage \
+  "$audit_quint_tmp/asset-revoked-transfer.log"

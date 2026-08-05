@@ -1,0 +1,12 @@
+import {
+  "mizchi/converge_audit/x/game_audit/quint_asset_driver",
+  "mizchi/quint_connect",
+  "mizchi/quint_connect/runner",
+  "moonbitlang/async",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/env",
+}
+
+supported_targets = "+native"
+
+pkgtype(kind: "executable")

@@ -24,6 +24,7 @@ bounded/inductive safetyへ選択的に使い、TLCのliveness gateとは区別�
 - `*Models.qnt`: 正常構成とRed構成
 - `*Tests.qnt`: 代表的な正常・guard scenario
 - `CheckpointDeliveryMbt.qnt` / `WitnessQuorumMbt.qnt`: 実装へ再生する決定的なMBT trace
+- `AssetOwnershipModels.qnt`: model checkingに加え、`quint_connect`でMoonBitへ直接再生するrandom trace source
 - `ConfigContracts.qnt`: 許可しない定数構成
 - `check*.sh`: Quint CLIとCIの接続
 
@@ -54,7 +55,9 @@ distinct roster count、deadline expiry、ready collectionからreceiver更新�
 `AssetOwnership.qnt`は1 asset、3 owner、最大2 transferへ縮約する。署名検証結果はbooleanとして
 抽象化し、version 0のorigin headから始まるexact-version transfer、送信者と受信者の二重認証、
 active listing中のtransfer禁止、cancel後のtransfer許可、取消済みlisting nonceのreplay拒否を扱う。
-新nonceなら同じowner headでも再出品できる。
+origin/transfer versionごとのrevocationとappealも扱い、祖先revoke時はdescendantのactive listingを
+quarantineする。appealはclean lineageを再計算するが旧listingを自動復活させず、新nonceなら同じowner
+headでも再出品できる。
 暗号primitive、HTTP decode、SQLite migrationはMoonBit/Workers testの責務に残す。
 
 asset settlementのclaim ledgerは次のとおりである。
@@ -65,6 +68,9 @@ asset settlementのclaim ledgerは次のとおりである。
 | owner変更にはsender/recipient両認証が要る | `AssetOwnership.transfer` | `transferRequiresDualAuthentication` + broken-recipient反例 | verified（有限model） |
 | active listing中はownerを変更しない | `AssetOwnership.transfer/list` | `activeListingMatchesCurrentOwnerHead` + broken-listing反例 | verified（有限model） |
 | cancel後はtransferと新nonceでの再出品が可能、旧nonceのreplayは不可 | `AssetOwnership.cancel/list` | `transferListCancelTransfer` / `canceledListingCannotReplay` / `canceledOwnerCanRelistWithFreshNonce` | scenario verified |
+| 祖先revoke後にdescendant listingをactiveのまま残さない | `AssetOwnership.revokeAncestor` | `activeListingRequiresCleanLineage` + broken-revocation反例 | verified（有限model） |
+| 未解決revoke中は新しいdescendant transferを作らない | `AssetOwnership.transfer` | `transferRequiresCleanLineage` + broken-revoked-transfer反例 | verified（有限model） |
+| appeal後もquarantine済みnonceを自動復活させない | `AssetOwnership.restoreAncestor/list` | `appealRecomputesButDoesNotReactivateListing` / `appealDoesNotPermitQuarantinedNonceReplay` | scenario verified |
 | Ed25519、wire binding、永続化migrationが上記抽象に従う | Workers API/SQLite contract | owner-auth unit test + workerd integration test | regression tested（refinement proofではない） |
 
 ## 検査する性質
@@ -81,7 +87,10 @@ asset settlementのclaim ledgerは次のとおりである。
 - receiverはready collectionなしに進まず、expiryはinvalid判定にもreceiver更新にもならない。
 - asset owner versionはtransferごとに正確に1進む。
 - asset transferは送信者と受信者の両方が認証されなければ成立しない。
+- asset transferは未解決の祖先revocationがない場合だけ成立する。
 - active listingは常に現在のowner headと一致し、出品中のowner変更を許さない。
+- `lineageClean`は未解決revocation集合が空であることと一致する。
+- active listingはclean lineageでのみ存在し、祖先revoke時はquarantineされる。
 
 checkpoint配送のlivenessは次の条件付き性質である。
 
@@ -96,7 +105,7 @@ eventually always(unpartitioned and all nodes up)
 
 ## Red module
 
-`quint-counterexamples`はload-bearingな制約を一つずつ外した10 moduleが、構文errorではなく
+`quint-counterexamples`はload-bearingな制約を一つずつ外した各moduleが、構文errorではなく
 期待したmodel counterexampleを出すことを確認する。
 
 | 外す制約 | Quint/TLCが示す反例 |
@@ -111,6 +120,8 @@ eventually always(unpartitioned and all nodes up)
 | transferのrecipient署名gate | recipient未承認でもownerを変更できる |
 | owner exact-version gate | transfer回数とowner versionが乖離する |
 | active listing中のtransfer gate | 出品中にownerが変わりlisting headが陳腐化する |
+| ancestor revoke時のquarantine | 祖先が無効でもdescendant listingがactiveのまま残る |
+| revoked lineageのtransfer gate | 無効な祖先から新しいowner headを派生できる |
 
 ## 実行結果
 
@@ -123,11 +134,11 @@ eventually always(unpartitioned and all nodes up)
 | witness safety | 336,897 | 30,720 | 18 |
 | witness liveness | 212,993 | 19,456 | 18 |
 
-正常5構成は反例なし、Red 10構成はすべて期待した反例を出した。これは有限model checkingの
+設定済みの全正常構成は反例なし、全Red構成は期待した反例を出した。これは有限model checkingの
 結果であり、任意peer数・任意epoch数・任意roster数の数学的証明やproduction transport
 実装の検証を意味しない。authority process/storageのcrash recoveryも現在の範囲外である。
 
-加えて、正常到達性とguardを示す11件の`run` scenarioが通過し、capacity 0、quorum 0、
+加えて、正常到達性とguardを示す設定済みの全`run` scenarioが通過し、capacity 0、quorum 0、
 rosterを超えるquorumの3構成を設定契約違反として拒否する。
 
 ## Model-based testing
@@ -156,6 +167,19 @@ distinct approval、receiver advanceを12 stateで通過する。replayerは抽�
 witness MBTは認証gateの射影であり、network soup自体やcollection SQLite、deadline、rate limitを
 実装へ再生するものではない。それらはWorkers integration testの責務として分離する。
 
+asset ownershipには
+[`mizchi/quint_connect`](https://github.com/mizchi/quint-connect-moonbit)を使う。
+native MoonBit runnerが`AssetOwnershipModels.qnt`へ`quint run --mbt`を実行し、名前空間付きstate、
+`#bigint`、`#set`、nondeterministic pickをdecodeする。`quint_asset_driver`は各actionを
+`asset_lineage_use_allowed`、`asset_lineage_decision_allowed`、
+`transfer_transition_allowed`へ接続し、全stateのowner/listing/revocation射影を比較する。
+
+固定ITF unit testはactive listingの祖先revokeを含み、健全driverの一致と、quarantineを省いた
+破損driverの`StateDiverged`を確認する。CLI integrationはseed `0xa55e7`で32 trace、288 stateを
+照合し、同じtrace群で破損driverが失敗することも確認する。これはMoonBitのpure policyと
+adapter state machineのconformance testであり、Cloudflare Worker、D1 transaction、HTTP decodeの
+refinement proofではない。それらはworkerd integration testで別に検査する。
+
 ## Apalache smoke
 
 Quint既定のApalache backendは、witness safety最大5 stepsで反例なし、producer署名gateを
@@ -173,18 +197,21 @@ just quint-config-contracts
 just quint-scenarios
 just quint-mbt
 just quint-witness-mbt
+just quint-connect-mbt
 just quint-check
 just quint-counterexamples
 just quint-apalache-smoke
 just quint-docs
 ```
 
-`quint-check`はtypecheck後、正常5構成をTLC backendと名前付きinvariantで検査する。
-`quint-scenarios`は11件の実行可能な代表traceを検査する。`quint-config-contracts`は無効な
-定数構成3件を拒否する。
+`quint-check`はtypecheck後、設定済みの全正常構成をTLC backendと名前付きinvariantで検査する。
+`quint-scenarios`は設定済みの全実行可能traceを検査する。`quint-config-contracts`は無効な
+定数構成を拒否する。
 `quint-mbt`はcheckpoint ITF traceをMoonBit policy + Node SQLiteへ再生し、
 `quint-witness-mbt`はwitness ITF traceを実暗号MoonBit認証gateへ再生する。
-`quint-counterexamples`はRed 10構成を検査する。`quint-apalache-smoke`はbounded checkで、
+`quint-connect-mbt`は公開`mizchi/quint_connect` packageでasset ownershipのrandom ITF traceを
+MoonBit policyへ再生し、正例と破損driverの負例を検査する。
+`quint-counterexamples`は設定済みの全Red構成を検査する。`quint-apalache-smoke`はbounded checkで、
 authoritativeな`formal-check`には含めない。
 
 ## 移行記録

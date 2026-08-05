@@ -76,12 +76,10 @@ rendering frameではなく監査leafの時間slotであり、画面更新やcli
 
 ## 現在の機械的な裏付け
 
-- MoonBit: 362 tests passed。
-- Why3 1.7.2 + Z3 4.8.17: 汎用audit 31 + game audit 161、計192 proof goals proved。
-- Quint 0.32 / TLC 2.19: 2 peer・2 epochのcrash/drop/partition/bounded-outboxモデルを11,340 distinct statesで検査し、
-  safetyとnetwork安定後のauthority finalityに反例なし。witness collectionもsafety 30,720、liveness
-  19,456 distinct statesで反例なし。6つの破損設定では期待した反例を検出。
-- Cloudflare workerd integration: 42 tests passed（atomic sealの4 fault rollback、restart復元、producer/witness署名拒否・収集、source secret fail-closed、rate isolation、peer client、direct authority ACK、MoonBit runtime capability、settlement/percentile metricを含む）。
+- MoonBit: `moon test`の全suiteが成功。件数はCIの実行ログをsource of truthとする。
+- Why3 + Z3: `just prove`で設定済みの全proof obligationが成功。
+- Quint / TLC: `just formal-check`で全正常modelに反例がなく、全破損modelで期待した反例を検出。
+- Cloudflare workerd integration: Worker、static asset、Playwrightを含む全suiteが成功。件数はCIの実行ログをsource of truthとする。
 - local witness collection 20 run: hostile sourceの8件拒否後9件目429、別sourceの3/4 quorumは20/20成功。
   peer GET + local sign + POSTはmean 33.471 ms / p95 40.808 ms、3 approval wallはmean
   100.440 ms / p95 110.266 ms、clean seal pathはmean 160.867 ms / p95 191.552 ms。
@@ -117,8 +115,11 @@ baselineなので、全地域SLAや異なるsource間の公平性は未保証で
 - このlisting fast pathはtransfer event列そのものを中央で毎回replayせず、manifestに拘束された
   `n-f` witness certificateを信用する。challenge、高価値、witness forkでは該当assetのtransition sliceを
   取得して既存`InventoryIndex`で中央replayする経路が次段階になる。
-- 後発rejectionを過去のinventory ancestryへ伝播するrevocationとappeal windowは未接続なので、
-  現在の`eligible` flagより強い祖先保証はまだ主張しない。
+- reference PvE Workerではorigin/transferの後発rejectionをasset単位の未解決revocationとして索引化し、
+  descendant listingをquarantineする。appealでlineageを再計算しても旧listingは自動復活しない。
+- 汎用open-world inventoryはverified origin/current owner headの後発rejectionをrevision付きで索引化し、
+  未解決件数が0になるまでlistingとhead更新を拒否する。compact bundleが保持しない中間transferの
+  lineage proofと時間制appeal windowは未実装なので、任意の過去祖先まで追跡できるとは主張しない。
 - certificate不足: cheat確定ではなく、報酬保留と中央replayへの昇格。
 
 予兆AoE、projectile travel、charge/release、parry window、capture/hold、seed固定waveは監査と相性が
@@ -134,8 +135,8 @@ prototypeのprotocol骨格は通ったが、production完成ではない。優�
    pure bounded fanout/retry/multi-peer response選択と、SQLite lease + bounded HTTP loopbackは実装済み。
 3. observer signing storeとIndexedDB/mobile SQLiteへのproduction persistence、appeal window、pruning。
    player-local論理DB、storage-neutral write-set、Node SQLiteのatomic seal/restart/ACK復元は実装済み。
-4. marketplaceのancestry revocation、appeal window、複数assetを同じinventory checkpointへ
-   一括反映するhead registryと、risk-adaptive sampling/Queue backpressure。
+4. 汎用inventoryへ中間transferのlineage proofとappeal windowを追加し、複数assetを同じinventory
+   checkpointへ一括反映するhead registryと、risk-adaptive sampling/Queue backpressureを追加する。
 5. PvE raidのwire/loot binding、PvPのprojectile/visibilityなど実ゲームkernel。
    phase分離boss HP/player attack/cooldownとPvP cooldown/capture objectiveのreferenceは実装済み。
 6. packet loss/partitionを含むnetwork impairment試験、tail latency、実プレイテスト。

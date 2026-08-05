@@ -95,10 +95,23 @@ The central verifier binds that proof back to its verified creation receipt.
 The Cloudflare adapter stores replay bundles separately from Queue messages and
 now tests a SQLite head/history transaction, restart recovery, all three Queue
 replay modes, and monotonic per-asset inventory heads. A head update requires
-the exact parent, an increasing epoch, and owner/version consistency;
-observer signing-store durability, transparency-head remote witness quorum,
-multi-asset atomic inventory heads, ancestry revocation, and production
-cryptography remain open.
+the exact parent, an increasing epoch, and owner/version consistency. The
+reference-game Worker also keeps revisioned origin/transfer revocation heads,
+quarantines active descendant listings atomically, and requires a fresh nonce
+after appeal. The generic open-world path now applies the same revisioned
+decision contract to its verified origin and exact current inventory head,
+blocking listings and head advancement until all open revocations are appealed.
+Authenticated historical-transfer lineage proofs, observer signing-store
+durability, transparency-head remote witness quorum, multi-asset atomic
+inventory heads, timed appeal windows, and production cryptography remain open.
+
+`quint_asset_driver` is a verification-only adapter built on
+[`mizchi/quint_connect`](https://github.com/mizchi/quint-connect-moonbit). It
+generates randomized `AssetOwnershipModels.qnt` ITF traces, calls the real
+MoonBit transfer/lineage predicates, and compares every observable ownership,
+listing, and revocation state. Its negative control skips listing quarantine
+and must report `StateDiverged`. This checks the pure policy projection, not the
+Cloudflare/D1 persistence refinement.
 
 `browser_bridge` is a smaller JavaScript boundary for the reference game's hot
 path. It exposes only SHA-256 and the game-neutral `audit/merkle` root builder,
@@ -121,6 +134,7 @@ just test-game-pkg crypto
 just bench-game-pkg wire
 just bench-game-pkg crypto
 just test-game-pkg worker
+just quint-connect-mbt
 moon test src/x/game_audit/central_replay
 just test-cf-game-audit
 ```

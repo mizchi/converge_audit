@@ -130,9 +130,10 @@ checkpointを安価に受理し、疑わしい結果だけをdurableかつidempo
 
 | 対象 | 手段 | 現在確認している範囲 |
 | --- | --- | --- |
-| cadence、retention、head、seal、vote merge | MoonBit proof → Why3/Z3 | pure predicateと数学整数上の不変条件、計200 goals |
-| crash、drop、retry、bounded outbox、witness quorum | Quint / TLC | 有限actor・epochモデルのsafety/liveness。正常4設定で反例なし |
-| guardが本当に必要か | 意図的に壊したQuint module | 7設定すべてで期待した反例を検出 |
+| cadence、retention、head、seal、vote merge | MoonBit proof → Why3/Z3 | pure predicateと数学整数上に設定した全proof obligation |
+| crash、drop、retry、bounded outbox、witness quorum | Quint / TLC | 設定済みの全正常モデルで反例なし |
+| guardが本当に必要か | 意図的に壊したQuint module | 設定済みの全破損モデルで期待した反例を検出 |
+| Quint modelとMoonBit policyの射影 | `mizchi/quint_connect` ITF replay | seed固定asset 32 trace / 288 stateとstate divergence負例 |
 | SQLite/DO/Queue/HTTPへの写像 | integration testとfault injection | atomic rollback、restart、duplicate、fork、ACK loss |
 | 通信量・latency | local/remote benchmark | 特定環境のengineering baseline。一般SLAではない |
 

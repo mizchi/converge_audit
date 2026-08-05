@@ -17,5 +17,5 @@ quint test formal/quint/WitnessQuorumTests.qnt \
 
 quint test formal/quint/AssetOwnershipTests.qnt \
   --main=assetOwnershipTests \
-  --match='^(transferListCancelTransfer|activeListingBlocksTransfer|recipientMustAcceptTransfer|canceledListingCannotReplay|canceledOwnerCanRelistWithFreshNonce)$' \
+  --match='^(transferListCancelTransfer|activeListingBlocksTransfer|recipientMustAcceptTransfer|canceledListingCannotReplay|canceledOwnerCanRelistWithFreshNonce|ancestorRevocationQuarantinesDescendantListing|appealRecomputesButDoesNotReactivateListing|appealDoesNotPermitQuarantinedNonceReplay|oneAppealDoesNotClearAnotherRevokedAncestor|revokedLineageBlocksTransfer|appealRestoresTransfer)$' \
   --verbosity=1

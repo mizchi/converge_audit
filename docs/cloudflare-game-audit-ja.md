@@ -145,6 +145,19 @@ survivorだけに決定論的loot kernelを適用し、`ItemReceipt`のMerkle ro
 exact childだけをtransactionで受理する。wrong parent、epoch/version rollback、古いowner、revoked状態は
 fail-closedになる。proof省略時も、最後に保存したcurrent ownerだけを許可する。
 
+reference PvEの`POST /v1/pve/:unit/game-asset-lineage-decisions`は管理tokenを要求し、origin receiptまたは
+受理済みtransfer IDへrevision付きの`revoked` / `eligible` decisionを適用する。decision historyと
+ancestor headはSQLiteへ残り、未解決revocationは`(asset_id, status)` indexで判定する。revokeとactive
+listingの`quarantined`化は同じtransactionで行い、appeal後も旧nonceは復活させない。
+
+汎用側の`POST /v1/open/:unit/asset-lineage-decisions`も管理tokenとancestor単位のrevision CASを使う。
+verified originは`ancestor_id = asset_id`、現在owner headは`ancestor_id = inventory checkpoint digest`で
+指定する。未解決decisionは`verified_item_creations.lineage_status`へ集約し、1件でもあればproof省略の
+listing、proof付きlisting、次inventory headへの更新をすべて拒否する。originとcurrent headを別々に
+revokeした場合は、両方がappealされるまで再許可しない。decision head/historyは別tableへ保存する。
+compact bundleは中間transfer列を保持しないため、過去headの直接revokeは受理しない。そこまで扱うには
+challenge slow pathのtransition sliceまたは認証済みlineage proofが必要である。
+
 このcompact listing verifierはtransfer event列をbundleに含めず、manifest-bound `n-f` witnessが
 同じinventory transitionをreplayしたというByzantine fault assumptionを使う。したがって通常出品の
 低コストfast pathにはなるが、challenge・高価値・witness fork時にtransition sliceを取得して
@@ -321,7 +334,8 @@ pnpm bench:witness
 3. experimental Ed25519とWorkers WebCrypto Ed25519を比較し、監査済みbackend境界を決める。
 4. PvE bundle v2を拡張し、phase checkpoint、cooldown、player attack、boss HPを扱う。
 5. open-world plan/sealのexternal transparency headへ、remote実測済みcheckpoint witness collectionを接続する。
-6. marketplaceへancestry revocation、appeal window、checkpoint単位のmulti-asset head更新を追加する。
+6. open-world inventoryへ中間transferのlineage proof、appeal window、checkpoint単位の
+   multi-asset head更新を追加する（origin/current-head revocationは接続済み）。
 7. witness sourceをIP以外のdevice/session credentialへ結び、NAT-aware global fair queueとhistory pruningを実装する。
 8. playtest telemetryを接続する。
 
@@ -359,6 +373,7 @@ pnpm bench:witness
 | TS側遷移がMoonBit proofと同じ | Worker bridgeがproved classifierを直接呼ぶ | Proven core + Tested bridge |
 | current-owner listingはauthority checkpoint、`n-f` replay witness、origin receipt、inventory root membershipを要求する | MoonBit central verifier + real-crypto workerd integration + apac-ne benchmark | Tested locally + remote |
 | per-asset inventory headはexact parent・epoch前進・owner/version整合なしに進まない | 6条件MoonBit predicate、64-case test、wrong-parent/version integration、apac-ne head advance | Proven + Tested locally + remote |
+| reference origin/transfer revokeはdescendant listingをquarantineし、汎用origin/current-head revokeは全未解決decisionのappealまでlisting/head更新を止める | MoonBit clean-lineage predicate、Quint正常/破損model、revision CAS、workerd integration | Proven core + Model checked + Tested locally |
 | Cloudflare apac-ne hintでcheckpoint/Queue/inventoryのend-to-end値を得られる | 64-head×3 mode remote benchmark | Measured once |
 | remote peerからmode policyどおりquorumを収集する | 公開pull、端末ローカル署名submit、durable collection、deadline、collection-backed seal、HMAC-source fixed window、全mode apac-ne + PvP wnam/weur各20 run | 全mode remote E2E、outbound push・global fairnessはPending |
 | checkpoint outboxを配送しACKで完了する | direct DO RPC、lease/alarm retry、historical Duplicate ACK | Tested locally + remote 20/20、本番ACK-loss回復を観測 |

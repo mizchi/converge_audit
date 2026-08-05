@@ -15,9 +15,10 @@
 | `WitnessQuorumModels.qnt` | safety/liveness構成とproducer/rosterのRed構成 |
 | `WitnessQuorumTests.qnt` | quorum、intruder、expiryの実行可能scenario |
 | `WitnessQuorumMbt.qnt` | 実Ed25519 MoonBit認証gateへ再生する決定的なITF trace driver |
-| `AssetOwnership.qnt` | asset owner head、二重署名transfer、listing/cancelの状態機械とproperty |
-| `AssetOwnershipModels.qnt` | 正常構成とrecipient/version/listing gateを外したRed構成 |
-| `AssetOwnershipTests.qnt` | transfer、listing、cancel、旧nonce replay拒否と新nonce再出品の実行可能scenario |
+| `AssetOwnership.qnt` | asset owner head、二重署名transfer、listing/cancel、revocation/appealの状態機械とproperty |
+| `AssetOwnershipModels.qnt` | 正常構成とrecipient/version/listing/revocation gateを外したRed構成 |
+| `AssetOwnershipTests.qnt` | transfer、listing、cancel、祖先revoke、appeal、fresh nonce再出品の実行可能scenario |
+| `src/x/game_audit/quint_asset_driver` | `quint_connect`でAssetOwnershipのrandom ITF traceをMoonBit pure policyへ射影するadapter |
 | `ConfigContracts.qnt` | 許可しない定数構成 |
 | `check*.sh` | scenario、正常検証、Red反例、設定契約をCIへ接続するscript |
 
@@ -31,12 +32,14 @@
 6. `fairness`と`temporal` propertyで条件付き進行保証を確認する。
 7. `*Models.qnt`で正常構成とRed構成の差分を確認する。
 8. `*Tests.qnt`を、期待する代表traceの実行可能ドキュメントとして読む。
-9. `CheckpointDeliveryMbt.qnt`とNode replayerで、選んだtraceの実装射影を確認する。
+9. 決定的な`*Mbt.qnt` replayerと、`quint_asset_driver`のrandom trace replayで実装射影を確認する。
 
 asset ownershipを読む場合は、`ownerVersion`をassetごとの単調なhead、`listingVersion`を
 出品時に固定したheadとして読む。`Canceled`はassetやowner head全体の永久禁止ではなく、
 `canceledListingNonces`に入った旧listing identityだけを再利用できない状態である。新nonceでの再出品と、
 正当なtransfer後に新ownerが行う出品はどちらも許可する。
+`revokedAncestors`はoriginをversion 0、transfer結果をversion 1以降として抽象化した未解決集合である。
+`Quarantined`は後発revokeによるsystem側の停止であり、appealで`lineageClean`へ戻っても旧nonceは再利用しない。
 
 ## Quintの定義種別
 
@@ -93,6 +96,11 @@ import/flatten/TLC経路では`assume`だけでは無効構成がTLCの検査対
 7. storage/transport上の意味が変わる場合はMBT traceかreplayerの射影を追加する。
 8. model boundaryやdomain上の意味が変わる場合は`README.md`も更新する。
 
+MoonBitだけで完結するpure state/policy射影には`mizchi/quint_connect`を使う。host固有のSQLite、
+Durable Object、HTTPを含むadapterは同期MoonBit callbackへ押し込まず、既存のNode/workerd
+integration testに残す。どちらの場合も、健全実装が通る正例と、load-bearingな更新を一つ外した
+破損実装がstate divergenceになる負例を対にする。
+
 ## 実行
 
 ```sh
@@ -100,6 +108,7 @@ just quint-scenarios
 just quint-config-contracts
 just quint-mbt
 just quint-witness-mbt
+just quint-connect-mbt
 just quint-check
 just quint-counterexamples
 just formal-check

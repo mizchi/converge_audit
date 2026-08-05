@@ -1,0 +1,62 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/converge_audit/x/game_audit/quint_asset_driver"
+
+import {
+  "mizchi/quint_connect",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn new_asset_driver(broken_revocation? : Bool) -> AssetDriver
+
+pub fn replay_asset_ownership(@quint_connect.ItfTrace, AssetDriver) -> Result[@quint_connect.ReplaySummary, @quint_connect.ConnectError]
+
+pub fn replay_asset_ownership_suite(Array[@quint_connect.ItfTrace], broken_revocation? : Bool) -> Result[@quint_connect.ReplaySuiteSummary, @quint_connect.SuiteError]
+
+// Errors
+
+// Types and methods
+pub struct AssetDriver {
+  snapshot : AssetSnapshot
+  broken_revocation : Bool
+}
+
+pub(all) enum AssetListingNonce {
+  N1
+  N2
+  N3
+} derive(Eq, @debug.Debug)
+
+pub(all) enum AssetListingStatus {
+  NeverListed
+  Active
+  Canceled
+  Quarantined
+} derive(Eq, @debug.Debug)
+
+pub(all) enum AssetOwner {
+  O1
+  O2
+  O3
+} derive(Eq, @debug.Debug)
+
+pub(all) struct AssetSnapshot {
+  owner : AssetOwner
+  owner_version : Int
+  transfer_count : Int
+  listing_status : AssetListingStatus
+  listing_owner : AssetOwner
+  listing_version : Int
+  listing_nonce : AssetListingNonce
+  canceled_nonce_mask : Int
+  revoked_version_mask : Int
+  lineage_clean : Bool
+  last_transfer_lineage_clean : Bool
+  last_sender_authenticated : Bool
+  last_recipient_authenticated : Bool
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits
+

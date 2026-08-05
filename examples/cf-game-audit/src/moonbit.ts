@@ -607,6 +607,36 @@ export async function inventoryHeadAdvanceAllowed(input: {
   );
 }
 
+export async function assetLineageUseAllowed(input: {
+  creationVerified: boolean;
+  currentHeadVerified: boolean;
+  openRevocations: number;
+}): Promise<boolean> {
+  const audit = await loadAuditModule();
+  return audit.audit_asset_lineage_use_allowed(
+    input.creationVerified,
+    input.currentHeadVerified,
+    input.openRevocations,
+  );
+}
+
+export async function assetLineageDecisionAllowed(input: {
+  assetExists: boolean;
+  ancestorInLineage: boolean;
+  expectedDecisionMatches: boolean;
+  revisionAdvances: boolean;
+  decisionChangesStatus: boolean;
+}): Promise<boolean> {
+  const audit = await loadAuditModule();
+  return audit.audit_asset_lineage_decision_allowed(
+    input.assetExists,
+    input.ancestorInLineage,
+    input.expectedDecisionMatches,
+    input.revisionAdvances,
+    input.decisionChangesStatus,
+  );
+}
+
 export async function verifyPveReplayBundle(
   bundleHex: string,
   expectedSessionId: string,

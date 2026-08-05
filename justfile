@@ -96,13 +96,17 @@ quint-mbt:
 quint-witness-mbt:
   nix develop path:. --command sh formal/quint/check-witness-mbt.sh
 
+# Generate Quint traces and replay them in MoonBit through quint_connect
+quint-connect-mbt:
+  nix develop path:. --command sh formal/quint/check-quint-connect.sh
+
 # Render reference documentation from Quint docstrings
 quint-docs:
   nix develop path:. --command quint docs formal/quint/CheckpointDelivery.qnt
   nix develop path:. --command quint docs formal/quint/WitnessQuorum.qnt
   nix develop path:. --command quint docs formal/quint/AssetOwnership.qnt
 
-# Confirm that all ten load-bearing Quint guards produce counterexamples
+# Confirm that all load-bearing Quint guards produce counterexamples
 quint-counterexamples:
   nix develop path:. --command sh formal/quint/check-counterexamples.sh
 
@@ -111,7 +115,7 @@ quint-apalache-smoke:
   nix develop path:. --command sh formal/quint/check-apalache-smoke.sh
 
 # Verify every authoritative protocol model and load-bearing guard
-formal-check: quint-config-contracts quint-scenarios quint-mbt quint-witness-mbt quint-check quint-counterexamples
+formal-check: quint-config-contracts quint-scenarios quint-mbt quint-witness-mbt quint-connect-mbt quint-check quint-counterexamples
 
 # Build WASM-GC
 build:

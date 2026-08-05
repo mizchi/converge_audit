@@ -1,0 +1,105 @@
+///|
+predicate asset_lineage_use_allowed_post(
+  creation_verified : Bool,
+  current_head_verified : Bool,
+  open_revocations : Int,
+  result : Bool,
+) {
+  if creation_verified {
+    if current_head_verified {
+      result == (open_revocations == 0)
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+predicate asset_lineage_decision_allowed_post(
+  asset_exists : Bool,
+  ancestor_in_lineage : Bool,
+  expected_decision_matches : Bool,
+  revision_advances : Bool,
+  decision_changes_status : Bool,
+  result : Bool,
+) {
+  if asset_exists {
+    if ancestor_in_lineage {
+      if expected_decision_matches {
+        if revision_advances {
+          result == decision_changes_status
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_asset_use_has_no_open_revocation(
+  creation_verified : Bool,
+  current_head_verified : Bool,
+  open_revocations : Int,
+) where {
+  proof_require: asset_lineage_use_allowed_post(
+    creation_verified,
+    current_head_verified,
+    open_revocations,
+    true,
+  ),
+  proof_ensure: creation_verified == true,
+  proof_ensure: current_head_verified == true,
+  proof_ensure: open_revocations == 0,
+} {
+}
+
+///|
+pub lemma open_revocation_rejects_asset_use(
+  creation_verified : Bool,
+  current_head_verified : Bool,
+  open_revocations : Int,
+  allowed : Bool,
+) where {
+  proof_require: asset_lineage_use_allowed_post(
+    creation_verified,
+    current_head_verified,
+    open_revocations,
+    allowed,
+  ),
+  proof_require: open_revocations > 0,
+  proof_ensure: allowed == false,
+} {
+}
+
+///|
+pub lemma accepted_lineage_decision_has_exact_ancestor_head(
+  asset_exists : Bool,
+  ancestor_in_lineage : Bool,
+  expected_decision_matches : Bool,
+  revision_advances : Bool,
+  decision_changes_status : Bool,
+) where {
+  proof_require: asset_lineage_decision_allowed_post(
+    asset_exists,
+    ancestor_in_lineage,
+    expected_decision_matches,
+    revision_advances,
+    decision_changes_status,
+    true,
+  ),
+  proof_ensure: asset_exists == true,
+  proof_ensure: ancestor_in_lineage == true,
+  proof_ensure: expected_decision_matches == true,
+  proof_ensure: revision_advances == true,
+  proof_ensure: decision_changes_status == true,
+} {
+}

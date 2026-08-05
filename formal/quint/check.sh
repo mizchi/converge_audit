@@ -71,5 +71,8 @@ quint verify formal/quint/AssetOwnershipModels.qnt \
     typeOk \
     ownerVersionAdvancesExactlyOnce \
     transferRequiresDualAuthentication \
+    transferRequiresCleanLineage \
     activeListingMatchesCurrentOwnerHead \
+    lineageFlagMatchesRevocations \
+    activeListingRequiresCleanLineage \
   --verbosity=1

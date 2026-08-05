@@ -4,7 +4,9 @@ module assetOwnershipSafety {
     enforceSenderSignature = true,
     enforceRecipientSignature = true,
     enforceExactVersion = true,
-    blockTransferWhileListed = true
+    blockTransferWhileListed = true,
+    quarantineOnRevocation = true,
+    blockUseOnRevocation = true
   ).* from "./AssetOwnership"
 }
 
@@ -13,7 +15,9 @@ module assetOwnershipBrokenRecipient {
     enforceSenderSignature = true,
     enforceRecipientSignature = false,
     enforceExactVersion = true,
-    blockTransferWhileListed = true
+    blockTransferWhileListed = true,
+    quarantineOnRevocation = true,
+    blockUseOnRevocation = true
   ).* from "./AssetOwnership"
 }
 
@@ -22,7 +26,9 @@ module assetOwnershipBrokenVersion {
     enforceSenderSignature = true,
     enforceRecipientSignature = true,
     enforceExactVersion = false,
-    blockTransferWhileListed = true
+    blockTransferWhileListed = true,
+    quarantineOnRevocation = true,
+    blockUseOnRevocation = true
   ).* from "./AssetOwnership"
 }
 
@@ -31,6 +37,30 @@ module assetOwnershipBrokenListingGate {
     enforceSenderSignature = true,
     enforceRecipientSignature = true,
     enforceExactVersion = true,
-    blockTransferWhileListed = false
+    blockTransferWhileListed = false,
+    quarantineOnRevocation = true,
+    blockUseOnRevocation = true
+  ).* from "./AssetOwnership"
+}
+
+module assetOwnershipBrokenRevocationPropagation {
+  import assetOwnership(
+    enforceSenderSignature = true,
+    enforceRecipientSignature = true,
+    enforceExactVersion = true,
+    blockTransferWhileListed = true,
+    quarantineOnRevocation = false,
+    blockUseOnRevocation = true
+  ).* from "./AssetOwnership"
+}
+
+module assetOwnershipBrokenRevokedTransfer {
+  import assetOwnership(
+    enforceSenderSignature = true,
+    enforceRecipientSignature = true,
+    enforceExactVersion = true,
+    blockTransferWhileListed = true,
+    quarantineOnRevocation = true,
+    blockUseOnRevocation = false
   ).* from "./AssetOwnership"
 }

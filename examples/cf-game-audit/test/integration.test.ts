@@ -914,6 +914,263 @@ describe.sequential("Cloudflare game audit shard", () => {
     });
   });
 
+  it("quarantines descendant listings until an origin revocation is appealed", async () => {
+    const unit = `reference-game-revocation-${crypto.randomUUID()}`;
+    const itemRequest = referenceGameItemRequest(unit);
+    const verified = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(itemRequest),
+      },
+    );
+    expect(verified.status).toBe(201);
+    const verifiedBody = await verified.json() as {
+      receipt: {
+        authority_receipt_id: string;
+        owner_version: number;
+        owner_head_id: string;
+      };
+    };
+    const transferBoundary = {
+      assetId: itemRequest.asset_id,
+      authorityReceiptId: verifiedBody.receipt.authority_receipt_id,
+      previousHeadId: verifiedBody.receipt.owner_head_id,
+      fromOwnerId: itemRequest.player_id,
+      fromOwnerPublicKey: referenceGameOwnerPublicKey,
+      toOwnerId: "player-2",
+      toOwnerPublicKey: referenceGameRecipientPublicKey,
+      previousVersion: verifiedBody.receipt.owner_version,
+      nextVersion: verifiedBody.receipt.owner_version + 1,
+    };
+    const transferDigest = gameItemTransferProofDigest(
+      unit,
+      transferBoundary,
+      referenceGameDigest,
+    );
+    const transferRequest = {
+      asset_id: transferBoundary.assetId,
+      authority_receipt_id: transferBoundary.authorityReceiptId,
+      previous_head_id: transferBoundary.previousHeadId,
+      from_owner_id: transferBoundary.fromOwnerId,
+      from_owner_public_key: transferBoundary.fromOwnerPublicKey,
+      to_owner_id: transferBoundary.toOwnerId,
+      to_owner_public_key: transferBoundary.toOwnerPublicKey,
+      previous_version: transferBoundary.previousVersion,
+      next_version: transferBoundary.nextVersion,
+      sender_signature: audit_browser_ed25519_sign(SEED, transferDigest),
+      recipient_signature: audit_browser_ed25519_sign(
+        PLAYER_SEED,
+        transferDigest,
+      ),
+    };
+    const transferred = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-transfers`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(transferRequest),
+      },
+    );
+    expect(transferred.status).toBe(201);
+    const transferredBody = await transferred.json() as {
+      owner_head: { owner_version: number; owner_head_id: string };
+      transfer: { transfer_id: string };
+    };
+    const recipientSigner = {
+      publicKey: referenceGameRecipientPublicKey,
+      signDigest: (value: string) =>
+        audit_browser_ed25519_sign(PLAYER_SEED, value),
+    };
+    const listingBoundary = {
+      assetId: itemRequest.asset_id,
+      sellerId: "player-2",
+      authorityReceiptId: transferBoundary.authorityReceiptId,
+      ownerPublicKey: referenceGameRecipientPublicKey,
+      ownerVersion: transferredBody.owner_head.owner_version,
+      ownerHeadId: transferredBody.owner_head.owner_head_id,
+      listingNonce: "5".repeat(64),
+    };
+    const listingRequest = {
+      asset_id: listingBoundary.assetId,
+      seller_id: listingBoundary.sellerId,
+      authority_receipt_id: listingBoundary.authorityReceiptId,
+      owner_public_key: listingBoundary.ownerPublicKey,
+      owner_version: listingBoundary.ownerVersion,
+      owner_head_id: listingBoundary.ownerHeadId,
+      listing_nonce: listingBoundary.listingNonce,
+      owner_signature: signGameMarketListingProof(
+        unit,
+        listingBoundary,
+        referenceGameDigest,
+        recipientSigner,
+      ),
+    };
+    const list = (body: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-market-listings`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    expect((await list(listingRequest)).status).toBe(201);
+
+    const decide = (body: unknown, authorized = true) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-decisions`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(authorized
+            ? { authorization: "Bearer test-admin-token" }
+            : {}),
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const revocation = {
+      asset_id: itemRequest.asset_id,
+      ancestor_id: transferBoundary.authorityReceiptId,
+      expected_revision: 0,
+      outcome: "revoked",
+      reason: "origin checkpoint challenge upheld",
+    };
+    expect((await decide(revocation, false)).status).toBe(401);
+    const revoked = await decide(revocation);
+    expect(revoked.status).toBe(201);
+    await expect(revoked.json()).resolves.toMatchObject({
+      ok: true,
+      decision: "applied",
+      ancestor_kind: "origin",
+      revision: 1,
+      lineage_status: "revoked",
+      quarantined_listings: 1,
+    });
+    const denied = await list(listingRequest);
+    expect(denied.status).toBe(403);
+    await expect(denied.json()).resolves.toMatchObject({
+      allowed: false,
+      decision: "asset_lineage_revoked",
+    });
+    const deniedTransfer = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-transfers`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(transferRequest),
+      },
+    );
+    expect(deniedTransfer.status).toBe(403);
+    await expect(deniedTransfer.json()).resolves.toMatchObject({
+      transferred: false,
+      decision: "asset_lineage_revoked",
+      open_revocations: 1,
+    });
+
+    const transferRevocation = {
+      asset_id: itemRequest.asset_id,
+      ancestor_id: transferredBody.transfer.transfer_id,
+      expected_revision: 0,
+      outcome: "revoked",
+      reason: "transfer signature challenge upheld",
+    };
+    const transferRevoked = await decide(transferRevocation);
+    expect(transferRevoked.status).toBe(201);
+    await expect(transferRevoked.json()).resolves.toMatchObject({
+      decision: "applied",
+      ancestor_kind: "transfer",
+      lineage_status: "revoked",
+      open_revocations: 2,
+      quarantined_listings: 0,
+    });
+
+    const restored = await decide({
+      ...revocation,
+      expected_revision: 1,
+      outcome: "eligible",
+      reason: "appeal accepted after authoritative replay",
+    });
+    expect(restored.status).toBe(201);
+    await expect(restored.json()).resolves.toMatchObject({
+      decision: "applied",
+      revision: 2,
+      lineage_status: "eligible",
+      open_revocations: 1,
+    });
+    const stillDenied = await list(listingRequest);
+    expect(stillDenied.status).toBe(403);
+    await expect(stillDenied.json()).resolves.toMatchObject({
+      allowed: false,
+      decision: "asset_lineage_revoked",
+      open_revocations: 1,
+    });
+    const transferRestored = await decide({
+      ...transferRevocation,
+      expected_revision: 1,
+      outcome: "eligible",
+      reason: "transfer appeal accepted after signature audit",
+    });
+    expect(transferRestored.status).toBe(201);
+    await expect(transferRestored.json()).resolves.toMatchObject({
+      decision: "applied",
+      revision: 2,
+      lineage_status: "eligible",
+      open_revocations: 0,
+    });
+    const quarantinedReplay = await list(listingRequest);
+    expect(quarantinedReplay.status).toBe(409);
+    await expect(quarantinedReplay.json()).resolves.toMatchObject({
+      allowed: false,
+      decision: "listing_quarantined",
+    });
+
+    const freshBoundary = {
+      ...listingBoundary,
+      listingNonce: "6".repeat(64),
+    };
+    const fresh = await list({
+      ...listingRequest,
+      listing_nonce: freshBoundary.listingNonce,
+      owner_signature: signGameMarketListingProof(
+        unit,
+        freshBoundary,
+        referenceGameDigest,
+        recipientSigner,
+      ),
+    });
+    expect(fresh.status).toBe(201);
+    await expect(fresh.json()).resolves.toMatchObject({
+      allowed: true,
+      decision: "listed",
+      listing: { listing_nonce: freshBoundary.listingNonce },
+    });
+
+    const duplicateRevocation = await decide(transferRevocation);
+    expect(duplicateRevocation.status).toBe(200);
+    await expect(duplicateRevocation.json()).resolves.toMatchObject({
+      decision: "duplicate",
+      ancestor_kind: "transfer",
+      decision_revision: 1,
+      decision_outcome: "revoked",
+      revision: 2,
+      lineage_status: "eligible",
+      open_revocations: 0,
+    });
+    const staleAppeal = await decide({
+      ...transferRevocation,
+      outcome: "eligible",
+      reason: "stale appeal",
+    });
+    expect(staleAppeal.status).toBe(409);
+    await expect(staleAppeal.json()).resolves.toMatchObject({
+      decision: "stale_lineage_revision",
+      current_revision: 2,
+      current_status: "eligible",
+    });
+  });
+
   it("issues an item receipt from a later authority-verified epoch", async () => {
     const unit = `reference-game-later-item-${crypto.randomUUID()}`;
     const audit = referenceGameRun(60, (tick) => tick <= 30 ? -1 : 1);
@@ -2817,6 +3074,161 @@ describe.sequential("Cloudflare game audit shard", () => {
       current_version: 1,
     });
 
+    const decideLineage = (
+      decision: Record<string, unknown>,
+      authenticated = true,
+    ) =>
+      SELF.fetch(
+        `https://example.test/v1/open/${unit}/asset-lineage-decisions`,
+        {
+          method: "POST",
+          headers: {
+            ...(authenticated
+              ? { authorization: "Bearer test-admin-token" }
+              : {}),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(decision),
+        },
+      );
+    const originRevocation = {
+      asset_id: replay.asset_id,
+      ancestor_id: replay.asset_id,
+      expected_revision: 0,
+      outcome: "revoked",
+      reason: "sample replay appealed",
+    };
+    expect((await decideLineage(originRevocation, false)).status).toBe(401);
+    const oldHead = await decideLineage({
+      ...originRevocation,
+      ancestor_id: replay.checkpoint_digest,
+      reason: "unproven historical head",
+    });
+    expect(oldHead.status).toBe(409);
+    await expect(oldHead.json()).resolves.toMatchObject({
+      decision: "ancestor_not_in_lineage",
+      asset_id: replay.asset_id,
+      ancestor_id: replay.checkpoint_digest,
+    });
+
+    const revokedOrigin = await decideLineage(originRevocation);
+    expect(revokedOrigin.status).toBe(201);
+    const revokedOriginBody = await revokedOrigin.json() as Record<
+      string,
+      unknown
+    >;
+    expect(revokedOriginBody).toMatchObject({
+      decision: "applied",
+      asset_id: replay.asset_id,
+      ancestor_id: replay.asset_id,
+      ancestor_kind: "origin",
+      revision: 1,
+      lineage_status: "revoked",
+      open_revocations: 1,
+    });
+    expect((await decideLineage(originRevocation)).status).toBe(200);
+
+    const blockedByOrigin = await SELF.fetch(
+      `https://example.test/v1/open/${unit}/market-listing`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-admin-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ asset_id: replay.asset_id, seller_id: "bob" }),
+      },
+    );
+    expect(blockedByOrigin.status).toBe(403);
+    await expect(blockedByOrigin.json()).resolves.toMatchObject({
+      allowed: false,
+      decision: "asset_lineage_revoked",
+      open_revocations: 1,
+    });
+
+    const revokedHead = await decideLineage({
+      asset_id: replay.asset_id,
+      ancestor_id: inventory.checkpoint_digest,
+      expected_revision: 0,
+      outcome: "revoked",
+      reason: "current owner checkpoint disputed",
+    });
+    expect(revokedHead.status).toBe(201);
+    await expect(revokedHead.json()).resolves.toMatchObject({
+      ancestor_kind: "current_head",
+      revision: 1,
+      lineage_status: "revoked",
+      open_revocations: 2,
+    });
+
+    const appealedOrigin = await decideLineage({
+      ...originRevocation,
+      expected_revision: 1,
+      outcome: "eligible",
+      reason: "origin appeal accepted",
+    });
+    expect(appealedOrigin.status).toBe(201);
+    await expect(appealedOrigin.json()).resolves.toMatchObject({
+      lineage_status: "eligible",
+      open_revocations: 1,
+    });
+    const stillBlocked = await SELF.fetch(
+      `https://example.test/v1/open/${unit}/market-listing`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-admin-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ asset_id: replay.asset_id, seller_id: "bob" }),
+      },
+    );
+    expect(stillBlocked.status).toBe(403);
+    await expect(stillBlocked.json()).resolves.toMatchObject({
+      decision: "asset_lineage_revoked",
+      open_revocations: 1,
+    });
+
+    const appealedHead = await decideLineage({
+      asset_id: replay.asset_id,
+      ancestor_id: inventory.checkpoint_digest,
+      expected_revision: 1,
+      outcome: "eligible",
+      reason: "current head appeal accepted",
+    });
+    expect(appealedHead.status).toBe(201);
+    await expect(appealedHead.json()).resolves.toMatchObject({
+      lineage_status: "eligible",
+      open_revocations: 0,
+    });
+    const listingAfterAppeal = await SELF.fetch(
+      `https://example.test/v1/open/${unit}/market-listing`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-admin-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ asset_id: replay.asset_id, seller_id: "bob" }),
+      },
+    );
+    expect(listingAfterAppeal.status).toBe(200);
+    await expect(listingAfterAppeal.json()).resolves.toMatchObject({
+      allowed: true,
+      decision: "eligible_current_owner",
+      open_revocations: 0,
+    });
+    const staleOriginDecision = await decideLineage({
+      ...originRevocation,
+      reason: "stale revision replay",
+    });
+    expect(staleOriginDecision.status).toBe(409);
+    await expect(staleOriginDecision.json()).resolves.toMatchObject({
+      decision: "stale_lineage_revision",
+      current_revision: 2,
+      current_status: "eligible",
+    });
+
     const wrongParent = JSON.parse(
       audit_benchmark_make_inventory_listing_proof_bundle(
         SEED,
@@ -2929,6 +3341,7 @@ describe.sequential("Cloudflare game audit shard", () => {
       replay_artifacts: { stored: 1, bytes: replay.bundle_hex.length / 2 },
       replay_compute: { count: 1 },
       verified_item_creations: { eligible: 1, revoked: 0 },
+      verified_asset_lineages: { eligible: 1, revoked: 0 },
     });
   });
 

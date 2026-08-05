@@ -1136,6 +1136,36 @@ pub fn audit_inventory_head_advance_allowed(
 }
 
 ///|
+pub fn audit_asset_lineage_use_allowed(
+  creation_verified : Bool,
+  current_head_verified : Bool,
+  open_revocations : Int,
+) -> Bool {
+  @audit.asset_lineage_use_allowed(
+    creation_verified~,
+    current_head_verified~,
+    open_revocations~,
+  )
+}
+
+///|
+pub fn audit_asset_lineage_decision_allowed(
+  asset_exists : Bool,
+  ancestor_in_lineage : Bool,
+  expected_decision_matches : Bool,
+  revision_advances : Bool,
+  decision_changes_status : Bool,
+) -> Bool {
+  @audit.asset_lineage_decision_allowed(
+    asset_exists~,
+    ancestor_in_lineage~,
+    expected_decision_matches~,
+    revision_advances~,
+    decision_changes_status~,
+  )
+}
+
+///|
 fn worker_accept_pve_event(
   adapter : @bft.AuditAdapter,
   signed : @bft.SignedEvent,

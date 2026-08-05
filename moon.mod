@@ -17,4 +17,6 @@ source = "src"
 import {
   "mizchi/converge@0.2.0",
   "mizchi/experimental_crypto@0.0.2",
+  "mizchi/quint_connect@0.1.0",
+  "moonbitlang/async@0.20.3",
 }
