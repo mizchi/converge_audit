@@ -2,30 +2,62 @@
 set -eu
 
 quint typecheck formal/quint/CheckpointDelivery.qnt
+quint typecheck formal/quint/CheckpointDeliveryModels.qnt
 quint typecheck formal/quint/WitnessQuorum.qnt
+quint typecheck formal/quint/WitnessQuorumModels.qnt
 
-quint verify formal/quint/CheckpointDelivery.qnt \
+quint verify formal/quint/CheckpointDeliveryModels.qnt \
   --backend=tlc \
   --main=checkpointSafety \
-  --invariant=safety \
+  --invariants \
+    configIsValid \
+    typeOk \
+    checkpointCompleteness \
+    checkpointAgreement \
+    headLogsAreExactChains \
+    acceptedEventsSurviveCrash \
+    noLostSealedCheckpoint \
+    outboxWithinCapacity \
+    authorityAcceptsOnlyCreatedCheckpoints \
   --verbosity=1
 
-quint verify formal/quint/CheckpointDelivery.qnt \
+quint verify formal/quint/CheckpointDeliveryModels.qnt \
   --backend=tlc \
-  --main=checkpointLiveness \
-  --invariant=safety \
+  --main=checkpointSafety \
+  --invariants \
+    configIsValid \
+    typeOk \
+    checkpointCompleteness \
+    checkpointAgreement \
+    headLogsAreExactChains \
+    acceptedEventsSurviveCrash \
+    noLostSealedCheckpoint \
+    outboxWithinCapacity \
+    authorityAcceptsOnlyCreatedCheckpoints \
   --temporal=stableNetworkLeadsToFinality \
   --verbosity=1
 
-quint verify formal/quint/WitnessQuorum.qnt \
+quint verify formal/quint/WitnessQuorumModels.qnt \
   --backend=tlc \
   --main=witnessSafety \
-  --invariant=safety \
+  --invariants \
+    configIsValid \
+    typeOk \
+    readyRequiresAuthenticatedDistinctRosterQuorum \
+    receiverRequiresReadyCollection \
+    timeoutNeverMarksInvalid \
+    expiredCollectionNeverAdvances \
   --verbosity=1
 
-quint verify formal/quint/WitnessQuorum.qnt \
+quint verify formal/quint/WitnessQuorumModels.qnt \
   --backend=tlc \
   --main=witnessLiveness \
-  --invariant=typeOk,readyRequiresAuthenticatedDistinctRosterQuorum,receiverRequiresReadyCollection,timeoutNeverMarksInvalid \
+  --invariants \
+    configIsValid \
+    typeOk \
+    readyRequiresAuthenticatedDistinctRosterQuorum \
+    receiverRequiresReadyCollection \
+    timeoutNeverMarksInvalid \
+    expiredCollectionNeverAdvances \
   --temporal=allHonestApprovalsEventuallyReady \
   --verbosity=1

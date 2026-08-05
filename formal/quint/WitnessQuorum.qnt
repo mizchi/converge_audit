@@ -9,6 +9,7 @@ module witnessQuorum {
     valid: bool,
   }
 
+  /// State of one destination-specific witness collection.
   type State = {
     network: Set[Response],
     acceptedWitnesses: Set[Actor],
@@ -26,8 +27,17 @@ module witnessQuorum {
   pure val Roster = Set(W1, W2, W3, W4)
   pure val Actors = Roster.union(Set(Intruder))
 
+  /// Executable quorum-range contract checked by every healthy verification.
+  pure val configIsValid = and {
+    requiredApprovals >= 1,
+    requiredApprovals <= Roster.size(),
+  }
+
+  assume ValidRequiredApprovals = configIsValid
+
   var state: State
 
+  /// Start one unclassified witness collection with an empty message soup.
   action init = {
     state' = {
       network: Set(),
@@ -64,6 +74,8 @@ module witnessQuorum {
     }
   }
 
+  /// Consume one response and move to Ready only after producer authentication
+  /// and a distinct roster quorum both succeed.
   action deliverResponse(response: Response): bool = {
     val rosterAccepted = response.valid and (
       response.witness.in(Roster) or not(enforceRoster)
@@ -89,6 +101,7 @@ module witnessQuorum {
     }
   }
 
+  /// Expiry is a pending classification, never proof that the producer cheated.
   action expire = all {
     allowExpire,
     state.status == Collecting,
@@ -99,12 +112,15 @@ module witnessQuorum {
     },
   }
 
+  /// Gate the downstream receiver update on a Ready collection.
   action advanceReceiver = all {
     state.status == Ready,
     not(state.receiverAdvanced),
     state' = { ...state, receiverAdvanced: true },
   }
 
+  /// Bind parameterized protocol actions to nondeterministic arguments for
+  /// `step` and fairness.
   action sendSomeHonestApproval = {
     nondet witness = Roster.oneOf()
     sendHonestApproval(witness)
@@ -121,6 +137,8 @@ module witnessQuorum {
     deliverResponse(response)
   }
 
+  /// Fairness relation for an unconsumed honest approval. It is a semantic
+  /// subset of `deliverSomeResponse`, which is the branch in `step`.
   action deliverSomeHonestResponse = {
     nondet response = state.network.filter(response => and {
       response.valid,
@@ -158,7 +176,9 @@ module witnessQuorum {
   val expiredCollectionNeverAdvances =
     state.status == Expired implies not(state.receiverAdvanced)
 
+  /// Aggregate retained for interactive use and the bounded Apalache smoke.
   val safety = and {
+    configIsValid,
     typeOk,
     readyRequiresAuthenticatedDistinctRosterQuorum,
     receiverRequiresReadyCollection,
@@ -168,6 +188,8 @@ module witnessQuorum {
 
   val vars = state
 
+  /// Strong fairness prevents an intermittently enabled honest approval from
+  /// being starved; receiver advancement needs only weak fairness.
   temporal fairness = and {
     strongFair(sendSomeHonestApproval, vars),
     strongFair(deliverSomeResponse, vars),
@@ -175,46 +197,8 @@ module witnessQuorum {
     weakFair(advanceReceiver, vars),
   }
 
+  /// With expiry disabled, fair honest approval delivery eventually reaches
+  /// Ready.
   temporal allHonestApprovalsEventuallyReady =
     fairness implies eventually(state.status == Ready)
-}
-
-module witnessSafety {
-  import witnessQuorum(
-    requiredApprovals = 3,
-    producerSignatureValid = true,
-    enforceProducerSignature = true,
-    enforceRoster = true,
-    allowExpire = true
-  ).*
-}
-
-module witnessLiveness {
-  import witnessQuorum(
-    requiredApprovals = 3,
-    producerSignatureValid = true,
-    enforceProducerSignature = true,
-    enforceRoster = true,
-    allowExpire = false
-  ).*
-}
-
-module witnessBrokenProducer {
-  import witnessQuorum(
-    requiredApprovals = 3,
-    producerSignatureValid = false,
-    enforceProducerSignature = false,
-    enforceRoster = true,
-    allowExpire = true
-  ).*
-}
-
-module witnessBrokenRoster {
-  import witnessQuorum(
-    requiredApprovals = 3,
-    producerSignatureValid = true,
-    enforceProducerSignature = true,
-    enforceRoster = false,
-    allowExpire = true
-  ).*
 }

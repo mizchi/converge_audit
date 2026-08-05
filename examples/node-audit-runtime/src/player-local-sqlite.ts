@@ -781,7 +781,7 @@ export class PlayerLocalSqliteStore {
       known_seal_complete:
         knownDigestMatches && closureConsumed && allOutboxPresent,
       closure_consumed: closureConsumed,
-      outbox_entry_count: this.count("player_local_outbox"),
+      outbox_entry_count: this.activeOutboxCount(),
       outbox_capacity: config.outbox_capacity,
       next_created_order: config.next_created_order,
     };
@@ -801,7 +801,8 @@ export class PlayerLocalSqliteStore {
       !isNonNegativeInteger(image.outbox_capacity) ||
       !isNonNegativeInteger(image.storage_revision) ||
       !isNonNegativeInteger(image.next_created_order) ||
-      image.outbox.length > image.outbox_capacity
+      image.outbox.filter((entry) => entry.state.kind !== "acknowledged").length >
+        image.outbox_capacity
     ) {
       throw new PlayerLocalStoreCorruptError();
     }
@@ -1007,9 +1008,10 @@ export class PlayerLocalSqliteStore {
     if (changed !== 1) throw new PlayerLocalStoreCorruptError();
   }
 
-  private count(table: "player_local_outbox"): number {
+  private activeOutboxCount(): number {
     return this.get<{ count: number }>(
-      `SELECT COUNT(*) AS count FROM ${table}`,
+      `SELECT COUNT(*) AS count FROM player_local_outbox
+       WHERE state != 'acknowledged'`,
     )?.count ?? 0;
   }
 

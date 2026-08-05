@@ -80,6 +80,23 @@ prove-audit: prove-game-audit
 quint-check:
   nix develop path:. --command sh formal/quint/check.sh
 
+# Reject model configurations outside the declared protocol contract
+quint-config-contracts:
+  nix develop path:. --command sh formal/quint/check-config-contracts.sh
+
+# Run executable happy-path and guard scenarios from the Quint models
+quint-scenarios:
+  nix develop path:. --command sh formal/quint/check-scenarios.sh
+
+# Replay a Quint ITF trace against the MoonBit policy and SQLite adapter
+quint-mbt:
+  nix develop path:. --command sh formal/quint/check-mbt.sh
+
+# Render reference documentation from Quint docstrings
+quint-docs:
+  nix develop path:. --command quint docs formal/quint/CheckpointDelivery.qnt
+  nix develop path:. --command quint docs formal/quint/WitnessQuorum.qnt
+
 # Confirm that all seven load-bearing Quint guards produce counterexamples
 quint-counterexamples:
   nix develop path:. --command sh formal/quint/check-counterexamples.sh
@@ -89,7 +106,7 @@ quint-apalache-smoke:
   nix develop path:. --command sh formal/quint/check-apalache-smoke.sh
 
 # Verify every authoritative protocol model and load-bearing guard
-formal-check: quint-check quint-counterexamples
+formal-check: quint-config-contracts quint-scenarios quint-mbt quint-check quint-counterexamples
 
 # Build WASM-GC
 build:

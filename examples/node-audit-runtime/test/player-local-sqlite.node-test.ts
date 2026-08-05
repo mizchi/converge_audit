@@ -47,6 +47,9 @@ function sealWriteSet(
 ): PlayerLocalSealWriteSet {
   const image = store.image();
   const epoch = image.head.epoch + 1;
+  const activeOutboxCount = image.outbox.filter(
+    (entry) => entry.state.kind !== "acknowledged",
+  ).length;
   const outbox_entries = destinations.map((destination_id, index) => ({
     boundary,
     destination_id,
@@ -66,7 +69,7 @@ function sealWriteSet(
       known_digest_matches: false,
       known_seal_complete: false,
       closure_consumed: false,
-      outbox_entry_count: image.outbox.length,
+      outbox_entry_count: activeOutboxCount,
       outbox_capacity: image.outbox_capacity,
       next_created_order: image.next_created_order,
     },
@@ -86,7 +89,7 @@ function sealWriteSet(
       frontier_digest: "frontier",
       certificate_digest: "certificate",
     },
-    next_outbox_entry_count: image.outbox.length + destinations.length,
+    next_outbox_entry_count: activeOutboxCount + destinations.length,
     next_created_order: image.next_created_order + destinations.length,
   };
 }
@@ -225,6 +228,38 @@ test("refuses an over-capacity write set atomically", async (t) => {
     reason: "invalid_write_set",
   });
   assert.deepEqual(store.image(), before);
+  store.close();
+});
+
+test("acknowledged outbox history does not consume delivery capacity", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "converge-player-local-"));
+  t.after(async () => rm(directory, { recursive: true, force: true }));
+  const store = PlayerLocalSqliteStore.open(join(directory, "audit.sqlite"), {
+    ...configuration,
+    outbox_capacity: 1,
+  });
+  assert.deepEqual(
+    store.commitSeal(sealWriteSet(store, ["authority"], "checkpoint-0")),
+    { decision: "committed" },
+  );
+  assert(store.claimOutbox(0, 100, 30));
+  assert.deepEqual(
+    store.acknowledgeOutbox({
+      boundary,
+      authority_id: "authority",
+      epoch: 0,
+      checkpoint_digest: "checkpoint-0",
+      decision: "accepted",
+    }),
+    { decision: "updated" },
+  );
+  assert.deepEqual(
+    store.commitSeal(sealWriteSet(store, ["authority"], "checkpoint-1")),
+    { decision: "committed" },
+  );
+  const image = store.image();
+  assert.equal(image.outbox.length, 2, "ACK tombstone remains durable");
+  assert.equal(image.ack_history.length, 1);
   store.close();
 });
 

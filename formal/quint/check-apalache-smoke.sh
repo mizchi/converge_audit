@@ -2,10 +2,11 @@
 set -eu
 
 quint typecheck formal/quint/WitnessQuorum.qnt
+quint typecheck formal/quint/WitnessQuorumModels.qnt
 
 # Apalache is bounded here. This is a smoke check, not a replacement for the
 # complete finite-state TLC safety/liveness runs in check.sh.
-quint verify formal/quint/WitnessQuorum.qnt \
+quint verify formal/quint/WitnessQuorumModels.qnt \
   --main=witnessSafety \
   --invariant=safety \
   --max-steps=5 \
@@ -15,7 +16,7 @@ audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/bft-quint-apalache.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
 log_file="$audit_quint_tmp/broken-producer.log"
 
-if quint verify formal/quint/WitnessQuorum.qnt \
+if quint verify formal/quint/WitnessQuorumModels.qnt \
   --main=witnessBrokenProducer \
   --invariant=readyRequiresAuthenticatedDistinctRosterQuorum \
   --max-steps=8 \

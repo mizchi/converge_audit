@@ -1436,6 +1436,59 @@ describe.sequential("Cloudflare game audit shard", () => {
     });
   });
 
+  it("reuses delivery capacity after ACK while retaining its tombstone", async () => {
+    const mode = "open" as const;
+    const unit = crypto.randomUUID();
+    const sessionId = `cf:open:${unit}`;
+    const anchor = fixture(sessionId, "observer-capacity-reuse", 0, "genesis");
+    await configure(
+      mode,
+      unit,
+      sessionId,
+      anchor.authority_key,
+      anchor.epoch,
+      anchor.previous_digest,
+    );
+    await configureCheckpointRuntime(mode, unit, 1, ["authority-1"]);
+    await closeCheckpointEpoch(mode, unit, 0);
+    const first = await sealCheckpoint(
+      mode,
+      unit,
+      0,
+      "genesis",
+      "checkpoint-capacity-0",
+      ["authority-1"],
+      undefined,
+      false,
+      "direct",
+    );
+    expect(first.status).toBe(202);
+
+    await closeCheckpointEpoch(mode, unit, 1);
+    const second = await sealCheckpoint(
+      mode,
+      unit,
+      1,
+      "checkpoint-capacity-0",
+      "checkpoint-capacity-1",
+      ["authority-1"],
+      undefined,
+      false,
+      "direct",
+    );
+    expect(second.status).toBe(202);
+    await expect(checkpointState(mode, unit)).resolves.toMatchObject({
+      head: { epoch: 1, digest: "checkpoint-capacity-1" },
+      history: 2,
+      outbox: {
+        capacity: 1,
+        pending: 0,
+        in_flight: 0,
+        acknowledged: 2,
+      },
+    });
+  });
+
   it("atomically initializes, advances, deduplicates, and survives eviction", async () => {
     const unit = crypto.randomUUID();
     const sessionId = `cf:pve:${unit}`;

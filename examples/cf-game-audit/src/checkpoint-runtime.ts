@@ -401,7 +401,7 @@ export class CheckpointRuntimeStore {
           knownDigestMatches,
           knownSealComplete,
           closureConsumed: closure.status === "consumed",
-          outboxEntryCount: this.outboxCount(),
+          outboxEntryCount: this.activeOutboxCount(),
           outboxCapacity: config.outbox_capacity,
           nextCreatedOrder: config.next_created_order,
           checkpointEpoch: input.epoch,
@@ -929,8 +929,10 @@ export class CheckpointRuntimeStore {
     return this.count("checkpoint_history");
   }
 
-  private outboxCount(): number {
-    return this.count("checkpoint_outbox");
+  private activeOutboxCount(): number {
+    return this.storage.sql.exec<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM checkpoint_outbox WHERE state != 'acknowledged'",
+    ).toArray()[0]?.count ?? 0;
   }
 
   private count(

@@ -79,6 +79,7 @@ export interface CheckpointSealStorageSnapshot {
   known_digest_matches: boolean;
   known_seal_complete: boolean;
   closure_consumed: boolean;
+  /** Pending plus in-flight entries; acknowledged history does not use capacity. */
   outbox_entry_count: number;
   outbox_capacity: number;
   next_created_order: number;

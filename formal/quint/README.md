@@ -7,6 +7,9 @@ MoonBit/Why3が純粋な受理predicateを担当し、Quint/TLCは配送順、�
 partitionをまたぐ状態遷移を担当する。実adapterが満たすtransaction/API契約は
 [persistence / transport実装契約](../../docs/game-audit-implementation-contract-ja.md)に定める。
 
+コードの読む順番、nondet wrapper、fairness、property追加手順は
+[Quintモデルの読み方と変更手順](./GUIDE-ja.md)に分離している。
+
 QuintはTLAの意味論を持つtyped specification languageである。完全な有限状態探索と
 fairness付きlivenessには`quint verify --backend=tlc`を使う。既定のApalache backendは
 bounded/inductive safetyへ選択的に使い、TLCのliveness gateとは区別する。
@@ -14,6 +17,15 @@ bounded/inductive safetyへ選択的に使い、TLCのliveness gateとは区別�
 - [Quint repository](https://github.com/quint-co/quint)
 - [Quint: Model Checkers](https://quint.sh/docs/model-checkers)
 - [Quint: Checking Properties](https://quint.sh/docs/checking-properties)
+
+## Source構成
+
+- `CheckpointDelivery.qnt` / `WitnessQuorum.qnt`: protocol本体とproperty
+- `*Models.qnt`: 正常構成とRed構成
+- `*Tests.qnt`: 代表的な正常・guard scenario
+- `CheckpointDeliveryMbt.qnt`: 実装へ再生する決定的なmodel-based testing trace
+- `ConfigContracts.qnt`: 許可しない定数構成
+- `check*.sh`: Quint CLIとCIの接続
 
 ## モデル境界
 
@@ -93,6 +105,27 @@ eventually always(unpartitioned and all nodes up)
 結果であり、任意peer数・任意epoch数・任意roster数の数学的証明やproduction transport
 実装の検証を意味しない。authority process/storageのcrash recoveryも現在の範囲外である。
 
+加えて、正常到達性とguardを示す6件の`run` scenarioが通過し、capacity 0、quorum 0、
+rosterを超えるquorumの3構成を設定契約違反として拒否する。
+
+## Model-based testing
+
+`CheckpointDeliveryMbt.qnt`はprotocol本体のactionだけを使い、次の代表traceをITF JSONへ出力する。
+
+```text
+event gossip/delivery -> epoch 1 seal -> crash/restart
+  -> authority ACK -> epoch 2 seal -> authority ACK
+```
+
+outbox capacityは1である。したがって、epoch 1のACKが配送容量を解放しなければepoch 2をseal
+できない。Node側replayerは各stateをMoonBitのcheckpoint policyとplayer-local SQLite adapterへ
+順番に適用し、accepted event、checkpoint chain、未ACK durable outbox、authority headの射影を
+毎step比較する。
+
+このtestにより、Quintと実装で「容量は未ACK entryを数え、acknowledged tombstoneは証跡として
+残しても容量を消費しない」という意味を固定する。任意traceのrefinement proofではなく、crash、
+再送、ACK、容量再利用を横断する決定的なconformance testである。
+
 ## Apalache smoke
 
 Quint既定のApalache backendは、witness safety最大5 stepsで反例なし、producer署名gateを
@@ -106,12 +139,19 @@ Quint既定のApalache backendは、witness safety最大5 stepsで反例なし�
 just formal-check
 
 # 個別実行
+just quint-config-contracts
+just quint-scenarios
+just quint-mbt
 just quint-check
 just quint-counterexamples
 just quint-apalache-smoke
+just quint-docs
 ```
 
-`quint-check`はtypecheck後、正常4構成をTLC backendで検査する。
+`quint-check`はtypecheck後、正常4構成をTLC backendと名前付きinvariantで検査する。
+`quint-scenarios`は6件の実行可能な代表traceを検査する。`quint-config-contracts`は無効な
+定数構成3件を拒否する。
+`quint-mbt`はITF traceを生成し、MoonBit policy + Node SQLiteへ再生する。
 `quint-counterexamples`はRed 7構成を検査する。`quint-apalache-smoke`はbounded checkで、
 authoritativeな`formal-check`には含めない。
 

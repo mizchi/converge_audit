@@ -149,6 +149,10 @@ identity/boundary保証を持たせる。senderはACKを永続化してからout
 `queued`やsocket write成功は`acknowledged`ではない。outbox容量不足時はcheckpoint sealを
 成功させず、gameplay結果をprovisionalに留める。
 
+容量として数えるのは`pending + in_flight`の未ACK entryである。`acknowledged` tombstoneと
+対応するACK evidenceは重複排除・retry・appeal期間の証跡として保持するが、配送容量を消費しない。
+総履歴件数の上限・pruneは、この配送backpressureとは別のretention policyで定める。
+
 状態遷移は次に限定する。
 
 ```text
@@ -418,6 +422,7 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | atomic gap batch | in-memory transportとCloudflare gap API | Partial |
 | server-side central replay outbox | Cloudflare `replay_outbox` | Tested locally |
 | checkpoint transportの有限safety/liveness | Quint/TLC、bounded outbox込み11,340 distinct states | Model checked、capacity gate除去で反例 |
+| checkpoint traceの実装conformance | Quint ITFをMoonBit policy + Node SQLiteへstep replayし、event/head/未ACK outbox/authority射影を比較 | Deterministic MBT Tested |
 | witness collectionの有限safety/liveness | Quint/TLC、4 roster + 1 intruder、safety 30,720 / liveness 19,456 distinct states | Model checked |
 | authority DB crash/restore | Durable Object local testのみ、Quint範囲外 | Partial |
 
@@ -480,7 +485,7 @@ source独立性や全地域SLAと同一視してはならない。
 | model question | 公開row DTOを改ざん・欠損させたimageからorphan headやACK履歴なしのacknowledged outboxを復元できるか |
 | machine result | MoonBit正常imageはevent/equivocation/head/outbox/ACKを復元し、orphan headとACK footprint欠損を拒否した。Node SQLiteでもrestart後の同値image、stale CAS、容量超過、ACK footprint欠損を検査し、history/head/outbox/closure各書込み直後の例外は全旧状態へrollbackした |
 | decision | `PlayerLocalAuditStore`を汎用reference transaction、`PlayerLocalSealPlan::write_set()`をstorage-neutral境界とし、物理adapterは公開DTOを同一transactionで保存・再構築する。未認証network payloadからwrite-set/ACKを直接構築してはならない |
-| lock | MoonBit local store 22 tests、Node SQLite 9 tests、`just test-node-audit-runtime`。Quintのatomic `sealNextCheckpoint`を実装へ対応付けるが、SQLite engine自体をmodel checkedしたとは主張しない |
+| lock | MoonBit local store 23 tests、Node SQLite 10 tests（Node package合計17）、`just test-node-audit-runtime`。Quintのatomic `sealNextCheckpoint`を実装へ対応付けるが、SQLite engine自体をmodel checkedしたとは主張しない |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -509,6 +514,15 @@ source独立性や全地域SLAと同一視してはならない。
 | decision | capacity checkを`sealNextCheckpoint`のload-bearing guardとしてQuintへ固定する |
 | lock | `checkpointBrokenBackpressure`を含む7 broken moduleと`just formal-check` |
 
+| 項目 | 内容 |
+| --- | --- |
+| source | Quintの`availableOutbox`は未ACK checkpointだけを含み、ACK後はcapacity 1でも次epochをsealできる |
+| implementation observation | MoonBit local store、Node SQLite、Cloudflare SQLiteはacknowledged tombstoneを保持し、その総row数をcapacityへ数えていた |
+| model question | epoch 1をACKした後、証跡を削除せずepoch 2をseal・配送できるか |
+| machine result | capacity 1のITF replayがepoch 2 sealで`concurrent_write`を再現した。未ACK countへ修正後、11 stateをMoonBit + SQLiteへ完走し、WorkersでもACK済み2 rowを保持したままhead epoch 1へ進んだ |
+| decision | `outbox_entry_count = pending + in_flight`とし、acknowledged履歴のretention上限を配送capacityから分離する |
+| lock | `just quint-mbt`、MoonBit/Node capacity reuse回帰test、Cloudflare direct ACK 2世代integration test |
+
 ## 12. 受入テスト
 
 production adapterは最低限、次を自動検査する。
@@ -521,7 +535,7 @@ production adapterは最低限、次を自動検査する。
 6. same-epoch fork、wrong parent、gap、foreign boundaryでheadが変わらない。
 7. gap batchの最後だけ不正でもprefixをcommitしない。
 8. timeout、partition、under-quorumだけではcheat確定にならない。
-9. outbox満杯時にhead/watermarkだけが進まない。
+9. outbox満杯時にhead/watermarkだけが進まず、ACK後はtombstoneを保持したまま容量を再利用できる。
 10. prune/restart後も必要なduplicate、appeal、fork evidenceを復元できる。
 11. 未provision receiverとsource outboxに存在しない自己整合jobでauthority stateが変わらない。
 12. producer署名改ざん、非roster witness、duplicate witness、under-quorumでsource/receiver stateが変わらない。

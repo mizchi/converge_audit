@@ -2,7 +2,8 @@
 /// Storage facts read inside the transaction that will apply an atomic seal
 /// plan. `known_seal_complete` means the known checkpoint has its history,
 /// head, required outbox entries, and consumed closure in the same committed
-/// transaction footprint.
+/// transaction footprint. `outbox_entry_count` counts only pending/in-flight
+/// entries; acknowledged evidence may remain durable without using capacity.
 pub(all) struct CheckpointSealStorageSnapshot {
   boundary : AuditBoundary
   current_epoch : Int

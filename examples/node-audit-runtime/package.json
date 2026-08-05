@@ -8,8 +8,10 @@
   "scripts": {
     "build:moon": "moon build --target js --release",
     "pretest": "pnpm run build:moon",
+    "pretest:quint-mbt": "pnpm run build:moon",
     "pretypecheck": "pnpm run build:moon",
     "test": "node --test test/*.node-test.ts",
+    "test:quint-mbt": "node scripts/quint-checkpoint-mbt.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

@@ -28,49 +28,51 @@ check_expected_failure() {
 }
 
 quint typecheck formal/quint/CheckpointDelivery.qnt
+quint typecheck formal/quint/CheckpointDeliveryModels.qnt
 quint typecheck formal/quint/WitnessQuorum.qnt
+quint typecheck formal/quint/WitnessQuorumModels.qnt
 
 audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/bft-quint.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
 
 check_expected_failure \
-  formal/quint/CheckpointDelivery.qnt \
+  formal/quint/CheckpointDeliveryModels.qnt \
   checkpointBrokenCompleteness \
   invariant \
   checkpointCompleteness \
   "$audit_quint_tmp/completeness.log"
 check_expected_failure \
-  formal/quint/CheckpointDelivery.qnt \
+  formal/quint/CheckpointDeliveryModels.qnt \
   checkpointBrokenOutbox \
   invariant \
   noLostSealedCheckpoint \
   "$audit_quint_tmp/outbox.log"
 check_expected_failure \
-  formal/quint/CheckpointDelivery.qnt \
+  formal/quint/CheckpointDeliveryModels.qnt \
   checkpointBrokenParent \
   invariant \
   headLogsAreExactChains \
   "$audit_quint_tmp/parent.log"
 check_expected_failure \
-  formal/quint/CheckpointDelivery.qnt \
+  formal/quint/CheckpointDeliveryModels.qnt \
   checkpointBrokenRetry \
   temporal \
   authorityEventuallyFinalizes \
   "$audit_quint_tmp/retry.log"
 check_expected_failure \
-  formal/quint/CheckpointDelivery.qnt \
+  formal/quint/CheckpointDeliveryModels.qnt \
   checkpointBrokenBackpressure \
   invariant \
   outboxWithinCapacity \
   "$audit_quint_tmp/backpressure.log"
 check_expected_failure \
-  formal/quint/WitnessQuorum.qnt \
+  formal/quint/WitnessQuorumModels.qnt \
   witnessBrokenProducer \
   invariant \
   readyRequiresAuthenticatedDistinctRosterQuorum \
   "$audit_quint_tmp/witness-producer.log"
 check_expected_failure \
-  formal/quint/WitnessQuorum.qnt \
+  formal/quint/WitnessQuorumModels.qnt \
   witnessBrokenRoster \
   invariant \
   readyRequiresAuthenticatedDistinctRosterQuorum \

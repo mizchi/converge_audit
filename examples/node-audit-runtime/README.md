@@ -32,6 +32,23 @@ revision/snapshot CAS
 acknowledged rowを拒否する。event、equivocation、checkpoint、outbox、ACKは線形走査で
 検証し、SQLiteのkey/indexで重複とlookupを制約する。
 
+outboxの`capacity`は`pending + in_flight`の配送作業数である。`acknowledged` rowとACK履歴は
+duplicate/retry/appeal用の証跡として残るが、次のsealの配送容量は消費しない。
+
+## Quint trace replay
+
+[moonbit-checkpoint-policy.ts](./src/moonbit-checkpoint-policy.ts) は汎用MoonBit bridgeのseal、
+authority head分類、ACK gateを型付きで公開する。
+[quint-checkpoint-mbt.ts](./scripts/quint-checkpoint-mbt.ts) は
+`formal/quint/CheckpointDeliveryMbt.qnt`が生成したITF traceをSQLiteへ再生し、各stepで
+event、checkpoint chain、未ACK outbox、authority headを比較する。
+
+```sh
+just quint-mbt
+```
+
+capacity 1でACK後に次epochをsealするため、acknowledged tombstoneを容量へ数える実装差も検出する。
+
 ## Peer fanout
 
 [moonbit-peer-policy.ts](./src/moonbit-peer-policy.ts) は、生成済みMoonBit JSから

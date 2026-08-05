@@ -36,11 +36,16 @@ fn local_event(counter : Int, digest : String) -> PlayerLocalAuditEvent {
 
 ///|
 fn local_closure() -> TrustedEpochClosure {
+  local_closure_at(0)
+}
+
+///|
+fn local_closure_at(epoch : Int) -> TrustedEpochClosure {
   match
     open_trusted_epoch_closure(
       {
         boundary: local_store_boundary(),
-        epoch: 0,
+        epoch,
         roster_digest: @commitment.AuditDigest("roster"),
         frontier_digest: @commitment.AuditDigest("frontier"),
         certificate_digest: @commitment.AuditDigest("certificate"),
@@ -56,12 +61,21 @@ fn local_closure() -> TrustedEpochClosure {
 
 ///|
 fn local_draft() -> CheckpointSealDraft {
+  local_draft_at(0, "genesis", "checkpoint-0")
+}
+
+///|
+fn local_draft_at(
+  epoch : Int,
+  previous_checkpoint : String,
+  checkpoint_digest : String,
+) -> CheckpointSealDraft {
   {
     boundary: local_store_boundary(),
-    epoch: 0,
-    previous_checkpoint: @commitment.AuditDigest("genesis"),
-    checkpoint_digest: @commitment.AuditDigest("checkpoint-0"),
-    canonical_envelope: "checkpoint-envelope-0",
+    epoch,
+    previous_checkpoint: @commitment.AuditDigest(previous_checkpoint),
+    checkpoint_digest: @commitment.AuditDigest(checkpoint_digest),
+    canonical_envelope: "checkpoint-envelope-" + epoch.to_string(),
   }
 }
 
@@ -173,6 +187,61 @@ test "player-local seal CAS failure leaves every relation unchanged" {
   inspect(store.head().epoch, content="-1")
   inspect(store.outbox_entries().length(), content="0")
   inspect(store.closure_consumed(0), content="false")
+}
+
+///|
+test "acknowledged outbox history does not consume delivery capacity" {
+  let store = match
+    open_player_local_audit_store(
+      boundary=local_store_boundary(),
+      genesis_digest=@commitment.AuditDigest("genesis"),
+      outbox_capacity=1,
+    ) {
+    PlayerLocalAuditStoreReady(store) => store
+    _ => abort("expected a capacity-one local store")
+  }
+  let first = match
+    store.prepare_seal(local_draft(), local_closure(), ["authority"]) {
+    PlayerLocalSealPrepared(plan) => plan
+    _ => abort("expected the first seal")
+  }
+  debug_inspect(store.commit_seal(first), content="PlayerLocalSealCommitted")
+  let claimed = match
+    store.claim_outbox_at(0, now_ms=100, lease_duration_ms=30) {
+    PlayerLocalOutboxUpdated(entry) => entry
+    _ => abort("expected the first delivery claim")
+  }
+  let ack = match
+    open_authenticated_checkpoint_ack(
+      {
+        boundary: claimed.boundary(),
+        authority_id: claimed.destination_id(),
+        epoch: claimed.epoch(),
+        checkpoint_digest: claimed.checkpoint_digest(),
+        decision: CheckpointAccepted,
+      },
+      authentication_succeeded=true,
+    ) {
+    CheckpointAckReady(value) => value
+    _ => abort("expected an authenticated ACK")
+  }
+  match store.acknowledge_outbox_at(0, ack) {
+    PlayerLocalOutboxUpdated(_) => ()
+    _ => abort("expected ACK persistence")
+  }
+  let second_draft = local_draft_at(1, "checkpoint-0", "checkpoint-1")
+  inspect(
+    store.seal_snapshot(second_draft, ["authority"]).outbox_entry_count,
+    content="0",
+  )
+  let second = match
+    store.prepare_seal(second_draft, local_closure_at(1), ["authority"]) {
+    PlayerLocalSealPrepared(plan) => plan
+    _ => abort("ACK should release delivery capacity")
+  }
+  debug_inspect(store.commit_seal(second), content="PlayerLocalSealCommitted")
+  inspect(store.outbox_entries().length(), content="2")
+  inspect(store.durable_image().ack_history.length(), content="1")
 }
 
 ///|

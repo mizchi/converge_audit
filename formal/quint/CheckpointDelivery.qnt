@@ -26,6 +26,8 @@ module checkpointDelivery {
     event: Event,
   }
 
+  /// Complete protocol state. A single record keeps each transition atomic and
+  /// gives fairness one explicit state value to observe.
   type State = {
     accepted: Peer -> Set[Event],
     headLog: Node -> List[Checkpoint],
@@ -50,6 +52,12 @@ module checkpointDelivery {
   const allowCrash: bool
   const allowPartition: bool
   const allowDrop: bool
+
+  /// Executable form of the model-configuration contract. Keep this as a
+  /// checked invariant because Quint 0.32.0 does not pass `assume` to TLC.
+  pure val configIsValid = outboxCapacity > 0
+
+  assume PositiveOutboxCapacity = configIsValid
 
   pure val Peers = Set(P1, P2)
   pure val Nodes = Peers.map(peer => PeerNode(peer)).union(Set(Authority))
@@ -93,6 +101,8 @@ module checkpointDelivery {
   def availableOutbox(peer: Peer): Set[Checkpoint] =
     state.volatileOutbox.get(peer).union(state.durableOutbox.get(peer))
 
+  /// Initialize durable replica state, volatile transport state, and authority
+  /// state at genesis.
   action init = {
     state' = {
       accepted: Peers.mapBy(peer => Events.filter(event => eventOwner(event) == peer)),
@@ -110,6 +120,7 @@ module checkpointDelivery {
     }
   }
 
+  /// Enqueue one replica event for gossip without changing the receiver yet.
   action sendEvent(peer: Peer, receiver: Peer, event: Event): bool = {
     val message = { sender: peer, receiver: receiver, event: event }
     all {
@@ -150,6 +161,8 @@ module checkpointDelivery {
     },
   }
 
+  /// Seal exactly the next epoch when its watermark is complete and the
+  /// unacknowledged outbox still has capacity.
   action sealNextCheckpoint(peer: Peer): bool = {
     val epoch = headEpoch(PeerNode(peer)) + 1
     val checkpoint: Checkpoint = {
@@ -201,6 +214,8 @@ module checkpointDelivery {
     },
   }
 
+  /// Let the authority accept a duplicate or the exact next checkpoint and
+  /// acknowledge it by clearing every producer outbox copy.
   action receiveCheckpoint(checkpoint: Checkpoint): bool = {
     val duplicate = authorityHas(checkpoint)
     val exactNext = and {
@@ -243,6 +258,8 @@ module checkpointDelivery {
     },
   }
 
+  /// Crash a peer once, losing volatile outbox state but preserving durable
+  /// events, checkpoints, and durable outbox entries.
   action crash(peer: Peer): bool = all {
     allowCrash,
     state.up.get(PeerNode(peer)),
@@ -274,6 +291,8 @@ module checkpointDelivery {
     state' = { ...state, partitioned: false },
   }
 
+  /// Bind parameterized protocol actions to nondeterministic arguments. These
+  /// zero-argument wrappers are the relations used by `step` and fairness.
   action sendSomeEvent = {
     nondet peer = Peers.oneOf()
     nondet receiver = Peers.oneOf()
@@ -307,6 +326,8 @@ module checkpointDelivery {
     availableOutbox(peer).forall(other => checkpoint.epoch <= other.epoch),
   }
 
+  /// Fairness relation for retrying the oldest available checkpoint. It is a
+  /// semantic subset of `sendSomeCheckpoint`, which is the branch in `step`.
   action sendSomeOldestCheckpoint = {
     nondet peer = Peers.oneOf()
     nondet checkpoint = availableOutbox(peer).filter(
@@ -335,6 +356,7 @@ module checkpointDelivery {
     restart(peer)
   }
 
+  /// All environment, transport, replica, and authority transitions.
   action step = any {
     sendSomeEvent,
     deliverSomeEvent,
@@ -405,7 +427,10 @@ module checkpointDelivery {
         log.nth(index).in(state.durableCheckpoints.get(peer))))
   }
 
+  /// Aggregate retained for interactive use and the bounded Apalache smoke.
+  /// CI passes the named invariants separately for precise failure reports.
   val safety = and {
+    configIsValid,
     typeOk,
     checkpointCompleteness,
     checkpointAgreement,
@@ -421,6 +446,9 @@ module checkpointDelivery {
   val stableNetwork = not(state.partitioned) and allNodesUp
   val vars = state
 
+  /// Delivery and retry use strong fairness because partitions and temporary
+  /// disablement may recur. Seal, restart, and heal use weak fairness because
+  /// they must progress only when continuously enabled.
   temporal fairness = and {
     strongFair(sendSomeEvent, vars),
     strongFair(deliverSomeEvent, vars),
@@ -434,106 +462,10 @@ module checkpointDelivery {
   temporal authorityEventuallyFinalizes =
     fairness implies eventually(authorityFinalized)
 
+  /// If the network eventually remains healthy, fair execution eventually
+  /// finalizes the newest finite-model epoch at the authority.
   temporal stableNetworkLeadsToFinality =
     fairness implies (
       eventually(always(stableNetwork)) implies eventually(authorityFinalized)
     )
-}
-
-module checkpointSafety {
-  import checkpointDelivery(
-    requireCompleteBeforeSeal = true,
-    durableOutboxEnabled = true,
-    exactParentEnabled = true,
-    retryEnabled = true,
-    enforceOutboxCapacity = true,
-    outboxCapacity = 1,
-    allowCrash = true,
-    allowPartition = true,
-    allowDrop = true
-  ).*
-}
-
-module checkpointLiveness {
-  import checkpointDelivery(
-    requireCompleteBeforeSeal = true,
-    durableOutboxEnabled = true,
-    exactParentEnabled = true,
-    retryEnabled = true,
-    enforceOutboxCapacity = true,
-    outboxCapacity = 1,
-    allowCrash = true,
-    allowPartition = true,
-    allowDrop = true
-  ).*
-}
-
-module checkpointBrokenCompleteness {
-  import checkpointDelivery(
-    requireCompleteBeforeSeal = false,
-    durableOutboxEnabled = true,
-    exactParentEnabled = true,
-    retryEnabled = true,
-    enforceOutboxCapacity = true,
-    outboxCapacity = 1,
-    allowCrash = false,
-    allowPartition = false,
-    allowDrop = false
-  ).*
-}
-
-module checkpointBrokenOutbox {
-  import checkpointDelivery(
-    requireCompleteBeforeSeal = true,
-    durableOutboxEnabled = false,
-    exactParentEnabled = true,
-    retryEnabled = true,
-    enforceOutboxCapacity = true,
-    outboxCapacity = 1,
-    allowCrash = true,
-    allowPartition = false,
-    allowDrop = false
-  ).*
-}
-
-module checkpointBrokenParent {
-  import checkpointDelivery(
-    requireCompleteBeforeSeal = true,
-    durableOutboxEnabled = true,
-    exactParentEnabled = false,
-    retryEnabled = true,
-    enforceOutboxCapacity = true,
-    outboxCapacity = 2,
-    allowCrash = false,
-    allowPartition = false,
-    allowDrop = false
-  ).*
-}
-
-module checkpointBrokenRetry {
-  import checkpointDelivery(
-    requireCompleteBeforeSeal = true,
-    durableOutboxEnabled = true,
-    exactParentEnabled = true,
-    retryEnabled = false,
-    enforceOutboxCapacity = true,
-    outboxCapacity = 1,
-    allowCrash = false,
-    allowPartition = false,
-    allowDrop = true
-  ).*
-}
-
-module checkpointBrokenBackpressure {
-  import checkpointDelivery(
-    requireCompleteBeforeSeal = true,
-    durableOutboxEnabled = true,
-    exactParentEnabled = true,
-    retryEnabled = true,
-    enforceOutboxCapacity = false,
-    outboxCapacity = 1,
-    allowCrash = false,
-    allowPartition = false,
-    allowDrop = false
-  ).*
 }

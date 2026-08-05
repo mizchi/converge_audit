@@ -356,6 +356,31 @@ fn restore_local_outbox_entry(
 }
 
 ///|
+/// Delivery capacity is bounded independently from retained ACK history.
+fn active_local_outbox_count(entries : Array[CheckpointOutboxEntry]) -> Int {
+  let mut count = 0
+  for entry in entries {
+    if entry.state() != OutboxAcknowledgedState {
+      count += 1
+    }
+  }
+  count
+}
+
+///|
+fn active_local_outbox_record_count(
+  entries : Array[PlayerLocalCheckpointOutboxRecord],
+) -> Int {
+  let mut count = 0
+  for entry in entries {
+    if entry.state != OutboxAcknowledgedState {
+      count += 1
+    }
+  }
+  count
+}
+
+///|
 pub fn PlayerLocalAuditStore::seal_snapshot(
   self : PlayerLocalAuditStore,
   draft : CheckpointSealDraft,
@@ -387,7 +412,7 @@ pub fn PlayerLocalAuditStore::seal_snapshot(
     closure_consumed &&
     all_outbox_present,
     closure_consumed,
-    outbox_entry_count: self.outbox_value.length(),
+    outbox_entry_count: active_local_outbox_count(self.outbox_value),
     outbox_capacity: self.outbox_capacity_value,
     next_created_order: self.next_created_order_value,
   }
@@ -430,7 +455,7 @@ pub fn PlayerLocalAuditStore::commit_seal(
     return PlayerLocalSealConcurrentWrite
   }
   let entries = runtime_plan.outbox_entries()
-  if self.outbox_value.length() + entries.length() !=
+  if active_local_outbox_count(self.outbox_value) + entries.length() !=
     runtime_plan.next_outbox_entry_count() ||
     runtime_plan.next_outbox_entry_count() > self.outbox_capacity_value {
     return PlayerLocalSealConcurrentWrite
@@ -543,7 +568,7 @@ fn local_image_checkpoint_chain_valid(image : PlayerLocalAuditImage) -> Bool {
 
 ///|
 fn local_image_outbox_valid(image : PlayerLocalAuditImage) -> Bool {
-  if image.outbox.length() > image.outbox_capacity ||
+  if active_local_outbox_record_count(image.outbox) > image.outbox_capacity ||
     image.next_created_order < 0 {
     return false
   }
