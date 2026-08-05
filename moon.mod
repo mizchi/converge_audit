@@ -1,16 +1,16 @@
-name = "mizchi/bft"
+name = "mizchi/converge_audit"
 
 version = "0.1.0"
 
 readme = "README.md"
 
-repository = "https://github.com/mizchi/bft"
+repository = "https://github.com/mizchi/converge_audit"
 
 license = "Apache-2.0"
 
-keywords = [ "bft", "crdt", "audit", "checkpoint", "local-first" ]
+keywords = [ "crdt", "audit", "checkpoint", "local-first", "byzantine" ]
 
-description = "Byzantine-aware event authentication and checkpoint audit contracts for converge"
+description = "Adversarial checkpoint auditing for local-first replicated state"
 
 source = "src"
 

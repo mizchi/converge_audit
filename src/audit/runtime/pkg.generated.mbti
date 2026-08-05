@@ -1,8 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/audit/runtime"
+package "mizchi/converge_audit/audit/runtime"
 
 import {
-  "mizchi/bft/audit/commitment",
+  "mizchi/converge_audit/audit/commitment",
   "moonbitlang/core/debug",
 }
 

@@ -20,7 +20,7 @@ cooldown、位置、視界、loot rule に従うかは deterministic game kernel
 
 ## リポジトリ上の境界
 
-CRDTへ接続する汎用のByzantine-aware event検証は root package `mizchi/bft` に置く。ゲームに依存しない
+CRDTへ接続する汎用のByzantine-aware event検証は root package `mizchi/converge_audit` に置く。ゲームに依存しない
 checkpoint cadence/retention、commitment射影、head分類、Merkle/authenticated-mapは
 `src/audit/` に置く。一方、mode別preset、participant voteをgame finalityへ接続するadapter、asset replay、inventory、
 marketplace、dungeon encounterは一つのゲーム監査設計に依存するため、
@@ -55,7 +55,7 @@ CRDT本体へgame ruleを持ち込まない。
 - 主張: hash graph と Byzantine causal broadcast により、既存 CRDT を比較的小さな
   変更で Byzantine fault tolerant にする。
 - 採用: `SignedEvent` が session、event、causal dependency digest をまとめて署名し、
-  `(peer, counter)` の equivocation を検出する現在の `BFTAdapter`。
+  `(peer, counter)` の equivocation を検出する現在の `AuditAdapter`。
 - 限界: hash/signature の暗号強度は別の実装責任である。
 
 #### Chai and Zhao, Byzantine Fault Tolerance for Services with Commutative Operations, 2014
@@ -187,7 +187,7 @@ player-local DB
   raw signed events / receipts / checkpoints / proofs / current inventory
        │
        ▼
-session-bound BFT adapter ───── peer mesh / party / match witnesses
+session-bound audit adapter ─── peer mesh / party / match witnesses
        │                              │
        ▼                              ▼
 AuthenticatedEvent             approvals / challenges
@@ -392,7 +392,7 @@ DB の pruning は未実装である。詳細は
 
 | Path | 計算量 |
 | --- | --- |
-| BFT event acceptance | dependency 数と短い payload/signature 検証に比例 |
+| authenticated event acceptance | dependency 数と短い payload/signature 検証に比例 |
 | checkpoint quorum | `O(participants)` |
 | replay witness certificate | manifest canonicalization `O(n log n)` + signature/merge `O(n)` |
 | open-world sample selection | short tagged hash + `O(digest length)` bucketization |

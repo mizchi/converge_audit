@@ -1,26 +1,26 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/central_replay"
+package "mizchi/converge_audit/x/game_audit/central_replay"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/x/game_audit/attestation",
-  "mizchi/bft/x/game_audit/checkpoint",
-  "mizchi/bft/x/game_audit/market",
-  "mizchi/bft/x/game_audit/open_world",
-  "mizchi/bft/x/game_audit/pvp_session",
-  "mizchi/bft/x/game_audit/replay",
-  "mizchi/bft/x/game_audit/wire",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/x/game_audit/attestation",
+  "mizchi/converge_audit/x/game_audit/checkpoint",
+  "mizchi/converge_audit/x/game_audit/market",
+  "mizchi/converge_audit/x/game_audit/open_world",
+  "mizchi/converge_audit/x/game_audit/pvp_session",
+  "mizchi/converge_audit/x/game_audit/replay",
+  "mizchi/converge_audit/x/game_audit/wire",
   "moonbitlang/core/debug",
 }
 
 // Values
-pub fn verify_inventory_listing_proof_bundle(&@bft.Hasher, &@bft.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @bft.PublicKey, expected_checkpoint_digest~ : @bft.Digest, expected_game_manifest_digest~ : @bft.Digest, expected_origin~ : @market.ItemReceipt, expected_seller_id~ : String, rejected_ancestor~ : Bool, limits~ : @wire.InventoryListingWireLimits) -> InventoryListingCentralResult
+pub fn verify_inventory_listing_proof_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_checkpoint_digest~ : @converge_audit.Digest, expected_game_manifest_digest~ : @converge_audit.Digest, expected_origin~ : @market.ItemReceipt, expected_seller_id~ : String, rejected_ancestor~ : Bool, limits~ : @wire.InventoryListingWireLimits) -> InventoryListingCentralResult
 
-pub fn verify_open_world_pve_replay_bundle(&@bft.Hasher, &@bft.Verifier, Bytes, expected_world_id~ : String, expected_encounter_session_id~ : String, expected_authority_key~ : @bft.PublicKey, expected_transparency_log_session_id~ : String, expected_transparency_publisher_key~ : @bft.PublicKey, expected_transparency_checkpoint_digest~ : @bft.Digest, expected_audit_checkpoint_digest~ : @bft.Digest, expected_seal_checkpoint_digest~ : @bft.Digest, expected_encounter_checkpoint_digest~ : @bft.Digest, limits~ : @wire.OpenWorldPveReplayWireLimits) -> OpenWorldPveCentralReplayResult
+pub fn verify_open_world_pve_replay_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_world_id~ : String, expected_encounter_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_transparency_log_session_id~ : String, expected_transparency_publisher_key~ : @converge_audit.PublicKey, expected_transparency_checkpoint_digest~ : @converge_audit.Digest, expected_audit_checkpoint_digest~ : @converge_audit.Digest, expected_seal_checkpoint_digest~ : @converge_audit.Digest, expected_encounter_checkpoint_digest~ : @converge_audit.Digest, limits~ : @wire.OpenWorldPveReplayWireLimits) -> OpenWorldPveCentralReplayResult
 
-pub fn verify_pve_replay_bundle(&@bft.Hasher, &@bft.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @bft.PublicKey, expected_checkpoint_digest~ : @bft.Digest, limits~ : @wire.PveReplayWireLimits) -> PveCentralReplayResult
+pub fn verify_pve_replay_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_checkpoint_digest~ : @converge_audit.Digest, limits~ : @wire.PveReplayWireLimits) -> PveCentralReplayResult
 
-pub fn verify_pvp_replay_bundle(&@bft.Hasher, &@bft.Verifier, Bytes, expected_session_id~ : String, expected_referee_key~ : @bft.PublicKey, expected_checkpoint_digest~ : @bft.Digest, limits~ : @wire.PvpReplayWireLimits) -> PvpCentralReplayResult
+pub fn verify_pvp_replay_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_session_id~ : String, expected_referee_key~ : @converge_audit.PublicKey, expected_checkpoint_digest~ : @converge_audit.Digest, limits~ : @wire.PvpReplayWireLimits) -> PvpCentralReplayResult
 
 // Errors
 
@@ -49,27 +49,27 @@ pub(all) enum InventoryListingCentralResult {
 
 pub struct InventoryListingCentralVerified {
   session_id : String
-  checkpoint_digest : @bft.Digest
-  previous_checkpoint : @bft.Digest
-  authority_key : @bft.PublicKey
+  checkpoint_digest : @converge_audit.Digest
+  previous_checkpoint : @converge_audit.Digest
+  authority_key : @converge_audit.PublicKey
   epoch : Int
-  public_state_root : @bft.Digest
+  public_state_root : @converge_audit.Digest
   asset_id : String
   current_owner_id : String
   version : Int
-  last_event : @bft.Digest
+  last_event : @converge_audit.Digest
   approval_count : Int
   required_approvals : Int
 } derive(Eq, @debug.Debug)
 pub fn InventoryListingCentralVerified::approval_count(Self) -> Int
 pub fn InventoryListingCentralVerified::asset_id(Self) -> String
-pub fn InventoryListingCentralVerified::authority_key(Self) -> @bft.PublicKey
-pub fn InventoryListingCentralVerified::checkpoint_digest(Self) -> @bft.Digest
+pub fn InventoryListingCentralVerified::authority_key(Self) -> @converge_audit.PublicKey
+pub fn InventoryListingCentralVerified::checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn InventoryListingCentralVerified::current_owner_id(Self) -> String
 pub fn InventoryListingCentralVerified::epoch(Self) -> Int
-pub fn InventoryListingCentralVerified::last_event(Self) -> @bft.Digest
-pub fn InventoryListingCentralVerified::previous_checkpoint(Self) -> @bft.Digest
-pub fn InventoryListingCentralVerified::public_state_root(Self) -> @bft.Digest
+pub fn InventoryListingCentralVerified::last_event(Self) -> @converge_audit.Digest
+pub fn InventoryListingCentralVerified::previous_checkpoint(Self) -> @converge_audit.Digest
+pub fn InventoryListingCentralVerified::public_state_root(Self) -> @converge_audit.Digest
 pub fn InventoryListingCentralVerified::required_approvals(Self) -> Int
 pub fn InventoryListingCentralVerified::session_id(Self) -> String
 pub fn InventoryListingCentralVerified::version(Self) -> Int
@@ -101,11 +101,11 @@ pub(all) enum OpenWorldPveCentralReplayResult {
 pub struct OpenWorldPveCentralReplayVerified {
   world_id : String
   encounter_session_id : String
-  authority_key : @bft.PublicKey
-  transparency_checkpoint_digest : @bft.Digest
-  audit_checkpoint_digest : @bft.Digest
-  seal_checkpoint_digest : @bft.Digest
-  encounter_checkpoint_digest : @bft.Digest
+  authority_key : @converge_audit.PublicKey
+  transparency_checkpoint_digest : @converge_audit.Digest
+  audit_checkpoint_digest : @converge_audit.Digest
+  seal_checkpoint_digest : @converge_audit.Digest
+  encounter_checkpoint_digest : @converge_audit.Digest
   observer_approvals : Int
   required_observer_approvals : Int
   cleared : Bool
@@ -115,17 +115,17 @@ pub struct OpenWorldPveCentralReplayVerified {
   item_creations : Array[VerifiedItemCreation]
 } derive(Eq, @debug.Debug)
 pub fn OpenWorldPveCentralReplayVerified::accepted_dodge_count(Self) -> Int
-pub fn OpenWorldPveCentralReplayVerified::audit_checkpoint_digest(Self) -> @bft.Digest
-pub fn OpenWorldPveCentralReplayVerified::authority_key(Self) -> @bft.PublicKey
+pub fn OpenWorldPveCentralReplayVerified::audit_checkpoint_digest(Self) -> @converge_audit.Digest
+pub fn OpenWorldPveCentralReplayVerified::authority_key(Self) -> @converge_audit.PublicKey
 pub fn OpenWorldPveCentralReplayVerified::cleared(Self) -> Bool
 pub fn OpenWorldPveCentralReplayVerified::defeated_ids(Self) -> Array[String]
-pub fn OpenWorldPveCentralReplayVerified::encounter_checkpoint_digest(Self) -> @bft.Digest
+pub fn OpenWorldPveCentralReplayVerified::encounter_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn OpenWorldPveCentralReplayVerified::encounter_session_id(Self) -> String
 pub fn OpenWorldPveCentralReplayVerified::observer_approval_count(Self) -> Int
 pub fn OpenWorldPveCentralReplayVerified::required_observer_approvals(Self) -> Int
-pub fn OpenWorldPveCentralReplayVerified::seal_checkpoint_digest(Self) -> @bft.Digest
+pub fn OpenWorldPveCentralReplayVerified::seal_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn OpenWorldPveCentralReplayVerified::survivor_ids(Self) -> Array[String]
-pub fn OpenWorldPveCentralReplayVerified::transparency_checkpoint_digest(Self) -> @bft.Digest
+pub fn OpenWorldPveCentralReplayVerified::transparency_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn OpenWorldPveCentralReplayVerified::verified_item_creation_count(Self) -> Int
 pub fn OpenWorldPveCentralReplayVerified::verified_item_creations(Self) -> Array[VerifiedItemCreation]
 pub fn OpenWorldPveCentralReplayVerified::world_id(Self) -> String
@@ -154,8 +154,8 @@ pub(all) enum PveCentralReplayResult {
 
 pub struct PveCentralReplayVerified {
   session_id : String
-  checkpoint_digest : @bft.Digest
-  authority_key : @bft.PublicKey
+  checkpoint_digest : @converge_audit.Digest
+  authority_key : @converge_audit.PublicKey
   epoch : Int
   cleared : Bool
   accepted_dodges : Int
@@ -165,8 +165,8 @@ pub struct PveCentralReplayVerified {
   replayed_assets : Int
 } derive(Eq, @debug.Debug)
 pub fn PveCentralReplayVerified::accepted_dodge_count(Self) -> Int
-pub fn PveCentralReplayVerified::authority_key(Self) -> @bft.PublicKey
-pub fn PveCentralReplayVerified::checkpoint_digest(Self) -> @bft.Digest
+pub fn PveCentralReplayVerified::authority_key(Self) -> @converge_audit.PublicKey
+pub fn PveCentralReplayVerified::checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn PveCentralReplayVerified::cleared(Self) -> Bool
 pub fn PveCentralReplayVerified::defeated_ids(Self) -> Array[String]
 pub fn PveCentralReplayVerified::epoch(Self) -> Int
@@ -201,8 +201,8 @@ pub(all) enum PvpCentralReplayResult {
 
 pub struct PvpCentralReplayVerified {
   session_id : String
-  checkpoint_digest : @bft.Digest
-  referee_key : @bft.PublicKey
+  checkpoint_digest : @converge_audit.Digest
+  referee_key : @converge_audit.PublicKey
   epoch : Int
   accepted_commands : Int
   approval_count : Int
@@ -213,11 +213,11 @@ pub struct PvpCentralReplayVerified {
 } derive(Eq, @debug.Debug)
 pub fn PvpCentralReplayVerified::accepted_command_count(Self) -> Int
 pub fn PvpCentralReplayVerified::approval_count(Self) -> Int
-pub fn PvpCentralReplayVerified::checkpoint_digest(Self) -> @bft.Digest
+pub fn PvpCentralReplayVerified::checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn PvpCentralReplayVerified::epoch(Self) -> Int
 pub fn PvpCentralReplayVerified::equivocator_ids(Self) -> Array[String]
 pub fn PvpCentralReplayVerified::player_states(Self) -> Array[@replay.PvpPlayerState]
-pub fn PvpCentralReplayVerified::referee_key(Self) -> @bft.PublicKey
+pub fn PvpCentralReplayVerified::referee_key(Self) -> @converge_audit.PublicKey
 pub fn PvpCentralReplayVerified::required_approvals(Self) -> Int
 pub fn PvpCentralReplayVerified::session_id(Self) -> String
 pub fn PvpCentralReplayVerified::team_states(Self) -> Array[@replay.PvpTeamState]
@@ -228,8 +228,8 @@ pub(all) struct VerifiedItemCreation {
   item_type : String
   quantity : Int
   output_index : Int
-  source_event : @bft.Digest
-  checkpoint_digest : @bft.Digest
+  source_event : @converge_audit.Digest
+  checkpoint_digest : @converge_audit.Digest
   inventory_session_id : String
   checkpoint_epoch : Int
 } derive(Eq, @debug.Debug)

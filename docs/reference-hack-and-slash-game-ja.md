@@ -69,7 +69,7 @@ provisionalであり、監査不成立なら最後のACK地点までinventory li
 ### 実装済みのplayer-local journal
 
 - 1 tickを入力とcanonical effect集合からなる一つのleafにする。
-- 30 leafを`mizchi/bft/audit/merkle`のMerkle rootへ畳み込み、最終game state digestと前checkpointを
+- 30 leafを`mizchi/converge_audit/audit/merkle`のMerkle rootへ畳み込み、最終game state digestと前checkpointを
   micro checkpoint envelopeへ束縛する。
 - SHA-256とMerkle framingはTypeScriptへ複製せず、`src/x/game_audit/browser_bridge`からMoonBit実装を
   browser bundleへ直接linkする。

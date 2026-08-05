@@ -120,7 +120,7 @@ fn pvp_signed_events(bundle : @wire.PvpReplayBundle) -> Array[@bft.SignedEvent] 
 
 ///|
 fn pvp_roster_boundary_valid(
-  adapter : @bft.BFTAdapter,
+  adapter : @bft.AuditAdapter,
   bundle : @wire.PvpReplayBundle,
   expected_referee_key : @bft.PublicKey,
 ) -> Bool {
@@ -150,7 +150,7 @@ fn authenticate_pvp_event_graph(
   expected_session_id : String,
   expected_referee_key : @bft.PublicKey,
 ) -> Result[Map[String, @bft.AuthenticatedEvent], PvpCentralReplayRefusal] {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     hasher,
     verifier,
     session_id=expected_session_id,

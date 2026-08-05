@@ -1,10 +1,10 @@
 import {
-  "mizchi/bft/audit/commitment",
-  "mizchi/bft/audit/layered",
-  "mizchi/bft",
+  "mizchi/converge_audit/audit/commitment",
+  "mizchi/converge_audit/audit/layered",
+  "mizchi/converge_audit" @bft,
   "moonbitlang/core/bench",
 }
 
 import {
-  "mizchi/bft/audit",
+  "mizchi/converge_audit/audit",
 } for "test"

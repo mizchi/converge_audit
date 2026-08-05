@@ -1,20 +1,20 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/audit/delivery_auth"
+package "mizchi/converge_audit/audit/delivery_auth"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/audit/runtime",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/audit/runtime",
   "moonbitlang/core/debug",
 }
 
 // Values
-pub fn open_authenticated_checkpoint_delivery(&@bft.Hasher, &@bft.Verifier, DeliveryAuthenticationPolicy, SignedCheckpointDelivery, Array[SignedCheckpointDeliveryApproval]) -> DeliveryAuthenticationResult
+pub fn open_authenticated_checkpoint_delivery(&@converge_audit.Hasher, &@converge_audit.Verifier, DeliveryAuthenticationPolicy, SignedCheckpointDelivery, Array[SignedCheckpointDeliveryApproval]) -> DeliveryAuthenticationResult
 
 pub fn serialize_checkpoint_delivery_statement(CheckpointDeliveryStatement) -> String
 
-pub fn sign_checkpoint_delivery(&@bft.Hasher, &@bft.Signer, String, CheckpointDeliveryStatement) -> SignedCheckpointDelivery
+pub fn sign_checkpoint_delivery(&@converge_audit.Hasher, &@converge_audit.Signer, String, CheckpointDeliveryStatement) -> SignedCheckpointDelivery
 
-pub fn sign_checkpoint_delivery_approval(&@bft.Hasher, &@bft.Signer, String, @bft.Digest) -> SignedCheckpointDeliveryApproval
+pub fn sign_checkpoint_delivery_approval(&@converge_audit.Hasher, &@converge_audit.Signer, String, @converge_audit.Digest) -> SignedCheckpointDeliveryApproval
 
 // Errors
 
@@ -32,14 +32,14 @@ pub(all) struct CheckpointDeliveryStatement {
   boundary : @runtime.AuditBoundary
   destination_id : String
   epoch : Int
-  previous_checkpoint : @bft.Digest
-  checkpoint_digest : @bft.Digest
+  previous_checkpoint : @converge_audit.Digest
+  checkpoint_digest : @converge_audit.Digest
   canonical_envelope : String
 } derive(Eq, @debug.Debug)
 
 pub(all) struct DeliveryAuthenticationPolicy {
   producer_id : String
-  producer_key : @bft.PublicKey
+  producer_key : @converge_audit.PublicKey
   witnesses : Array[DeliveryWitness]
   required_approvals : Int
 } derive(Eq, @debug.Debug)
@@ -66,23 +66,23 @@ pub(all) enum DeliveryAuthenticationResult {
 
 pub(all) struct DeliveryWitness {
   witness_id : String
-  witness_key : @bft.PublicKey
+  witness_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
 
 pub(all) struct SignedCheckpointDelivery {
   statement : CheckpointDeliveryStatement
-  digest : @bft.Digest
-  signature : @bft.Signature
+  digest : @converge_audit.Digest
+  signature : @converge_audit.Signature
   producer_id : String
-  producer_key : @bft.PublicKey
+  producer_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
 
 pub(all) struct SignedCheckpointDeliveryApproval {
-  statement_digest : @bft.Digest
+  statement_digest : @converge_audit.Digest
   witness_id : String
-  digest : @bft.Digest
-  signature : @bft.Signature
-  witness_key : @bft.PublicKey
+  digest : @converge_audit.Digest
+  signature : @converge_audit.Signature
+  witness_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
 
 // Type aliases

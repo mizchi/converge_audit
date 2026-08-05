@@ -1,10 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/audit/layered"
+package "mizchi/converge_audit/audit/layered"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/audit",
-  "mizchi/bft/audit/merkle",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/audit",
+  "mizchi/converge_audit/audit/merkle",
   "moonbitlang/core/debug",
 }
 
@@ -13,11 +13,11 @@ pub fn serialize_macro_checkpoint(MacroCheckpoint) -> String
 
 pub fn serialize_micro_checkpoint(MicroCheckpoint) -> String
 
-pub fn verify_macro_checkpoint_event(&@bft.Hasher, MacroCheckpoint, String, LayeredEventProof) -> Bool
+pub fn verify_macro_checkpoint_event(&@converge_audit.Hasher, MacroCheckpoint, String, LayeredEventProof) -> Bool
 
-pub fn verify_macro_checkpoint_micro(&@bft.Hasher, MacroCheckpoint, MicroCheckpoint, @merkle.MerkleProof) -> Bool
+pub fn verify_macro_checkpoint_micro(&@converge_audit.Hasher, MacroCheckpoint, MicroCheckpoint, @merkle.MerkleProof) -> Bool
 
-pub fn verify_micro_checkpoint_event(&@bft.Hasher, MicroCheckpoint, String, @merkle.MerkleProof) -> Bool
+pub fn verify_micro_checkpoint_event(&@converge_audit.Hasher, MicroCheckpoint, String, @merkle.MerkleProof) -> Bool
 
 // Errors
 
@@ -59,7 +59,7 @@ pub enum LayeredBuilderOpenResult {
 }
 
 pub struct LayeredCheckpointBuilder {
-  hasher : &@bft.Hasher
+  hasher : &@converge_audit.Hasher
   policy : @audit.VerifiedCheckpointPolicy
   scope_id : String
   origin_ms : Int
@@ -68,14 +68,14 @@ pub struct LayeredCheckpointBuilder {
   mut macro_epoch : Int
   mut micro_index : Int
   mut window_start_ms : Int
-  mut previous_macro_digest : @bft.Digest
+  mut previous_macro_digest : @converge_audit.Digest
   mut pending_events : Array[PendingAuditEvent]
   pending_payloads : Map[String, Bool]
   mut current_macro_micros : Array[SealedMicroCheckpoint]
 }
 pub fn LayeredCheckpointBuilder::advance_watermark(Self, Int, max_windows~ : Int) -> AdvanceWatermarkResult
 pub fn LayeredCheckpointBuilder::append_event(Self, Int, String) -> AppendAuditEventResult
-pub fn LayeredCheckpointBuilder::open(&@bft.Hasher, @audit.VerifiedCheckpointPolicy, scope_id~ : String, origin_ms~ : Int, previous_macro_digest~ : @bft.Digest, max_pending_events~ : Int) -> LayeredBuilderOpenResult
+pub fn LayeredCheckpointBuilder::open(&@converge_audit.Hasher, @audit.VerifiedCheckpointPolicy, scope_id~ : String, origin_ms~ : Int, previous_macro_digest~ : @converge_audit.Digest, max_pending_events~ : Int) -> LayeredBuilderOpenResult
 pub fn LayeredCheckpointBuilder::pending_event_count(Self) -> Int
 pub fn LayeredCheckpointBuilder::watermark_ms(Self) -> Int
 
@@ -100,9 +100,9 @@ pub(all) struct MacroCheckpoint {
   ends_at_ms : Int
   micro_checkpoint_count : Int
   event_count : Int
-  previous_macro_digest : @bft.Digest
-  micro_root : @bft.Digest
-  digest : @bft.Digest
+  previous_macro_digest : @converge_audit.Digest
+  micro_root : @converge_audit.Digest
+  digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 
 pub(all) struct MicroCheckpoint {
@@ -112,8 +112,8 @@ pub(all) struct MicroCheckpoint {
   starts_at_ms : Int
   ends_at_ms : Int
   event_count : Int
-  event_root : @bft.Digest
-  digest : @bft.Digest
+  event_root : @converge_audit.Digest
+  digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 
 type PendingAuditEvent

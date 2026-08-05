@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft"
+package "mizchi/converge_audit"
 
 import {
   "mizchi/converge/types",
@@ -12,6 +12,44 @@ pub fn serialize_for_hash(String, @types.Event, Array[Digest]) -> String
 // Errors
 
 // Types and methods
+pub struct AuditAdapter {
+  hasher : &Hasher
+  verifier : &Verifier
+  session : String
+  peer_keys : Map[String, PublicKey]
+  digest_store : Map[String, Bool]
+  digest_ids : Map[String, @types.EventId]
+  event_digests : Map[String, Digest]
+  pending_buffer : Array[SignedEvent]
+  flushed_events : Array[AuthenticatedEvent]
+  flushed_alerts : Array[AuditAlert]
+}
+pub fn AuditAdapter::deliver(Self, SignedEvent) -> DeliveryResult
+pub fn AuditAdapter::new(&Hasher, &Verifier, session_id~ : String) -> Self
+pub fn AuditAdapter::register_peer(Self, @types.PeerId, PublicKey) -> Bool
+pub fn AuditAdapter::session_id(Self) -> String
+pub fn AuditAdapter::sign(Self, &Signer, @types.Event, Array[Digest]) -> SignedEvent
+pub fn AuditAdapter::take_flushed(Self) -> Array[AuthenticatedEvent]
+pub fn AuditAdapter::take_flushed_alerts(Self) -> Array[AuditAlert]
+
+pub(all) struct AuditAlert {
+  kind : AuditAlertKind
+  peer : @types.PeerId
+  digest : Digest
+  detail : String
+} derive(Eq, @debug.Debug)
+
+pub(all) enum AuditAlertKind {
+  SessionMismatch
+  UnknownPeer
+  AuthorKeyMismatch
+  DependencyMismatch
+  Equivocation
+  HashMismatch
+  InvalidSignature
+  MissingDependency
+} derive(Eq, @debug.Debug)
+
 pub struct AuthenticatedEvent {
   session_id : String
   digest : Digest
@@ -23,48 +61,10 @@ pub fn AuthenticatedEvent::digest(Self) -> Digest
 pub fn AuthenticatedEvent::event(Self) -> @types.Event
 pub fn AuthenticatedEvent::session_id(Self) -> String
 
-pub struct BFTAdapter {
-  hasher : &Hasher
-  verifier : &Verifier
-  session : String
-  peer_keys : Map[String, PublicKey]
-  digest_store : Map[String, Bool]
-  digest_ids : Map[String, @types.EventId]
-  event_digests : Map[String, Digest]
-  pending_buffer : Array[SignedEvent]
-  flushed_events : Array[AuthenticatedEvent]
-  flushed_alerts : Array[BFTAlert]
-}
-pub fn BFTAdapter::deliver(Self, SignedEvent) -> DeliveryResult
-pub fn BFTAdapter::new(&Hasher, &Verifier, session_id~ : String) -> Self
-pub fn BFTAdapter::register_peer(Self, @types.PeerId, PublicKey) -> Bool
-pub fn BFTAdapter::session_id(Self) -> String
-pub fn BFTAdapter::sign(Self, &Signer, @types.Event, Array[Digest]) -> SignedEvent
-pub fn BFTAdapter::take_flushed(Self) -> Array[AuthenticatedEvent]
-pub fn BFTAdapter::take_flushed_alerts(Self) -> Array[BFTAlert]
-
-pub(all) struct BFTAlert {
-  kind : BFTAlertKind
-  peer : @types.PeerId
-  digest : Digest
-  detail : String
-} derive(Eq, @debug.Debug)
-
-pub(all) enum BFTAlertKind {
-  SessionMismatch
-  UnknownPeer
-  AuthorKeyMismatch
-  DependencyMismatch
-  Equivocation
-  HashMismatch
-  InvalidSignature
-  MissingDependency
-} derive(Eq, @debug.Debug)
-
 pub(all) enum DeliveryResult {
   Accepted(AuthenticatedEvent)
   Buffered
-  Rejected(BFTAlert)
+  Rejected(AuditAlert)
 } derive(Eq, @debug.Debug)
 
 pub(all) struct Digest(String) derive(Compare, Eq, Hash, @debug.Debug)

@@ -1,11 +1,11 @@
 import {
-  "mizchi/bft/x/game_audit/attestation",
-  "mizchi/bft",
-  "mizchi/bft/x/game_audit/checkpoint",
-  "mizchi/bft/x/game_audit/replay",
+  "mizchi/converge_audit/x/game_audit/attestation",
+  "mizchi/converge_audit" @bft,
+  "mizchi/converge_audit/x/game_audit/checkpoint",
+  "mizchi/converge_audit/x/game_audit/replay",
 }
 
 import {
   "mizchi/converge/types",
-  "mizchi/bft/x/game_audit/witness_manifest",
+  "mizchi/converge_audit/x/game_audit/witness_manifest",
 } for "test"

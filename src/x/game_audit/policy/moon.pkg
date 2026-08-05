@@ -1,7 +1,7 @@
 import {
-  "mizchi/bft/audit",
+  "mizchi/converge_audit/audit",
 }
 
 import {
-  "mizchi/bft/x/game_audit/audit" @game_audit,
+  "mizchi/converge_audit/x/game_audit/audit" @game_audit,
 } for "test"

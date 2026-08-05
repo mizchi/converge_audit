@@ -15,7 +15,7 @@ fn raid_player_attack(
   tick : Int,
   counter : Int,
 ) -> DungeonPlayerAttackEvidence raise Error {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id="encounter-session",

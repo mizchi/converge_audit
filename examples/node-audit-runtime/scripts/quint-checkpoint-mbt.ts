@@ -356,7 +356,7 @@ async function replayTrace(
   traceIndex: number,
 ): Promise<void> {
   assert.equal(trace.states.length, 11, "MBT driver trace did not complete");
-  const directory = await mkdtemp(join(tmpdir(), `bft-quint-replay-${traceIndex}-`));
+  const directory = await mkdtemp(join(tmpdir(), `converge-audit-quint-replay-${traceIndex}-`));
   const peers = new Map<Peer, PeerStore>([
     ["P1", openPeer("P1", join(directory, "p1.sqlite"))],
     ["P2", openPeer("P2", join(directory, "p2.sqlite"))],

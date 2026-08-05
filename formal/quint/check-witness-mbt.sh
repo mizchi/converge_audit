@@ -3,7 +3,7 @@ set -eu
 
 quint typecheck formal/quint/WitnessQuorumMbt.qnt
 
-audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/bft-quint-witness-mbt.XXXXXX")"
+audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint-witness-mbt.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
 
 quint run formal/quint/WitnessQuorumMbt.qnt \

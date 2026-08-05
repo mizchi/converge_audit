@@ -1,9 +1,9 @@
 import {
-  "mizchi/bft/audit",
-  "mizchi/bft/audit/runtime" @audit_runtime,
-  "mizchi/bft",
+  "mizchi/converge_audit/audit",
+  "mizchi/converge_audit/audit/runtime" @audit_runtime,
+  "mizchi/converge_audit" @bft,
 }
 
 import {
-  "mizchi/bft/audit/commitment",
+  "mizchi/converge_audit/audit/commitment",
 } for "test"

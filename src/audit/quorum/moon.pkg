@@ -1,4 +1,4 @@
 import {
-  "mizchi/bft/audit/quorum/vote" @quorum_vote,
-  "mizchi/bft",
+  "mizchi/converge_audit/audit/quorum/vote" @quorum_vote,
+  "mizchi/converge_audit" @bft,
 }

@@ -31,7 +31,7 @@ fn dungeon_players() -> Array[DungeonPlayer] {
 
 ///|
 fn accept_dungeon_event(
-  adapter : @bft.BFTAdapter,
+  adapter : @bft.AuditAdapter,
   signer : &@bft.Signer,
   event : @types.Event,
   dep_hashes : Array[@bft.Digest],
@@ -58,7 +58,7 @@ fn dungeon_sources(
   input_signer? : String = "alice",
   depend_on_telegraph? : Bool = true,
 ) -> DungeonSources raise Error {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id="dungeon-42",
@@ -261,7 +261,7 @@ test "bounded client-time dodge survives and authorizes deterministic loot" {
               output_index=0,
             ),
           )
-          let asset_adapter = @bft.BFTAdapter::new(
+          let asset_adapter = @bft.AuditAdapter::new(
             @bft.FnvHasher::new(),
             @bft.MockVerifier::new(),
             session_id="dungeon-42",

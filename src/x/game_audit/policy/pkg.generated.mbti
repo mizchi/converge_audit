@@ -1,8 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/policy"
+package "mizchi/converge_audit/x/game_audit/policy"
 
 import {
-  "mizchi/bft/audit",
+  "mizchi/converge_audit/audit",
   "moonbitlang/core/debug",
 }
 

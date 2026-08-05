@@ -1,10 +1,10 @@
 import {
-  "mizchi/bft/x/game_audit/audit",
-  "mizchi/bft/audit/quorum",
-  "mizchi/bft",
-  "mizchi/bft/x/game_audit/checkpoint",
-  "mizchi/bft/x/game_audit/replay",
-  "mizchi/bft/x/game_audit/witness_manifest",
+  "mizchi/converge_audit/x/game_audit/audit",
+  "mizchi/converge_audit/audit/quorum",
+  "mizchi/converge_audit" @bft,
+  "mizchi/converge_audit/x/game_audit/checkpoint",
+  "mizchi/converge_audit/x/game_audit/replay",
+  "mizchi/converge_audit/x/game_audit/witness_manifest",
   "moonbitlang/core/bench",
 }
 

@@ -27,7 +27,7 @@ fn replayed_effect(
   counter? : Int = 0,
   effect_author? : String = "game-server",
 ) -> (@bft.AuthenticatedEvent, @replay.ReplayedAssetEffect) raise Error {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id~,

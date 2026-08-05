@@ -1137,7 +1137,7 @@ pub fn audit_inventory_head_advance_allowed(
 
 ///|
 fn worker_accept_pve_event(
-  adapter : @bft.BFTAdapter,
+  adapter : @bft.AuditAdapter,
   signed : @bft.SignedEvent,
 ) -> @bft.AuthenticatedEvent? {
   match adapter.deliver(signed) {
@@ -1173,7 +1173,7 @@ pub fn audit_benchmark_make_pve_replay_bundle(
   }
   let authority_peer_id = "authority"
   let player_id = "alice"
-  let adapter = @bft.BFTAdapter::new(hasher, verifier, session_id~)
+  let adapter = @bft.AuditAdapter::new(hasher, verifier, session_id~)
   if !adapter.register_peer(
       @types.PeerId(authority_peer_id),
       authority.public_key(),
@@ -1495,7 +1495,7 @@ pub fn audit_benchmark_make_pvp_replay_bundle(
     None => return worker_error("fixture_bob_key_failed")
   }
   let referee_peer_id = "referee"
-  let adapter = @bft.BFTAdapter::new(hasher, verifier, session_id~)
+  let adapter = @bft.AuditAdapter::new(hasher, verifier, session_id~)
   if !adapter.register_peer(
       @types.PeerId(referee_peer_id),
       referee.public_key(),
@@ -1845,7 +1845,7 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
   })
   let authority_peer_id = "authority"
   let player_id = "alice"
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     hasher,
     verifier,
     session_id=encounter_session_id,

@@ -1,15 +1,15 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/wire"
+package "mizchi/converge_audit/x/game_audit/wire"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/audit/merkle",
-  "mizchi/bft/x/game_audit/attestation",
-  "mizchi/bft/x/game_audit/checkpoint",
-  "mizchi/bft/x/game_audit/inventory",
-  "mizchi/bft/x/game_audit/open_world",
-  "mizchi/bft/x/game_audit/replay",
-  "mizchi/bft/x/game_audit/witness_manifest",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/audit/merkle",
+  "mizchi/converge_audit/x/game_audit/attestation",
+  "mizchi/converge_audit/x/game_audit/checkpoint",
+  "mizchi/converge_audit/x/game_audit/inventory",
+  "mizchi/converge_audit/x/game_audit/open_world",
+  "mizchi/converge_audit/x/game_audit/replay",
+  "mizchi/converge_audit/x/game_audit/witness_manifest",
   "moonbitlang/core/debug",
 }
 
@@ -87,7 +87,7 @@ pub suberror PveReplayWireError {
 // Types and methods
 pub(all) struct InventoryListingProofBundle {
   signed_checkpoint : @checkpoint.SignedCheckpoint
-  game_manifest_digest : @bft.Digest
+  game_manifest_digest : @converge_audit.Digest
   witnesses : Array[@witness_manifest.ReplayWitnessIdentity]
   max_faults : Int
   attestations : Array[@attestation.SignedAttestation]
@@ -127,7 +127,7 @@ pub(all) struct OpenWorldPveReplayBundle {
   signed_audit_checkpoint : @checkpoint.SignedCheckpoint
   signed_anchor_seal_checkpoint : @checkpoint.SignedCheckpoint
   audit_transparency : @open_world.OpenWorldAuditTransparencyEnvelope
-  game_manifest_digest : @bft.Digest
+  game_manifest_digest : @converge_audit.Digest
   sample_numerator : Int
   sample_denominator : Int
   registered_count : Int
@@ -150,13 +150,13 @@ pub(all) struct OpenWorldPveReplayWireLimits {
 pub fn OpenWorldPveReplayWireLimits::default() -> Self
 
 pub(all) struct PveReplayAssetEffectEvidence {
-  source : @bft.SignedEvent
+  source : @converge_audit.SignedEvent
   effect : @replay.AssetEffect
 }
 
 pub(all) struct PveReplayAttackTranscript {
   attack_id : String
-  telegraph : @bft.SignedEvent
+  telegraph : @converge_audit.SignedEvent
   dodge_evidence : Array[PveReplayDodgeEvidence]
 }
 
@@ -171,8 +171,8 @@ pub(all) struct PveReplayBundle {
 }
 
 pub(all) struct PveReplayDodgeEvidence {
-  input : @bft.SignedEvent
-  receipt : @bft.SignedEvent
+  input : @converge_audit.SignedEvent
+  receipt : @converge_audit.SignedEvent
   intent : @replay.DodgeIntent
   observed : @replay.DodgeReceipt
 }
@@ -203,8 +203,8 @@ pub(all) struct PvpReplayBundle {
 }
 
 pub(all) struct PvpReplayCommandEvidence {
-  input : @bft.SignedEvent
-  receipt : @bft.SignedEvent
+  input : @converge_audit.SignedEvent
+  receipt : @converge_audit.SignedEvent
   intent : @replay.PvpCommandIntent
   observed : @replay.PvpCommandReceipt
 }

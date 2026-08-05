@@ -17,9 +17,9 @@ fn make_event(
 }
 
 ///|
-/// Helper: create and sign an event using the BFTAdapter.
+/// Helper: create and sign an event using the audit adapter.
 fn sign_event(
-  adapter : BFTAdapter,
+  adapter : AuditAdapter,
   signer : MockSigner,
   event : @types.Event,
   dep_hashes : Array[Digest],
@@ -29,15 +29,15 @@ fn sign_event(
 
 ///|
 /// Helper: create a fresh adapter with default mock crypto.
-fn make_adapter() -> BFTAdapter {
+fn make_adapter() -> AuditAdapter {
   let hasher = FnvHasher::new()
   let verifier = MockVerifier::new()
-  BFTAdapter::new(hasher, verifier, session_id="test-session")
+  AuditAdapter::new(hasher, verifier, session_id="test-session")
 }
 
 ///|
 fn register_signer(
-  adapter : BFTAdapter,
+  adapter : AuditAdapter,
   peer : String,
   signer : MockSigner,
 ) -> Unit raise Error {
@@ -276,12 +276,12 @@ test "canonical serialization separates string field boundaries" {
 
 ///|
 test "session binding: an event signed for another session is rejected" {
-  let source = BFTAdapter::new(
+  let source = AuditAdapter::new(
     FnvHasher::new(),
     MockVerifier::new(),
     session_id="session-a",
   )
-  let target = BFTAdapter::new(
+  let target = AuditAdapter::new(
     FnvHasher::new(),
     MockVerifier::new(),
     session_id="session-b",
@@ -290,12 +290,12 @@ test "session binding: an event signed for another session is rejected" {
   assert_true(target.register_peer(@types.PeerId("alice"), signer.public_key()))
   let signed = source.sign(signer, make_event("alice", 0, 1, []), [])
   match target.deliver(signed) {
-    Rejected(alert) => assert_eq(alert.kind, BFTAlertKind::SessionMismatch)
+    Rejected(alert) => assert_eq(alert.kind, AuditAlertKind::SessionMismatch)
     _ => fail("cross-session event unexpectedly authenticated")
   }
   let relabeled : SignedEvent = { ..signed, session_id: "session-b" }
   match target.deliver(relabeled) {
-    Rejected(alert) => assert_eq(alert.kind, BFTAlertKind::HashMismatch)
+    Rejected(alert) => assert_eq(alert.kind, AuditAlertKind::HashMismatch)
     _ => fail("unsigned session relabeling unexpectedly authenticated")
   }
 }

@@ -25,7 +25,7 @@ check_invalid_config() {
 
 quint typecheck formal/quint/ConfigContracts.qnt
 
-audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/bft-quint-contracts.XXXXXX")"
+audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint-contracts.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
 
 check_invalid_config checkpointInvalidCapacity "$audit_quint_tmp/capacity.log"

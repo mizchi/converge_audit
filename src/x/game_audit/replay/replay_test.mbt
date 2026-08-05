@@ -5,7 +5,7 @@ fn authenticated_effect_event(
   counter? : Int = 0,
   signer_name? : String = "game-server",
 ) -> @bft.AuthenticatedEvent raise Error {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id~,

@@ -3,7 +3,7 @@ set -eu
 
 quint typecheck formal/quint/CheckpointDeliveryMbt.qnt
 
-audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/bft-quint-mbt.XXXXXX")"
+audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint-mbt.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
 
 quint run formal/quint/CheckpointDeliveryMbt.qnt \

@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/audit/runtime/bridge"
+package "mizchi/converge_audit/audit/runtime/bridge"
 
 // Values
 pub fn audit_acknowledge_checkpoint_outbox(Int, String, String, String, String, String, Int, String, String, Int, Int, String, String, String, String, String, Int, String, String, Bool) -> String

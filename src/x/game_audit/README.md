@@ -1,9 +1,9 @@
 # Experimental game-audit stack
 
 This subtree contains the multiplayer anti-cheat and auditable-asset prototype.
-It is intentionally outside `mizchi/bft`'s reusable package namespace.
+It is intentionally outside `mizchi/converge_audit`'s reusable package namespace.
 
-The root `mizchi/bft` package remains the reusable Byzantine-aware adapter around converge events.
+The root `mizchi/converge_audit` package remains the reusable Byzantine-aware adapter around converge events.
 `src/audit/` provides the reusable checkpoint policy, commitment projection,
 head classifier, authenticated delivery/quorum, runtime bridge, Merkle tree,
 and authenticated map. The packages here are one
@@ -86,7 +86,7 @@ backend, and durable head-history transaction remain integration work.
 `examples/cf-game-audit`: benchmark fixture generation, full envelope opening,
 the proved classifiers, and real-crypto PvE/PvP/open-world bundle replay. `central_replay`
 decodes a bounded versioned bundle, authenticates every signed event through
-the BFT adapter, reconstructs the complete transcript, and only reports success
+the audit adapter, reconstructs the complete transcript, and only reports success
 after the game checkpoint's manifest/event/public-state roots match; PvP also
 requires a replay-bound `n-f` witness certificate. Current-owner listing uses a
 separate bounded bundle containing an authority checkpoint, committed game

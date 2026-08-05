@@ -1,4 +1,4 @@
-# mizchi/bft
+# mizchi/converge_audit
 
 [`mizchi/converge`](https://github.com/mizchi/converge) のlocal-first CRDTへ接続する、
 敵対環境向けのevent認証・checkpoint監査ライブラリです。
@@ -48,7 +48,7 @@ deterministic replay
 
 ## このライブラリがしていること
 
-`mizchi/bft`はゲームルールそのものではなく、検証可能な履歴を作るためのmechanismを提供します。
+`mizchi/converge_audit`はゲームルールそのものではなく、検証可能な履歴を作るためのmechanismを提供します。
 
 - converge eventをsession、roster、public key、digest、signatureへ拘束する。
 - 同じplayer counterに異なるeventを出すequivocationを検出する。
@@ -77,15 +77,15 @@ deterministic kernelで解決します。
 
 | package | 責務 |
 | --- | --- |
-| `mizchi/bft` | 署名付きconverge event、roster拘束、equivocation検出、因果配送 |
-| `mizchi/bft/audit` | checkpoint cadence/retention、finality見積り、head分類 |
-| `mizchi/bft/audit/merkle` | immutable Merkle treeとinclusion proof |
-| `mizchi/bft/audit/authmap` | deterministic authenticated mapとmembership/non-membership proof |
-| `mizchi/bft/audit/layered` | watermark駆動のevent→micro→macro checkpoint |
-| `mizchi/bft/audit/quorum` | domain-separatedな認証済みvote収集 |
-| `mizchi/bft/audit/delivery_auth` | producer署名とdistinct witness quorumによる配送認証 |
-| `mizchi/bft/audit/runtime` | atomic seal/outbox/ACK、local store、peer retry契約 |
-| `mizchi/bft/x/game_audit/*` | PvE/PvP/open-world/inventory/marketplaceの実験policyとkernel |
+| `mizchi/converge_audit` | 署名付きconverge event、roster拘束、equivocation検出、因果配送 |
+| `mizchi/converge_audit/audit` | checkpoint cadence/retention、finality見積り、head分類 |
+| `mizchi/converge_audit/audit/merkle` | immutable Merkle treeとinclusion proof |
+| `mizchi/converge_audit/audit/authmap` | deterministic authenticated mapとmembership/non-membership proof |
+| `mizchi/converge_audit/audit/layered` | watermark駆動のevent→micro→macro checkpoint |
+| `mizchi/converge_audit/audit/quorum` | domain-separatedな認証済みvote収集 |
+| `mizchi/converge_audit/audit/delivery_auth` | producer署名とdistinct witness quorumによる配送認証 |
+| `mizchi/converge_audit/audit/runtime` | atomic seal/outbox/ACK、local store、peer retry契約 |
+| `mizchi/converge_audit/x/game_audit/*` | PvE/PvP/open-world/inventory/marketplaceの実験policyとkernel |
 
 `src/audit`はgame payloadをopaque digestとして扱う汎用層です。誰をwitnessにするか、何票を
 finalityとするか、攻撃・回避・lootが合法かは`src/x/game_audit`または実際のゲーム側が決めます。

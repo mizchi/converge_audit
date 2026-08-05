@@ -1,5 +1,5 @@
 {
-  description = "Verification toolchain for mizchi/bft";
+  description = "Verification toolchain for mizchi/converge_audit";
 
   inputs.nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2405";
   # Quint was added after the MoonBit/Why3 toolchain pin above. Keep the

@@ -125,7 +125,7 @@ delivery authenticationとvote semilatticeで39 goals、計200 goalsが成功し
 署名済みgame checkpoint、encounter config/roster/attack plan、署名済みtelegraph/input/receiptを
 持つ。PvP bundleはreferee checkpoint、公開state config、team/player/witness roster、fault bound、
 署名済みcommand/receipt、replay-witness attestationを持つ。consumerは1 MiB等の上限を先に確認し、
-全eventをBFT adapterへ通してから既存kernelを実行する。PvPはさらに`n > 3f`のmanifestと`n-f`
+全eventをaudit adapterへ通してから既存kernelを実行する。PvPはさらに`n > 3f`のmanifestと`n-f`
 certificateを検証する。checkpoint digest、authority/referee、sessionはbundleから信用せず、管理APIが
 固定した期待値と比較する。
 

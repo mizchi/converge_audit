@@ -1,16 +1,16 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/audit/quorum"
+package "mizchi/converge_audit/audit/quorum"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/audit/quorum/vote",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/audit/quorum/vote",
   "moonbitlang/core/debug",
 }
 
 // Values
 pub fn serialize_vote_statement(VoteStatement) -> String
 
-pub fn sign_vote(&@bft.Hasher, &@bft.Signer, @bft.Digest, String, String, VoteChoice) -> SignedVote
+pub fn sign_vote(&@converge_audit.Hasher, &@converge_audit.Signer, @converge_audit.Digest, String, String, VoteChoice) -> SignedVote
 
 // Errors
 
@@ -22,20 +22,20 @@ pub(all) struct QuorumEvidence {
 
 pub(all) struct QuorumMember {
   member_id : String
-  member_key : @bft.PublicKey
+  member_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
 
 pub(all) struct SignedVote {
   statement : VoteStatement
-  digest : @bft.Digest
-  signature : @bft.Signature
-  signer_key : @bft.PublicKey
+  digest : @converge_audit.Digest
+  signature : @converge_audit.Signature
+  signer_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
 
 pub(all) struct VoteAlert {
   kind : VoteAlertKind
   member_id : String
-  digest : @bft.Digest
+  digest : @converge_audit.Digest
   detail : String
 } derive(Eq, @debug.Debug)
 
@@ -56,11 +56,11 @@ pub(all) enum VoteChoice {
 } derive(Eq, @debug.Debug)
 
 pub struct VoteCollector {
-  hasher : &@bft.Hasher
-  verifier : &@bft.Verifier
-  subject_digest_value : @bft.Digest
+  hasher : &@converge_audit.Hasher
+  verifier : &@converge_audit.Verifier
+  subject_digest_value : @converge_audit.Digest
   domain_value : String
-  member_keys : Map[String, @bft.PublicKey]
+  member_keys : Map[String, @converge_audit.PublicKey]
   member_indices : Map[String, Int]
   votes : Array[@vote.ParticipantVote]
   roster_valid_value : Bool
@@ -69,8 +69,8 @@ pub fn VoteCollector::deliver(Self, SignedVote) -> VoteDeliveryResult
 pub fn VoteCollector::domain(Self) -> String
 pub fn VoteCollector::evidence(Self) -> QuorumEvidence
 pub fn VoteCollector::is_roster_valid(Self) -> Bool
-pub fn VoteCollector::new(&@bft.Hasher, &@bft.Verifier, @bft.Digest, String, Array[QuorumMember]) -> Self
-pub fn VoteCollector::subject_digest(Self) -> @bft.Digest
+pub fn VoteCollector::new(&@converge_audit.Hasher, &@converge_audit.Verifier, @converge_audit.Digest, String, Array[QuorumMember]) -> Self
+pub fn VoteCollector::subject_digest(Self) -> @converge_audit.Digest
 
 pub(all) enum VoteDeliveryResult {
   VoteAccepted
@@ -79,7 +79,7 @@ pub(all) enum VoteDeliveryResult {
 } derive(Eq, @debug.Debug)
 
 pub(all) struct VoteStatement {
-  subject_digest : @bft.Digest
+  subject_digest : @converge_audit.Digest
   member_id : String
   domain : String
   choice : VoteChoice

@@ -60,7 +60,7 @@ player command は `match_id`、`epoch`、直前 checkpoint digest、tick、play
 中央検証用の version 1 bundle は referee peer id、署名済み checkpoint、PvP config、team/player
 roster、witness roster と fault bound、署名済み command/receipt、replay-witness attestation を
 canonical CBOR で運ぶ。受信側は信頼済み job の session、referee key、checkpoint digest と照合し、
-全 event を BFT adapter で認証してから同じ kernel を再実行する。最後に commit 済み roster の
+全 event を audit adapter で認証してから同じ kernel を再実行する。最後に commit 済み roster の
 `n-f` 署名が集まった場合だけ `verified` を返す。bundle 自身から期待境界を推測しない。
 
 ## 面白さを毀損しにくい使い方

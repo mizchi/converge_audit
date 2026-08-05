@@ -1,4 +1,4 @@
-# mizchi/bft task runner
+# mizchi/converge_audit task runner
 
 # Check types
 check:
@@ -44,7 +44,7 @@ test-audit-runtime:
 check-audit-boundary:
   #!/usr/bin/env sh
   set -eu
-  if rg -n '"mizchi/bft/x/game_audit' src/audit --glob 'moon.pkg'; then
+  if rg -n '"mizchi/converge_audit/x/game_audit' src/audit --glob 'moon.pkg'; then
     echo 'src/audit must not depend on src/x/game_audit' >&2
     exit 1
   fi
@@ -123,15 +123,15 @@ bench:
 
 # Run benchmarks for a specific package
 bench-pkg pkg:
-  moon bench -p mizchi/bft/{{pkg}}
+  moon bench -p mizchi/converge_audit/{{pkg}}
 
 # Run benchmarks for an experimental game-audit package
 bench-game-pkg pkg:
-  moon bench -p mizchi/bft/x/game_audit/{{pkg}}
+  moon bench -p mizchi/converge_audit/x/game_audit/{{pkg}}
 
 # Benchmark event -> micro -> macro checkpoint sealing
 bench-audit-layered:
-  moon bench -p mizchi/bft/audit/layered --release
+  moon bench -p mizchi/converge_audit/audit/layered --release
 
 # Run the Cloudflare workerd/Durable Object integration tests
 test-cf-game-audit:

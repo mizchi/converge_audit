@@ -1,4 +1,4 @@
 import {
-  "mizchi/bft/audit",
-  "mizchi/bft/audit/commitment",
+  "mizchi/converge_audit/audit",
+  "mizchi/converge_audit/audit/commitment",
 }

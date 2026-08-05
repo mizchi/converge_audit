@@ -1,25 +1,25 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/inventory"
+package "mizchi/converge_audit/x/game_audit/inventory"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/audit/authmap",
-  "mizchi/bft/x/game_audit/attestation",
-  "mizchi/bft/x/game_audit/market",
-  "mizchi/bft/x/game_audit/replay",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/audit/authmap",
+  "mizchi/converge_audit/x/game_audit/attestation",
+  "mizchi/converge_audit/x/game_audit/market",
+  "mizchi/converge_audit/x/game_audit/replay",
   "moonbitlang/core/debug",
 }
 
 // Values
-pub fn inventory_origin_receipt_digest(&@bft.Hasher, @market.ItemReceipt) -> @bft.Digest
+pub fn inventory_origin_receipt_digest(&@converge_audit.Hasher, @market.ItemReceipt) -> @converge_audit.Digest
 
-pub fn inventory_proof_matches_origin_receipt(&@bft.Hasher, InventoryProof, @market.ItemReceipt) -> Bool
+pub fn inventory_proof_matches_origin_receipt(&@converge_audit.Hasher, InventoryProof, @market.ItemReceipt) -> Bool
 
-pub fn market_accepts_inventory_listing(&@bft.Hasher, @attestation.FinalizedCheckpoint, InventoryProof, seller_id~ : String, rejected_ancestor~ : Bool) -> Bool
+pub fn market_accepts_inventory_listing(&@converge_audit.Hasher, @attestation.FinalizedCheckpoint, InventoryProof, seller_id~ : String, rejected_ancestor~ : Bool) -> Bool
 
 pub fn serialize_asset_record(AssetRecord) -> String
 
-pub fn verify_inventory_proof(&@bft.Hasher, @bft.Digest, InventoryProof) -> Bool
+pub fn verify_inventory_proof(&@converge_audit.Hasher, @converge_audit.Digest, InventoryProof) -> Bool
 
 // Errors
 
@@ -29,11 +29,11 @@ pub(all) struct AssetRecord {
   owner_id : String
   item_type : String
   quantity : Int
-  origin_source_event : @bft.Digest
+  origin_source_event : @converge_audit.Digest
   origin_output_index : Int
-  origin_receipt_digest : @bft.Digest
+  origin_receipt_digest : @converge_audit.Digest
   version : Int
-  last_event : @bft.Digest
+  last_event : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 
 pub(all) struct AssetTransfer {
@@ -41,7 +41,7 @@ pub(all) struct AssetTransfer {
   from_owner : String
   to_owner : String
   expected_version : Int
-  source_event : @bft.Digest
+  source_event : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 
 pub(all) enum InventoryCommitResult {
@@ -57,37 +57,37 @@ pub(all) enum InventoryCommitResult {
 } derive(Eq, @debug.Debug)
 
 pub struct InventoryIndex {
-  hasher : &@bft.Hasher
+  hasher : &@converge_audit.Hasher
   session : String
   records : Map[String, AssetRecord]
   mut state_map : @authmap.AuthenticatedMap
-  mut checkpoint_digest : @bft.Digest
+  mut checkpoint_digest : @converge_audit.Digest
   mut checkpoint_epoch : Int
 }
 pub fn InventoryIndex::commit(Self, @attestation.FinalizedCheckpoint, InventoryPlan) -> InventoryCommitResult
 pub fn InventoryIndex::get(Self, String) -> AssetRecord?
-pub fn InventoryIndex::last_checkpoint(Self) -> @bft.Digest
+pub fn InventoryIndex::last_checkpoint(Self) -> @converge_audit.Digest
 pub fn InventoryIndex::last_epoch(Self) -> Int
-pub fn InventoryIndex::new(&@bft.Hasher, session_id~ : String, genesis_checkpoint~ : @bft.Digest) -> Self
+pub fn InventoryIndex::new(&@converge_audit.Hasher, session_id~ : String, genesis_checkpoint~ : @converge_audit.Digest) -> Self
 pub fn InventoryIndex::plan(Self, @market.ReceiptBatch, Array[AssetTransfer], effects~ : Array[@replay.ReplayedAssetEffect]) -> InventoryPlanResult
 pub fn InventoryIndex::proof(Self, String) -> InventoryProof?
-pub fn InventoryIndex::root(Self) -> @bft.Digest
+pub fn InventoryIndex::root(Self) -> @converge_audit.Digest
 pub fn InventoryIndex::session_id(Self) -> String
 pub fn InventoryIndex::size(Self) -> Int
 
 pub struct InventoryPlan {
-  base_root : @bft.Digest
-  base_checkpoint : @bft.Digest
+  base_root : @converge_audit.Digest
+  base_checkpoint : @converge_audit.Digest
   base_epoch : Int
   record_updates : Map[String, AssetRecord]
   next_state_map : @authmap.AuthenticatedMap
-  resulting_root : @bft.Digest
-  delta_root : @bft.Digest
-  replay_manifest : @bft.Digest?
+  resulting_root : @converge_audit.Digest
+  delta_root : @converge_audit.Digest
+  replay_manifest : @converge_audit.Digest?
 }
-pub fn InventoryPlan::asset_delta_root(Self) -> @bft.Digest
-pub fn InventoryPlan::replay_manifest_digest(Self) -> @bft.Digest?
-pub fn InventoryPlan::state_root(Self) -> @bft.Digest
+pub fn InventoryPlan::asset_delta_root(Self) -> @converge_audit.Digest
+pub fn InventoryPlan::replay_manifest_digest(Self) -> @converge_audit.Digest?
+pub fn InventoryPlan::state_root(Self) -> @converge_audit.Digest
 
 pub(all) enum InventoryPlanError {
   DuplicateAsset(String)

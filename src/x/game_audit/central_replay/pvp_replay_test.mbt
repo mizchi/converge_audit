@@ -8,7 +8,7 @@ priv struct PvpCentralReplayFixture {
 
 ///|
 fn accepted_pvp_central_event(
-  adapter : @bft.BFTAdapter,
+  adapter : @bft.AuditAdapter,
   signed : @bft.SignedEvent,
 ) -> @bft.AuthenticatedEvent raise Error {
   match adapter.deliver(signed) {
@@ -25,7 +25,7 @@ fn pvp_central_replay_fixture() -> PvpCentralReplayFixture raise Error {
   let alice = @bft.MockSigner::new("alice")
   let bob = @bft.MockSigner::new("bob")
   let session_id = "pvp:central-replay"
-  let adapter = @bft.BFTAdapter::new(hasher, verifier, session_id~)
+  let adapter = @bft.AuditAdapter::new(hasher, verifier, session_id~)
   assert_true(
     adapter.register_peer(@types.PeerId("referee"), referee.public_key()),
   )

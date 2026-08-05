@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/browser_bridge"
+package "mizchi/converge_audit/x/game_audit/browser_bridge"
 
 // Values
 pub fn audit_browser_ed25519_public_key(String) -> String

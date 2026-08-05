@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/audit/quorum/vote"
+package "mizchi/converge_audit/audit/quorum/vote"
 
 import {
   "moonbitlang/core/debug",

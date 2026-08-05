@@ -1,6 +1,6 @@
 ///|
-fn bench_adapter() -> BFTAdapter {
-  BFTAdapter::new(
+fn bench_adapter() -> AuditAdapter {
+  AuditAdapter::new(
     FnvHasher::new(),
     MockVerifier::new(),
     session_id="bench-session",
@@ -9,7 +9,7 @@ fn bench_adapter() -> BFTAdapter {
 
 ///|
 /// Sign 1000 events with FnvHasher + MockSigner.
-test "bench: BFTAdapter sign 1000 events" (b : @bench.T) {
+test "bench: AuditAdapter sign 1000 events" (b : @bench.T) {
   let events : Array[@types.Event] = []
   for i in 0..<1000 {
     events.push({
@@ -33,7 +33,7 @@ test "bench: BFTAdapter sign 1000 events" (b : @bench.T) {
 
 ///|
 /// Deliver 1000 signed events in a linear dependency chain.
-test "bench: BFTAdapter deliver 1000 events (linear)" (b : @bench.T) {
+test "bench: AuditAdapter deliver 1000 events (linear)" (b : @bench.T) {
   let src_adapter = bench_adapter()
   let signer = MockSigner::new("alice")
   let signed_events : Array[SignedEvent] = []
@@ -71,7 +71,7 @@ test "bench: BFTAdapter deliver 1000 events (linear)" (b : @bench.T) {
 
 ///|
 /// Deliver 1000 independent signed events (no dependencies).
-test "bench: BFTAdapter deliver 1000 events (no deps)" (b : @bench.T) {
+test "bench: AuditAdapter deliver 1000 events (no deps)" (b : @bench.T) {
   let src_adapter = bench_adapter()
   let signer = MockSigner::new("alice")
   let signed_events : Array[SignedEvent] = []
@@ -99,7 +99,7 @@ test "bench: BFTAdapter deliver 1000 events (no deps)" (b : @bench.T) {
 
 ///|
 /// Deliver 100 events in reverse order (all buffered), then deliver root to flush.
-test "bench: BFTAdapter causal flush 100 buffered" (b : @bench.T) {
+test "bench: AuditAdapter causal flush 100 buffered" (b : @bench.T) {
   let src_adapter = bench_adapter()
   let signer = MockSigner::new("alice")
   let signed_events : Array[SignedEvent] = []

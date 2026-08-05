@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/worker"
+package "mizchi/converge_audit/x/game_audit/worker"
 
 // Values
 pub fn audit_acknowledge_checkpoint_outbox(Int, String, String, String, String, String, Int, String, String, Int, Int, String, String, String, String, String, Int, String, String, Bool) -> String

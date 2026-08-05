@@ -18,7 +18,7 @@ fn audit_digest(digest : @bft.Digest) -> @commitment.AuditDigest {
 
 ///|
 /// The game checkpoint keeps its domain-specific field names and wire format,
-/// while exposing the stable `mizchi/bft/audit` projection to generic tooling.
+/// while exposing the stable `mizchi/converge_audit/audit` projection to generic tooling.
 pub impl @commitment.CheckpointAdapter for Checkpoint with fn checkpoint_commitment(
   self : Checkpoint,
 ) -> @commitment.CheckpointCommitment {

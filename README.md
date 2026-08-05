@@ -1,7 +1,7 @@
-# mizchi/bft
+# mizchi/converge_audit
 
-Byzantine-aware event authentication and verifiable checkpoint auditing for
-the [`mizchi/converge`](https://github.com/mizchi/converge) local-first CRDT.
+Adversarial event authentication and verifiable checkpoint auditing for the
+[`mizchi/converge`](https://github.com/mizchi/converge) local-first CRDT.
 
 [日本語版 / Japanese](README-ja.md)
 
@@ -49,8 +49,8 @@ storing, and replaying every frame of every player on that server.
 
 ## What this library does
 
-`mizchi/bft` provides mechanisms for constructing verifiable histories; it does
-not define the game rules themselves.
+`mizchi/converge_audit` provides mechanisms for constructing verifiable
+histories; it does not define the game rules themselves.
 
 - Bind converge events to a session, roster, public key, digest, and signature.
 - Detect equivocation when one player counter identifies different events.
@@ -84,15 +84,15 @@ results.
 
 | Package | Responsibility |
 | --- | --- |
-| `mizchi/bft` | Signed converge events, roster binding, equivocation detection, causal delivery |
-| `mizchi/bft/audit` | Checkpoint cadence, retention, finality estimates, and head classification |
-| `mizchi/bft/audit/merkle` | Immutable Merkle trees and inclusion proofs |
-| `mizchi/bft/audit/authmap` | Deterministic authenticated maps and membership/non-membership proofs |
-| `mizchi/bft/audit/layered` | Watermark-driven event → micro → macro checkpoints |
-| `mizchi/bft/audit/quorum` | Domain-separated authenticated vote collection |
-| `mizchi/bft/audit/delivery_auth` | Producer signatures and distinct-witness delivery authentication |
-| `mizchi/bft/audit/runtime` | Atomic seal/outbox/ACK, local store, and peer retry contracts |
-| `mizchi/bft/x/game_audit/*` | Experimental PvE, PvP, open-world, inventory, and marketplace policies and kernels |
+| `mizchi/converge_audit` | Signed converge events, roster binding, equivocation detection, causal delivery |
+| `mizchi/converge_audit/audit` | Checkpoint cadence, retention, finality estimates, and head classification |
+| `mizchi/converge_audit/audit/merkle` | Immutable Merkle trees and inclusion proofs |
+| `mizchi/converge_audit/audit/authmap` | Deterministic authenticated maps and membership/non-membership proofs |
+| `mizchi/converge_audit/audit/layered` | Watermark-driven event → micro → macro checkpoints |
+| `mizchi/converge_audit/audit/quorum` | Domain-separated authenticated vote collection |
+| `mizchi/converge_audit/audit/delivery_auth` | Producer signatures and distinct-witness delivery authentication |
+| `mizchi/converge_audit/audit/runtime` | Atomic seal/outbox/ACK, local store, and peer retry contracts |
+| `mizchi/converge_audit/x/game_audit/*` | Experimental PvE, PvP, open-world, inventory, and marketplace policies and kernels |
 
 `src/audit` treats application payloads as opaque digests. Witness selection,
 quorum thresholds, and the legality of attacks, dodges, and loot belong to

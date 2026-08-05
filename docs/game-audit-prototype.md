@@ -38,7 +38,7 @@ The executable marketplace path is capability-based:
 
 ```text
 session-bound SignedEvent
-  -> BFT validation
+  -> adversarial audit validation
   -> AuthenticatedEvent capability
   -> sealed deterministic AssetReplayKernel
   -> ReplayedAssetEffect capability
@@ -74,7 +74,7 @@ coordinates while advancing the owner, version, and last-event digest.
 Creation receipts use the same capability check before inventory planning, and
 the direct marketplace path cannot bypass it.
 
-`AuthenticatedEvent` proves that the event passed the BFT adapter's session,
+`AuthenticatedEvent` proves that the event passed the audit adapter's session,
 hash, roster, signature, equivocation, and causal-dependency checks.
 `ReplayEngine` then requires a valid typed effect, a non-empty derived kernel
 manifest, the same session, and acceptance by a sealed `AssetReplayKernel`
@@ -323,7 +323,7 @@ The proof does not establish signature unforgeability, hash collision
 resistance, determinism or semantic correctness of a concrete game kernel, or
 cryptographic correctness of the Merkle implementation. It proves the Boolean
 issuance boundary, while executable tests cover the sealed reference kernel's
-payload, author, session, effect, and manifest bindings. The checkpoint and BFT
+payload, author, session, effect, and manifest bindings. The checkpoint and audit
 packages use FNV and a mock HMAC-like signer as deterministic test doubles.
 An additional `experimental_crypto@0.0.2` SHA-256/Ed25519 adapter passes known
 vectors and measures realistic pure-MoonBit cost, but its upstream explicitly
@@ -578,10 +578,10 @@ cryptography.
 | Finalized implies authority acceptance | MoonBit prove contract | `finalized_requires_authority` | Proven |
 | Challenge needs matching replay to finalize | MoonBit prove contract | `challenged_finalization_requires_replay` | Proven |
 | Only clean, included, finalized items enter the market | MoonBit prove contract | `market_acceptance_is_fail_closed` | Proven |
-| Event author equals the manifest key owner | BFT adapter contract | roster mismatch tests | Tested |
-| Event signature is bound to one session | BFT adapter contract | cross-session replay test and `event-v2` serialization | Tested |
-| Event dependency IDs match authenticated hashes | BFT adapter contract | direct and buffered mismatch tests | Tested |
-| Raw or rejected events cannot mint an accepted-event capability | BFT capability contract | private fields plus accepted/buffered/rejected delivery tests | Tested |
+| Event author equals the manifest key owner | audit adapter contract | roster mismatch tests | Tested |
+| Event signature is bound to one session | audit adapter contract | cross-session replay test and `event-v2` serialization | Tested |
+| Event dependency IDs match authenticated hashes | audit adapter contract | direct and buffered mismatch tests | Tested |
+| Raw or rejected events cannot mint an accepted-event capability | authenticated-event capability contract | private fields plus accepted/buffered/rejected delivery tests | Tested |
 | Signed checkpoint binds every declared root | checkpoint envelope contract | tamper tests | Tested |
 | Only roster-bound valid signatures affect approvals/challenges | attestation collector contract | impersonation, tamper, and target tests | Tested |
 | Checkpoint approval signatures cannot be reused as replay-witness claims | attestation domain contract | `attestation-v2` purpose binding and cross-purpose rejection tests | Tested |
@@ -664,7 +664,7 @@ inventory slices are now present. The remaining integration work is:
    with zone/epoch assignment and delegated referee keys;
 5. replace the test doubles/experimental adapter with an audited production
    hash and signature backend;
-6. bind the BFT session context to the exact authenticated manifest version,
+6. bind the audit session context to the exact authenticated manifest version,
    in addition to requiring a globally unique session id;
 7. persist checkpoints, inventory records, treap nodes, proofs, and evidence
    alerts transactionally in each player's local-first database, reconstruct

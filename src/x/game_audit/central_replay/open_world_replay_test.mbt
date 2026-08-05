@@ -63,7 +63,7 @@ fn open_world_central_replay_fixture(
       ),
     ),
   })
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     hasher,
     verifier,
     session_id=encounter_session_id,

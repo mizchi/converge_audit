@@ -12,7 +12,7 @@ quint verify formal/quint/WitnessQuorumModels.qnt \
   --max-steps=5 \
   --verbosity=1
 
-audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/bft-quint-apalache.XXXXXX")"
+audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint-apalache.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
 log_file="$audit_quint_tmp/broken-producer.log"
 

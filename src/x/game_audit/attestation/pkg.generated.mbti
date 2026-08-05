@@ -1,31 +1,31 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/attestation"
+package "mizchi/converge_audit/x/game_audit/attestation"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/audit/quorum",
-  "mizchi/bft/x/game_audit/audit",
-  "mizchi/bft/x/game_audit/checkpoint",
-  "mizchi/bft/x/game_audit/replay",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/audit/quorum",
+  "mizchi/converge_audit/x/game_audit/audit",
+  "mizchi/converge_audit/x/game_audit/checkpoint",
+  "mizchi/converge_audit/x/game_audit/replay",
   "moonbitlang/core/debug",
 }
 
 // Values
 pub fn finalize_witnessed_checkpoint(@checkpoint.VerifiedCheckpoint, WitnessReplayCertificate) -> CheckpointFinalizationResult
 
-pub fn replay_witness_session_manifest(&@bft.Hasher, game_manifest_digest~ : @bft.Digest, referee_key~ : @bft.PublicKey, witnesses~ : Array[Participant], max_faults~ : Int) -> @bft.Digest
+pub fn replay_witness_session_manifest(&@converge_audit.Hasher, game_manifest_digest~ : @converge_audit.Digest, referee_key~ : @converge_audit.PublicKey, witnesses~ : Array[Participant], max_faults~ : Int) -> @converge_audit.Digest
 
 pub fn serialize_attestation(Attestation) -> String
 
-pub fn sign_attestation(&@bft.Hasher, &@bft.Signer, @checkpoint.PreparedCheckpoint, String, AttestationChoice) -> SignedAttestation
+pub fn sign_attestation(&@converge_audit.Hasher, &@converge_audit.Signer, @checkpoint.PreparedCheckpoint, String, AttestationChoice) -> SignedAttestation
 
-pub fn sign_replay_witness_attestation(&@bft.Hasher, &@bft.Signer, @checkpoint.PreparedCheckpoint, String, AttestationChoice) -> SignedAttestation
+pub fn sign_replay_witness_attestation(&@converge_audit.Hasher, &@converge_audit.Signer, @checkpoint.PreparedCheckpoint, String, AttestationChoice) -> SignedAttestation
 
 // Errors
 
 // Types and methods
 pub(all) struct Attestation {
-  checkpoint_digest : @bft.Digest
+  checkpoint_digest : @converge_audit.Digest
   participant_id : String
   purpose : AttestationPurpose
   choice : AttestationChoice
@@ -55,7 +55,7 @@ pub(all) enum CheckpointFinalizationResult {
 pub(all) struct EvidenceAlert {
   kind : EvidenceAlertKind
   participant_id : String
-  digest : @bft.Digest
+  digest : @converge_audit.Digest
   detail : String
 } derive(Eq, @debug.Debug)
 
@@ -73,13 +73,13 @@ pub(all) enum EvidenceAlertKind {
 pub struct EvidenceCollector {
   inner : @quorum.VoteCollector
 }
-pub fn EvidenceCollector::checkpoint_digest(Self) -> @bft.Digest
-pub fn EvidenceCollector::decide(Self, Int, authority~ : @audit.AuthorityVerdict, authority_key~ : @bft.PublicKey, replay_match~ : @replay.CheckpointReplayMatch?) -> @audit.CheckpointDecision
+pub fn EvidenceCollector::checkpoint_digest(Self) -> @converge_audit.Digest
+pub fn EvidenceCollector::decide(Self, Int, authority~ : @audit.AuthorityVerdict, authority_key~ : @converge_audit.PublicKey, replay_match~ : @replay.CheckpointReplayMatch?) -> @audit.CheckpointDecision
 pub fn EvidenceCollector::deliver(Self, SignedAttestation) -> EvidenceDeliveryResult
 pub fn EvidenceCollector::evidence(Self) -> AuditEvidence
 pub fn EvidenceCollector::finalize(Self, @checkpoint.VerifiedCheckpoint, Int, replay_match~ : @replay.CheckpointReplayMatch?, witness_certificate? : WitnessReplayCertificate) -> CheckpointFinalizationResult
 pub fn EvidenceCollector::is_roster_valid(Self) -> Bool
-pub fn EvidenceCollector::new(&@bft.Hasher, &@bft.Verifier, @checkpoint.PreparedCheckpoint, Array[Participant]) -> Self
+pub fn EvidenceCollector::new(&@converge_audit.Hasher, &@converge_audit.Verifier, @checkpoint.PreparedCheckpoint, Array[Participant]) -> Self
 
 pub(all) enum EvidenceDeliveryResult {
   Accepted
@@ -91,11 +91,11 @@ pub struct FinalizedCheckpoint {
   verified : @checkpoint.VerifiedCheckpoint
 }
 pub fn FinalizedCheckpoint::checkpoint(Self) -> @checkpoint.Checkpoint
-pub fn FinalizedCheckpoint::digest(Self) -> @bft.Digest
+pub fn FinalizedCheckpoint::digest(Self) -> @converge_audit.Digest
 
 pub(all) struct Participant {
   id : String
-  key : @bft.PublicKey
+  key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
 
 pub(all) enum ReplayWitnessCertificationResult {
@@ -109,11 +109,11 @@ pub struct ReplayWitnessCollector {
   evidence : EvidenceCollector
   witness_count : Int
   max_faults : Int
-  referee_key : @bft.PublicKey
+  referee_key : @converge_audit.PublicKey
 }
 pub fn ReplayWitnessCollector::certify(Self, @checkpoint.VerifiedCheckpoint) -> ReplayWitnessCertificationResult
 pub fn ReplayWitnessCollector::deliver(Self, SignedAttestation) -> EvidenceDeliveryResult
-pub fn ReplayWitnessCollector::new(&@bft.Hasher, &@bft.Verifier, @checkpoint.PreparedCheckpoint, game_manifest_digest~ : @bft.Digest, referee_key~ : @bft.PublicKey, witnesses~ : Array[Participant], max_faults~ : Int) -> ReplayWitnessCollectorBuildResult
+pub fn ReplayWitnessCollector::new(&@converge_audit.Hasher, &@converge_audit.Verifier, @checkpoint.PreparedCheckpoint, game_manifest_digest~ : @converge_audit.Digest, referee_key~ : @converge_audit.PublicKey, witnesses~ : Array[Participant], max_faults~ : Int) -> ReplayWitnessCollectorBuildResult
 pub fn ReplayWitnessCollector::required_approvals(Self) -> Int
 
 pub(all) enum ReplayWitnessCollectorBuildResult {
@@ -128,22 +128,22 @@ pub(all) enum ReplayWitnessCollectorBuildResult {
 
 pub(all) struct SignedAttestation {
   attestation : Attestation
-  digest : @bft.Digest
-  signature : @bft.Signature
-  signer_key : @bft.PublicKey
+  digest : @converge_audit.Digest
+  signature : @converge_audit.Signature
+  signer_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
 
 pub struct WitnessReplayCertificate {
-  checkpoint_digest : @bft.Digest
-  referee_key : @bft.PublicKey
+  checkpoint_digest : @converge_audit.Digest
+  referee_key : @converge_audit.PublicKey
   witness_count : Int
   max_faults : Int
   approval_count : Int
 } derive(Eq, @debug.Debug)
 pub fn WitnessReplayCertificate::approval_count(Self) -> Int
-pub fn WitnessReplayCertificate::checkpoint_digest(Self) -> @bft.Digest
+pub fn WitnessReplayCertificate::checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn WitnessReplayCertificate::max_faults(Self) -> Int
-pub fn WitnessReplayCertificate::referee_key(Self) -> @bft.PublicKey
+pub fn WitnessReplayCertificate::referee_key(Self) -> @converge_audit.PublicKey
 pub fn WitnessReplayCertificate::required_approvals(Self) -> Int
 pub fn WitnessReplayCertificate::witness_count(Self) -> Int
 

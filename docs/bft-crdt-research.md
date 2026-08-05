@@ -69,7 +69,7 @@ The BFT layer wraps existing CRDT logic without modifying it:
      |
 [CrdtDoc]        -- unchanged
      |
-[BFTAdapter]     -- NEW: validates before passing to CrdtDoc
+[AuditAdapter]     -- NEW: validates before passing to CrdtDoc
      |
 [Transport]      -- unchanged
 ```
@@ -94,7 +94,7 @@ The BFT layer wraps existing CRDT logic without modifying it:
 | `PublicKey` | Peer's public key for signature verification |
 | `SignedEvent` | Event + digest + signature + dependency hashes |
 | `AuthenticatedEvent` | Private-field capability minted only after the full adapter pipeline accepts |
-| `BFTAlert` | Report of detected Byzantine behavior |
+| `AuditAlert` | Report of detected Byzantine behavior |
 | `DeliveryResult` | Accepted / Buffered / Rejected(alert) |
 
 ### Threat Model
@@ -128,13 +128,13 @@ derives its manifest from its version tag and configured effect-author key.
 The game-specific kernels additionally bind telegraphs, player inputs,
 authority receipts, and verified checkpoint roots before deriving survivor
 loot. The multi-attack encounter also commits its full attack plan and
-replay-derived public state. This does not change the BFT adapter's
+replay-derived public state. This does not change the audit adapter's
 responsibility: the adapter proves message authenticity and causal consistency,
 while the game kernel proves application semantics.
 
 `register_peer` is a trusted setup operation, not a network protocol. The game
 session must populate it from an authenticated manifest before accepting remote
-traffic; rebinding an existing peer is rejected. `BFTAdapter` internals are not
+traffic; rebinding an existing peer is rejected. `AuditAdapter` internals are not
 public so consumers cannot mutate the roster or digest indices directly.
 
 The included `FnvHasher`, `MockSigner`, and `MockVerifier` are deterministic

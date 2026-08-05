@@ -4,7 +4,7 @@ const PVE_REPLAY_WIRE_VERSION : Int = 2
 ///|
 /// A signed dodge pair as transported to a deterministic PvE replay worker.
 /// Signed events remain untrusted until the central replay verifier admits
-/// them through the BFT adapter.
+/// them through the audit adapter.
 pub(all) struct PveReplayDodgeEvidence {
   input : @bft.SignedEvent
   receipt : @bft.SignedEvent
@@ -22,7 +22,7 @@ pub(all) struct PveReplayAttackTranscript {
 
 ///|
 /// An authority-signed asset declaration replayed only after the encounter
-/// outcome is known. The source is untrusted until admitted by the same BFT
+/// outcome is known. The source is untrusted until admitted by the same audit
 /// event graph as the combat transcript.
 pub(all) struct PveReplayAssetEffectEvidence {
   source : @bft.SignedEvent

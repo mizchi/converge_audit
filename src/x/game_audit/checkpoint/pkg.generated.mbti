@@ -1,27 +1,27 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/checkpoint"
+package "mizchi/converge_audit/x/game_audit/checkpoint"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/audit/commitment",
-  "mizchi/bft/audit/layered",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/audit/commitment",
+  "mizchi/converge_audit/audit/layered",
   "moonbitlang/core/debug",
 }
 
 // Values
-pub fn checkpoint_from_layered_macro(@layered.SealedMacroCheckpoint, manifest_digest~ : @bft.Digest, public_state_root~ : @bft.Digest, asset_delta_root~ : @bft.Digest, hidden_state_commitment~ : @bft.Digest?) -> Checkpoint
+pub fn checkpoint_from_layered_macro(@layered.SealedMacroCheckpoint, manifest_digest~ : @converge_audit.Digest, public_state_root~ : @converge_audit.Digest, asset_delta_root~ : @converge_audit.Digest, hidden_state_commitment~ : @converge_audit.Digest?) -> Checkpoint
 
-pub fn open_checkpoint(&@bft.Hasher, &@bft.Verifier, @bft.PublicKey, SignedCheckpoint) -> CheckpointOpenResult
+pub fn open_checkpoint(&@converge_audit.Hasher, &@converge_audit.Verifier, @converge_audit.PublicKey, SignedCheckpoint) -> CheckpointOpenResult
 
-pub fn prepare_checkpoint(&@bft.Hasher, Checkpoint) -> PreparedCheckpoint
+pub fn prepare_checkpoint(&@converge_audit.Hasher, Checkpoint) -> PreparedCheckpoint
 
 pub fn serialize_checkpoint(Checkpoint) -> String
 
-pub fn sign_checkpoint(&@bft.Hasher, &@bft.Signer, Checkpoint) -> SignedCheckpoint
+pub fn sign_checkpoint(&@converge_audit.Hasher, &@converge_audit.Signer, Checkpoint) -> SignedCheckpoint
 
-pub fn sign_prepared_checkpoint(&@bft.Signer, PreparedCheckpoint) -> SignedCheckpoint
+pub fn sign_prepared_checkpoint(&@converge_audit.Signer, PreparedCheckpoint) -> SignedCheckpoint
 
-pub fn verify_checkpoint(&@bft.Hasher, &@bft.Verifier, @bft.PublicKey, SignedCheckpoint) -> CheckpointVerification
+pub fn verify_checkpoint(&@converge_audit.Hasher, &@converge_audit.Verifier, @converge_audit.PublicKey, SignedCheckpoint) -> CheckpointVerification
 
 // Errors
 
@@ -29,12 +29,12 @@ pub fn verify_checkpoint(&@bft.Hasher, &@bft.Verifier, @bft.PublicKey, SignedChe
 pub(all) struct Checkpoint {
   session_id : String
   epoch : Int
-  previous_checkpoint : @bft.Digest
-  manifest_digest : @bft.Digest
-  event_root : @bft.Digest
-  public_state_root : @bft.Digest
-  asset_delta_root : @bft.Digest
-  hidden_state_commitment : @bft.Digest?
+  previous_checkpoint : @converge_audit.Digest
+  manifest_digest : @converge_audit.Digest
+  event_root : @converge_audit.Digest
+  public_state_root : @converge_audit.Digest
+  asset_delta_root : @converge_audit.Digest
+  hidden_state_commitment : @converge_audit.Digest?
 } derive(Eq, @debug.Debug)
 pub fn Checkpoint::matches_layered_macro(Self, @layered.MacroCheckpoint) -> Bool
 pub impl @commitment.CheckpointAdapter for Checkpoint
@@ -54,24 +54,24 @@ pub fn CheckpointVerification::is_verified(Self) -> Bool
 
 pub struct PreparedCheckpoint {
   checkpoint : Checkpoint
-  digest : @bft.Digest
+  digest : @converge_audit.Digest
 }
 pub fn PreparedCheckpoint::checkpoint(Self) -> Checkpoint
-pub fn PreparedCheckpoint::digest(Self) -> @bft.Digest
+pub fn PreparedCheckpoint::digest(Self) -> @converge_audit.Digest
 
 pub(all) struct SignedCheckpoint {
   checkpoint : Checkpoint
-  digest : @bft.Digest
-  signature : @bft.Signature
-  authority_key : @bft.PublicKey
+  digest : @converge_audit.Digest
+  signature : @converge_audit.Signature
+  authority_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
 
 pub struct VerifiedCheckpoint {
   signed : SignedCheckpoint
 }
-pub fn VerifiedCheckpoint::authority_key(Self) -> @bft.PublicKey
+pub fn VerifiedCheckpoint::authority_key(Self) -> @converge_audit.PublicKey
 pub fn VerifiedCheckpoint::checkpoint(Self) -> Checkpoint
-pub fn VerifiedCheckpoint::digest(Self) -> @bft.Digest
+pub fn VerifiedCheckpoint::digest(Self) -> @converge_audit.Digest
 
 // Type aliases
 

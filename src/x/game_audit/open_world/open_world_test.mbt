@@ -718,7 +718,7 @@ fn central_replayed_open_world_encounter() -> (
   let authority = @bft.MockSigner::new("world-referee")
   let plan = open_world_epoch_plan(hasher, verifier, authority, 1, 1)
   let session_id = "world-1:encounter-central"
-  let adapter = @bft.BFTAdapter::new(hasher, verifier, session_id~)
+  let adapter = @bft.AuditAdapter::new(hasher, verifier, session_id~)
   assert_true(
     adapter.register_peer(@types.PeerId("authority"), authority.public_key()),
   )

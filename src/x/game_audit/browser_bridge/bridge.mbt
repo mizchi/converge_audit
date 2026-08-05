@@ -7,7 +7,7 @@ pub fn audit_browser_sha256(value : String) -> String {
 }
 
 ///|
-/// Build the game-neutral `mizchi/bft/audit/merkle` root with SHA-256.
+/// Build the game-neutral `mizchi/converge_audit/audit/merkle` root with SHA-256.
 pub fn audit_browser_merkle_root(payloads : Array[String]) -> String {
   let hasher = @crypto.ExperimentalSha256Hasher::new()
   @merkle.MerkleTree::build(hasher, payloads).root().0

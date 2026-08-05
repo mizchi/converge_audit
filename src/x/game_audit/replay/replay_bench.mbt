@@ -7,7 +7,7 @@ fn benchmark_replay_input() -> (@bft.AuthenticatedEvent, AssetEffect) {
     quantity=1,
     output_index=0,
   )
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id="benchmark",
@@ -83,7 +83,7 @@ priv struct DungeonBenchmarkInput {
 ///|
 fn benchmark_dungeon_input(player_count : Int) -> DungeonBenchmarkInput {
   let hasher = @bft.FnvHasher::new()
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     hasher,
     @bft.MockVerifier::new(),
     session_id="dungeon-benchmark",
@@ -243,7 +243,7 @@ fn benchmark_encounter_input(
   attack_count : Int,
 ) -> EncounterBenchmarkInput {
   let hasher = @bft.FnvHasher::new()
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     hasher,
     @bft.MockVerifier::new(),
     session_id="encounter-benchmark",
@@ -398,7 +398,7 @@ fn benchmark_pvp_epoch_input(
 ) -> PvpEpochBenchmarkInput {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     hasher,
     verifier,
     session_id="pvp-benchmark",

@@ -5,11 +5,11 @@
 TDD（探索 → Red → Green → Refactoring）で開発し、関心の分離、状態とロジックの分離、
 公開contractの厳密さを優先する。
 
-このリポジトリはMoonBit module `mizchi/bft` であり、`mizchi/converge` に依存する。
+このリポジトリはMoonBit module `mizchi/converge_audit` であり、`mizchi/converge` に依存する。
 
-- root package `mizchi/bft`: converge Eventの認証adapter
-- `mizchi/bft/audit/*`: ゲーム非依存のcheckpoint監査contract
-- `mizchi/bft/x/game_audit/*`: 実験的なゲーム固有policy
+- root package `mizchi/converge_audit`: converge Eventの敵対環境向け認証adapter
+- `mizchi/converge_audit/audit/*`: ゲーム非依存のcheckpoint監査contract
+- `mizchi/converge_audit/x/game_audit/*`: 実験的なゲーム固有policy
 
 `src/audit` から `src/x/game_audit` への依存を禁止する。
 

@@ -86,7 +86,7 @@ bundleが自己申告するcheckpointをlatest headとしては信用しない�
 headに対し、exact parent、epoch前進、owner変更時のversion前進を満たす場合だけCAS更新する。
 
 `intent`と`observed_receipt`は署名event payloadから独立に信用しない。replay kernelがcanonical
-payloadと完全一致することを再確認する。署名eventはdecode後に`BFTAdapter`へ渡し、session、hash、
+payloadと完全一致することを再確認する。署名eventはdecode後に`AuditAdapter`へ渡し、session、hash、
 roster、signature、equivocation、causal dependencyをすべて通った`AuthenticatedEvent`だけをkernelへ
 渡す。同じdigestをbundle内で再利用した場合も曖昧性として拒否する。
 

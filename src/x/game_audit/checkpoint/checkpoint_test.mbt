@@ -149,7 +149,7 @@ test "failed verification cannot open a checkpoint capability" {
 }
 
 ///|
-test "game checkpoint projects into the generic bft audit contract" {
+test "game checkpoint projects into the generic checkpoint audit contract" {
   let adapted = @commitment.adapt_checkpoint(candidate())
   assert_eq(adapted.scope_id, "dungeon-42")
   assert_eq(adapted.epoch, 7)

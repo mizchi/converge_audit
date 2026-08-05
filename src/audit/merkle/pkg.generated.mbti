@@ -1,13 +1,13 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/audit/merkle"
+package "mizchi/converge_audit/audit/merkle"
 
 import {
-  "mizchi/bft",
+  "mizchi/converge_audit",
   "moonbitlang/core/debug",
 }
 
 // Values
-pub fn verify_inclusion(&@bft.Hasher, String, @bft.Digest, MerkleProof) -> Bool
+pub fn verify_inclusion(&@converge_audit.Hasher, String, @converge_audit.Digest, MerkleProof) -> Bool
 
 // Errors
 
@@ -19,19 +19,19 @@ pub(all) struct MerkleProof {
 } derive(Eq, @debug.Debug)
 
 pub(all) enum MerkleStep {
-  SiblingLeft(@bft.Digest)
-  SiblingRight(@bft.Digest)
+  SiblingLeft(@converge_audit.Digest)
+  SiblingRight(@converge_audit.Digest)
 } derive(Eq, @debug.Debug)
 
 pub struct MerkleTree {
-  leaf_hashes : Array[@bft.Digest]
-  levels : Array[Array[@bft.Digest]]
-  root_digest : @bft.Digest
+  leaf_hashes : Array[@converge_audit.Digest]
+  levels : Array[Array[@converge_audit.Digest]]
+  root_digest : @converge_audit.Digest
 }
-pub fn MerkleTree::build(&@bft.Hasher, Array[String]) -> Self
+pub fn MerkleTree::build(&@converge_audit.Hasher, Array[String]) -> Self
 pub fn MerkleTree::leaf_count(Self) -> Int
 pub fn MerkleTree::proof(Self, Int) -> MerkleProof?
-pub fn MerkleTree::root(Self) -> @bft.Digest
+pub fn MerkleTree::root(Self) -> @converge_audit.Digest
 
 // Type aliases
 

@@ -1,22 +1,22 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/replay"
+package "mizchi/converge_audit/x/game_audit/replay"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/x/game_audit/checkpoint",
-  "mizchi/bft/x/game_audit/witness_manifest",
   "mizchi/converge/types",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/x/game_audit/checkpoint",
+  "mizchi/converge_audit/x/game_audit/witness_manifest",
   "moonbitlang/core/debug",
 }
 
 // Values
 pub fn dungeon_encounter_loot_asset_id(String, String, String) -> String
 
-pub fn dungeon_encounter_transcript_root(&@bft.Hasher, Array[DungeonAttackTranscript]) -> @bft.Digest
+pub fn dungeon_encounter_transcript_root(&@converge_audit.Hasher, Array[DungeonAttackTranscript]) -> @converge_audit.Digest
 
 pub fn dungeon_loot_asset_id(String, String, String) -> String
 
-pub fn dungeon_transcript_root(&@bft.Hasher, @bft.AuthenticatedEvent, Array[DodgeEvidence]) -> @bft.Digest
+pub fn dungeon_transcript_root(&@converge_audit.Hasher, @converge_audit.AuthenticatedEvent, Array[DodgeEvidence]) -> @converge_audit.Digest
 
 pub fn finalize_dungeon_encounter(DungeonEncounterCandidate, @checkpoint.VerifiedCheckpoint) -> DungeonEncounterFinalizeResult
 
@@ -40,17 +40,17 @@ pub fn make_pvp_command_event(peer~ : @types.PeerId, counter~ : Int, lamport~ : 
 
 pub fn make_pvp_command_receipt_event(peer~ : @types.PeerId, counter~ : Int, lamport~ : Int, deps~ : Array[@types.EventId], receipt~ : PvpCommandReceipt) -> @types.Event
 
-pub fn prepare_dungeon_encounter(&@bft.Hasher, session_id~ : String, authority_key~ : @bft.PublicKey, config~ : DungeonEncounterConfig, players~ : Array[DungeonPlayer], attacks~ : Array[DungeonEncounterAttack], transcripts~ : Array[DungeonAttackTranscript]) -> DungeonEncounterCandidateResult
+pub fn prepare_dungeon_encounter(&@converge_audit.Hasher, session_id~ : String, authority_key~ : @converge_audit.PublicKey, config~ : DungeonEncounterConfig, players~ : Array[DungeonPlayer], attacks~ : Array[DungeonEncounterAttack], transcripts~ : Array[DungeonAttackTranscript]) -> DungeonEncounterCandidateResult
 
-pub fn prepare_dungeon_raid(&@bft.Hasher, session_id~ : String, authority_key~ : @bft.PublicKey, encounter_config~ : DungeonEncounterConfig, raid_rules~ : DungeonRaidRules, players~ : Array[DungeonPlayer], attacks~ : Array[DungeonEncounterAttack], defense_transcripts~ : Array[DungeonAttackTranscript], player_attacks~ : Array[DungeonPlayerAttackEvidence]) -> DungeonRaidCandidateResult
+pub fn prepare_dungeon_raid(&@converge_audit.Hasher, session_id~ : String, authority_key~ : @converge_audit.PublicKey, encounter_config~ : DungeonEncounterConfig, raid_rules~ : DungeonRaidRules, players~ : Array[DungeonPlayer], attacks~ : Array[DungeonEncounterAttack], defense_transcripts~ : Array[DungeonAttackTranscript], player_attacks~ : Array[DungeonPlayerAttackEvidence]) -> DungeonRaidCandidateResult
 
-pub fn prepare_pvp_epoch(&@bft.Hasher, session_id~ : String, referee_key~ : @bft.PublicKey, config~ : PvpEpochConfig, teams~ : Array[PvpTeam], players~ : Array[PvpPlayer], transcript~ : Array[PvpCommandEvidence], witnesses~ : Array[@witness_manifest.ReplayWitnessIdentity], max_faults~ : Int, attack_cooldown_ticks? : Int, objective_rule? : PvpObjectiveRule?) -> PvpEpochCandidateResult
+pub fn prepare_pvp_epoch(&@converge_audit.Hasher, session_id~ : String, referee_key~ : @converge_audit.PublicKey, config~ : PvpEpochConfig, teams~ : Array[PvpTeam], players~ : Array[PvpPlayer], transcript~ : Array[PvpCommandEvidence], witnesses~ : Array[@witness_manifest.ReplayWitnessIdentity], max_faults~ : Int, attack_cooldown_ticks? : Int, objective_rule? : PvpObjectiveRule?) -> PvpEpochCandidateResult
 
-pub fn pvp_epoch_game_manifest(&@bft.Hasher, String, @bft.PublicKey, PvpEpochConfig, Array[PvpTeam], Array[PvpPlayer], attack_cooldown_ticks? : Int, objective_rule? : PvpObjectiveRule?) -> @bft.Digest
+pub fn pvp_epoch_game_manifest(&@converge_audit.Hasher, String, @converge_audit.PublicKey, PvpEpochConfig, Array[PvpTeam], Array[PvpPlayer], attack_cooldown_ticks? : Int, objective_rule? : PvpObjectiveRule?) -> @converge_audit.Digest
 
-pub fn pvp_epoch_transcript_root(&@bft.Hasher, Array[PvpCommandEvidence]) -> @bft.Digest
+pub fn pvp_epoch_transcript_root(&@converge_audit.Hasher, Array[PvpCommandEvidence]) -> @converge_audit.Digest
 
-pub fn replay_checkpointed_telegraphed_attack(&@bft.Hasher, session_id~ : String, authority_key~ : @bft.PublicKey, config~ : TelegraphDungeonConfig, players~ : Array[DungeonPlayer], checkpoint~ : @checkpoint.VerifiedCheckpoint, telegraph_source~ : @bft.AuthenticatedEvent, attack~ : TelegraphedAttack, dodge_evidence~ : Array[DodgeEvidence]) -> DungeonReplayResult
+pub fn replay_checkpointed_telegraphed_attack(&@converge_audit.Hasher, session_id~ : String, authority_key~ : @converge_audit.PublicKey, config~ : TelegraphDungeonConfig, players~ : Array[DungeonPlayer], checkpoint~ : @checkpoint.VerifiedCheckpoint, telegraph_source~ : @converge_audit.AuthenticatedEvent, attack~ : TelegraphedAttack, dodge_evidence~ : Array[DodgeEvidence]) -> DungeonReplayResult
 
 pub fn serialize_asset_effect(AssetEffect) -> String
 
@@ -68,9 +68,9 @@ pub fn serialize_pvp_command_receipt(PvpCommandReceipt) -> String
 
 pub fn serialize_telegraphed_attack(TelegraphedAttack) -> String
 
-pub fn telegraph_dungeon_encounter_manifest(&@bft.Hasher, @bft.PublicKey, DungeonEncounterConfig, Array[DungeonPlayer], Array[DungeonEncounterAttack]) -> @bft.Digest
+pub fn telegraph_dungeon_encounter_manifest(&@converge_audit.Hasher, @converge_audit.PublicKey, DungeonEncounterConfig, Array[DungeonPlayer], Array[DungeonEncounterAttack]) -> @converge_audit.Digest
 
-pub fn telegraph_dungeon_manifest(&@bft.Hasher, @bft.PublicKey, TelegraphDungeonConfig, Array[DungeonPlayer]) -> @bft.Digest
+pub fn telegraph_dungeon_manifest(&@converge_audit.Hasher, @converge_audit.PublicKey, TelegraphDungeonConfig, Array[DungeonPlayer]) -> @converge_audit.Digest
 
 pub fn validate_asset_effect(AssetEffect) -> AssetEffectValidation
 
@@ -95,22 +95,22 @@ pub(all) enum AssetEffectValidation {
 } derive(Eq, @debug.Debug)
 
 pub struct CanonicalAssetKernel {
-  manifest : @bft.Digest
-  effect_author : @bft.PublicKey
+  manifest : @converge_audit.Digest
+  effect_author : @converge_audit.PublicKey
 }
-pub fn CanonicalAssetKernel::new(&@bft.Hasher, effect_author~ : @bft.PublicKey) -> Self
+pub fn CanonicalAssetKernel::new(&@converge_audit.Hasher, effect_author~ : @converge_audit.PublicKey) -> Self
 pub impl AssetReplayKernel for CanonicalAssetKernel
 
 pub struct CheckpointReplayMatch {
-  checkpoint_digest : @bft.Digest
-  authority_key : @bft.PublicKey
+  checkpoint_digest : @converge_audit.Digest
+  authority_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
-pub fn CheckpointReplayMatch::authority_key(Self) -> @bft.PublicKey
-pub fn CheckpointReplayMatch::checkpoint_digest(Self) -> @bft.Digest
+pub fn CheckpointReplayMatch::authority_key(Self) -> @converge_audit.PublicKey
+pub fn CheckpointReplayMatch::checkpoint_digest(Self) -> @converge_audit.Digest
 
 pub(all) struct DodgeEvidence {
-  input : @bft.AuthenticatedEvent
-  receipt : @bft.AuthenticatedEvent
+  input : @converge_audit.AuthenticatedEvent
+  receipt : @converge_audit.AuthenticatedEvent
   intent : DodgeIntent
   observed : DodgeReceipt
 } derive(Eq, @debug.Debug)
@@ -118,19 +118,19 @@ pub(all) struct DodgeEvidence {
 pub(all) struct DodgeIntent {
   attack_id : String
   player_id : String
-  telegraph_digest : @bft.Digest
+  telegraph_digest : @converge_audit.Digest
   client_tick : Int
   to_x : Int
 } derive(Eq, @debug.Debug)
 
 pub(all) struct DodgeReceipt {
-  input_digest : @bft.Digest
+  input_digest : @converge_audit.Digest
   received_tick : Int
 } derive(Eq, @debug.Debug)
 
 pub(all) struct DungeonAttackTranscript {
   attack_id : String
-  telegraph : @bft.AuthenticatedEvent
+  telegraph : @converge_audit.AuthenticatedEvent
   dodge_evidence : Array[DodgeEvidence]
 } derive(Eq, @debug.Debug)
 
@@ -141,12 +141,12 @@ pub(all) struct DungeonEncounterAttack {
 
 pub struct DungeonEncounterCandidate {
   session : String
-  authority : @bft.PublicKey
+  authority : @converge_audit.PublicKey
   encounter_id : String
   loot_item_type : String
-  manifest : @bft.Digest
-  event_root : @bft.Digest
-  public_state_root : @bft.Digest
+  manifest : @converge_audit.Digest
+  event_root : @converge_audit.Digest
+  public_state_root : @converge_audit.Digest
   player_states : Array[DungeonEncounterPlayerState]
   survivors : Array[String]
   defeated : Array[String]
@@ -154,9 +154,9 @@ pub struct DungeonEncounterCandidate {
   accepted_dodges : Int
   cleared : Bool
 } derive(Eq, @debug.Debug)
-pub fn DungeonEncounterCandidate::event_root(Self) -> @bft.Digest
-pub fn DungeonEncounterCandidate::manifest_digest(Self) -> @bft.Digest
-pub fn DungeonEncounterCandidate::public_state_root(Self) -> @bft.Digest
+pub fn DungeonEncounterCandidate::event_root(Self) -> @converge_audit.Digest
+pub fn DungeonEncounterCandidate::manifest_digest(Self) -> @converge_audit.Digest
+pub fn DungeonEncounterCandidate::public_state_root(Self) -> @converge_audit.Digest
 
 pub(all) enum DungeonEncounterCandidateResult {
   CandidateReady(DungeonEncounterCandidate)
@@ -176,10 +176,10 @@ pub(all) enum DungeonEncounterFinalizeResult {
 
 pub struct DungeonEncounterLootKernel {
   session : String
-  authority : @bft.PublicKey
+  authority : @converge_audit.PublicKey
   encounter_id : String
   loot_item_type : String
-  manifest : @bft.Digest
+  manifest : @converge_audit.Digest
   eligible : Map[String, Bool]
 }
 pub impl AssetReplayKernel for DungeonEncounterLootKernel
@@ -207,7 +207,7 @@ pub(all) enum DungeonEncounterRefusal {
 
 pub struct DungeonEncounterResolution {
   candidate : DungeonEncounterCandidate
-  checkpoint_digest : @bft.Digest
+  checkpoint_digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 pub fn DungeonEncounterResolution::accepted_dodge_count(Self) -> Int
 pub fn DungeonEncounterResolution::cleared(Self) -> Bool
@@ -215,31 +215,31 @@ pub fn DungeonEncounterResolution::defeated_ids(Self) -> Array[String]
 pub fn DungeonEncounterResolution::equivocator_ids(Self) -> Array[String]
 pub fn DungeonEncounterResolution::loot_effect(Self, String) -> AssetEffect?
 pub fn DungeonEncounterResolution::loot_kernel(Self) -> DungeonEncounterLootKernel
-pub fn DungeonEncounterResolution::manifest_digest(Self) -> @bft.Digest
+pub fn DungeonEncounterResolution::manifest_digest(Self) -> @converge_audit.Digest
 pub fn DungeonEncounterResolution::player_states(Self) -> Array[DungeonEncounterPlayerState]
-pub fn DungeonEncounterResolution::public_state_root(Self) -> @bft.Digest
+pub fn DungeonEncounterResolution::public_state_root(Self) -> @converge_audit.Digest
 pub fn DungeonEncounterResolution::replay_match(Self) -> CheckpointReplayMatch
 pub fn DungeonEncounterResolution::survivor_ids(Self) -> Array[String]
 
 pub struct DungeonLootKernel {
   session : String
-  authority : @bft.PublicKey
+  authority : @converge_audit.PublicKey
   attack_id : String
   loot_item_type : String
-  manifest : @bft.Digest
+  manifest : @converge_audit.Digest
   eligible : Map[String, Bool]
 }
 pub impl AssetReplayKernel for DungeonLootKernel
 
 pub(all) struct DungeonPlayer {
   player_id : String
-  public_key : @bft.PublicKey
+  public_key : @converge_audit.PublicKey
   initial_x : Int
 } derive(Eq, @debug.Debug)
 
 pub(all) struct DungeonPlayerAttackEvidence {
-  input : @bft.AuthenticatedEvent
-  receipt : @bft.AuthenticatedEvent
+  input : @converge_audit.AuthenticatedEvent
+  receipt : @converge_audit.AuthenticatedEvent
   intent : DungeonPlayerAttackIntent
   observed : DungeonPlayerAttackReceipt
 } derive(Eq, @debug.Debug)
@@ -251,15 +251,15 @@ pub(all) struct DungeonPlayerAttackIntent {
 } derive(Eq, @debug.Debug)
 
 pub(all) struct DungeonPlayerAttackReceipt {
-  input_digest : @bft.Digest
+  input_digest : @converge_audit.Digest
   received_tick : Int
 } derive(Eq, @debug.Debug)
 
 pub struct DungeonRaidCandidate {
   defense : DungeonEncounterCandidate
-  manifest : @bft.Digest
-  event_root : @bft.Digest
-  public_state_root : @bft.Digest
+  manifest : @converge_audit.Digest
+  event_root : @converge_audit.Digest
+  public_state_root : @converge_audit.Digest
   boss_hp_value : Int
   accepted_player_attacks_value : Int
   cooldown_violators_value : Array[String]
@@ -269,9 +269,9 @@ pub fn DungeonRaidCandidate::accepted_player_attack_count(Self) -> Int
 pub fn DungeonRaidCandidate::boss_hp(Self) -> Int
 pub fn DungeonRaidCandidate::cleared(Self) -> Bool
 pub fn DungeonRaidCandidate::cooldown_violator_ids(Self) -> Array[String]
-pub fn DungeonRaidCandidate::event_root(Self) -> @bft.Digest
-pub fn DungeonRaidCandidate::manifest_digest(Self) -> @bft.Digest
-pub fn DungeonRaidCandidate::public_state_root(Self) -> @bft.Digest
+pub fn DungeonRaidCandidate::event_root(Self) -> @converge_audit.Digest
+pub fn DungeonRaidCandidate::manifest_digest(Self) -> @converge_audit.Digest
+pub fn DungeonRaidCandidate::public_state_root(Self) -> @converge_audit.Digest
 
 pub(all) enum DungeonRaidCandidateResult {
   RaidCandidateReady(DungeonRaidCandidate)
@@ -287,7 +287,7 @@ pub(all) enum DungeonRaidRefusal {
   InvalidRaidRules
   DefensePhaseRefused(DungeonEncounterRefusal)
   InvalidPlayerAttackEvidence(Int)
-  ConflictingPlayerAttackReceipt(@bft.Digest)
+  ConflictingPlayerAttackReceipt(@converge_audit.Digest)
   EmptyRaidManifest
   RaidCheckpointAuthorityMismatch
   RaidCheckpointSessionMismatch
@@ -299,10 +299,10 @@ pub(all) enum DungeonRaidRefusal {
 
 pub struct DungeonRaidResolution {
   candidate : DungeonRaidCandidate
-  checkpoint_digest : @bft.Digest
+  checkpoint_digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 pub fn DungeonRaidResolution::boss_hp(Self) -> Int
-pub fn DungeonRaidResolution::checkpoint_digest(Self) -> @bft.Digest
+pub fn DungeonRaidResolution::checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn DungeonRaidResolution::cleared(Self) -> Bool
 pub fn DungeonRaidResolution::survivor_ids(Self) -> Array[String]
 
@@ -332,10 +332,10 @@ pub(all) enum DungeonReplayResult {
 
 pub struct DungeonResolution {
   session : String
-  authority : @bft.PublicKey
+  authority : @converge_audit.PublicKey
   attack_id : String
   loot_item_type : String
-  manifest : @bft.Digest
+  manifest : @converge_audit.Digest
   survivors : Array[String]
   hit : Array[String]
   equivocators : Array[String]
@@ -346,12 +346,12 @@ pub fn DungeonResolution::equivocator_ids(Self) -> Array[String]
 pub fn DungeonResolution::hit_ids(Self) -> Array[String]
 pub fn DungeonResolution::loot_effect(Self, String) -> AssetEffect?
 pub fn DungeonResolution::loot_kernel(Self) -> DungeonLootKernel
-pub fn DungeonResolution::manifest_digest(Self) -> @bft.Digest
+pub fn DungeonResolution::manifest_digest(Self) -> @converge_audit.Digest
 pub fn DungeonResolution::survivor_ids(Self) -> Array[String]
 
 pub(all) struct PvpCommandEvidence {
-  input : @bft.AuthenticatedEvent
-  receipt : @bft.AuthenticatedEvent
+  input : @converge_audit.AuthenticatedEvent
+  receipt : @converge_audit.AuthenticatedEvent
   intent : PvpCommandIntent
   observed : PvpCommandReceipt
 } derive(Eq, @debug.Debug)
@@ -359,7 +359,7 @@ pub(all) struct PvpCommandEvidence {
 pub(all) struct PvpCommandIntent {
   match_id : String
   epoch : Int
-  base_checkpoint_digest : @bft.Digest
+  base_checkpoint_digest : @converge_audit.Digest
   tick : Int
   player_id : String
   move_to_x : Int
@@ -367,30 +367,30 @@ pub(all) struct PvpCommandIntent {
 } derive(Eq, @debug.Debug)
 
 pub(all) struct PvpCommandReceipt {
-  command_digest : @bft.Digest
+  command_digest : @converge_audit.Digest
   received_tick : Int
 } derive(Eq, @debug.Debug)
 
 pub struct PvpEpochCandidate {
   session : String
-  referee : @bft.PublicKey
+  referee : @converge_audit.PublicKey
   config : PvpEpochConfig
-  game_manifest : @bft.Digest
-  manifest : @bft.Digest
-  event_root : @bft.Digest
-  public_state_root : @bft.Digest
-  asset_delta_root : @bft.Digest
+  game_manifest : @converge_audit.Digest
+  manifest : @converge_audit.Digest
+  event_root : @converge_audit.Digest
+  public_state_root : @converge_audit.Digest
+  asset_delta_root : @converge_audit.Digest
   player_states : Array[PvpPlayerState]
   team_states : Array[PvpTeamState]
   equivocators : Array[String]
   cooldown_violators : Array[String]
   accepted_commands : Int
 } derive(Eq, @debug.Debug)
-pub fn PvpEpochCandidate::asset_delta_root(Self) -> @bft.Digest
-pub fn PvpEpochCandidate::event_root(Self) -> @bft.Digest
-pub fn PvpEpochCandidate::game_manifest_digest(Self) -> @bft.Digest
-pub fn PvpEpochCandidate::manifest_digest(Self) -> @bft.Digest
-pub fn PvpEpochCandidate::public_state_root(Self) -> @bft.Digest
+pub fn PvpEpochCandidate::asset_delta_root(Self) -> @converge_audit.Digest
+pub fn PvpEpochCandidate::event_root(Self) -> @converge_audit.Digest
+pub fn PvpEpochCandidate::game_manifest_digest(Self) -> @converge_audit.Digest
+pub fn PvpEpochCandidate::manifest_digest(Self) -> @converge_audit.Digest
+pub fn PvpEpochCandidate::public_state_root(Self) -> @converge_audit.Digest
 
 pub(all) enum PvpEpochCandidateResult {
   PvpCandidateReady(PvpEpochCandidate)
@@ -400,7 +400,7 @@ pub(all) enum PvpEpochCandidateResult {
 pub(all) struct PvpEpochConfig {
   match_id : String
   epoch : Int
-  previous_checkpoint : @bft.Digest
+  previous_checkpoint : @converge_audit.Digest
   player_max_hp : Int
   ticks_per_epoch : Int
   max_late_ticks : Int
@@ -424,7 +424,7 @@ pub(all) enum PvpEpochRefusal {
   InvalidWitnessRoster
   TooManyCommands
   InvalidCommandEvidence(Int)
-  ConflictingCommandReceipt(@bft.Digest)
+  ConflictingCommandReceipt(@converge_audit.Digest)
   EmptyGameManifest
   CheckpointRefereeMismatch
   CheckpointSessionMismatch
@@ -439,12 +439,12 @@ pub(all) enum PvpEpochRefusal {
 
 pub struct PvpEpochResolution {
   candidate : PvpEpochCandidate
-  checkpoint_digest : @bft.Digest
+  checkpoint_digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 pub fn PvpEpochResolution::accepted_command_count(Self) -> Int
 pub fn PvpEpochResolution::cooldown_violator_ids(Self) -> Array[String]
 pub fn PvpEpochResolution::equivocator_ids(Self) -> Array[String]
-pub fn PvpEpochResolution::game_manifest_digest(Self) -> @bft.Digest
+pub fn PvpEpochResolution::game_manifest_digest(Self) -> @converge_audit.Digest
 pub fn PvpEpochResolution::player_states(Self) -> Array[PvpPlayerState]
 pub fn PvpEpochResolution::replay_match(Self) -> CheckpointReplayMatch
 pub fn PvpEpochResolution::team_states(Self) -> Array[PvpTeamState]
@@ -457,7 +457,7 @@ pub(all) struct PvpObjectiveRule {
 
 pub(all) struct PvpPlayer {
   player_id : String
-  public_key : @bft.PublicKey
+  public_key : @converge_audit.PublicKey
   team_id : String
   initial_x : Int
   initial_hp : Int
@@ -485,7 +485,7 @@ pub struct ReplayEngine {
   kernel : &AssetReplayKernel
 }
 pub fn ReplayEngine::new(&AssetReplayKernel, session_id~ : String) -> Self
-pub fn ReplayEngine::replay(Self, @bft.AuthenticatedEvent, AssetEffect) -> ReplayResult
+pub fn ReplayEngine::replay(Self, @converge_audit.AuthenticatedEvent, AssetEffect) -> ReplayResult
 
 pub(all) enum ReplayRefusal {
   SessionMismatch
@@ -500,15 +500,15 @@ pub(all) enum ReplayResult {
 } derive(Eq, @debug.Debug)
 
 pub struct ReplayedAssetEffect {
-  source : @bft.AuthenticatedEvent
-  manifest : @bft.Digest
+  source : @converge_audit.AuthenticatedEvent
+  manifest : @converge_audit.Digest
   effect : AssetEffect
 } derive(Eq, @debug.Debug)
 pub fn ReplayedAssetEffect::effect(Self) -> AssetEffect
-pub fn ReplayedAssetEffect::manifest_digest(Self) -> @bft.Digest
-pub fn ReplayedAssetEffect::matches(Self, session_id~ : String, manifest_digest~ : @bft.Digest, source_digest~ : @bft.Digest, effect~ : AssetEffect) -> Bool
+pub fn ReplayedAssetEffect::manifest_digest(Self) -> @converge_audit.Digest
+pub fn ReplayedAssetEffect::matches(Self, session_id~ : String, manifest_digest~ : @converge_audit.Digest, source_digest~ : @converge_audit.Digest, effect~ : AssetEffect) -> Bool
 pub fn ReplayedAssetEffect::session_id(Self) -> String
-pub fn ReplayedAssetEffect::source_digest(Self) -> @bft.Digest
+pub fn ReplayedAssetEffect::source_digest(Self) -> @converge_audit.Digest
 
 pub(all) struct TelegraphDungeonConfig {
   min_reaction_ticks : Int
@@ -531,7 +531,7 @@ pub(all) struct TelegraphedAttack {
 
 // Traits
 pub trait AssetReplayKernel {
-  fn manifest_digest(Self) -> @bft.Digest
-  fn replay(Self, @bft.AuthenticatedEvent, AssetEffect) -> Bool
+  fn manifest_digest(Self) -> @converge_audit.Digest
+  fn replay(Self, @converge_audit.AuthenticatedEvent, AssetEffect) -> Bool
 }
 

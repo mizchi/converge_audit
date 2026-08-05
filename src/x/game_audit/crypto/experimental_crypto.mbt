@@ -120,7 +120,7 @@ pub impl @bft.Signer for ExperimentalEd25519Signer with fn public_key(
 }
 
 ///|
-/// Stateless strict Ed25519 verifier for hex-encoded BFT keys/signatures.
+/// Stateless strict Ed25519 verifier for hex-encoded audit keys/signatures.
 pub struct ExperimentalEd25519Verifier {}
 
 ///|

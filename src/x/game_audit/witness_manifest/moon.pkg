@@ -1,3 +1,3 @@
 import {
-  "mizchi/bft",
+  "mizchi/converge_audit" @bft,
 }

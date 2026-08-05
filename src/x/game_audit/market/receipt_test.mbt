@@ -46,7 +46,7 @@ fn replayed_receipt(
     quantity~,
     output_index~,
   )
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id~,

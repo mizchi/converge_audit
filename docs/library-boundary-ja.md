@@ -1,16 +1,16 @@
-# mizchi/bft のライブラリ境界
+# mizchi/converge_audit のライブラリ境界
 
 更新日: 2026-08-05
 
 ## 結論
 
-`mizchi/bft` が一般化するのはチート検出そのものではなく、検証可能なイベント履歴を
+`mizchi/converge_audit` が一般化するのはチート検出そのものではなく、検証可能なイベント履歴を
 commit、認証、収束、配送する機構である。ゲーム上の正当性は、用途ごとのdeterministic
 validatorが判断する。CRDTとlocal-first同期は依存先の`mizchi/converge`が担当する。
 
 CRDTの収束は「同じ入力集合から同じ状態へ到達する」ことを保証できるが、入力が現実の
 プレイとして正しいことまでは保証しない。そのためCRDT本体を変更せず、
-`mizchi/bft/audit/*`を任意利用の監査拡張として別moduleに置く。
+`mizchi/converge_audit/audit/*`を任意利用の監査拡張として別moduleに置く。
 
 ```text
 converge CRDT
@@ -117,9 +117,9 @@ game Workerは既存Cloudflare API互換のcomposition endpointを維持する�
 
 | 項目 | 内容 |
 | --- | --- |
-| source | `mizchi/converge`のCRDT coreを保ちつつ、BFT event認証とcheckpoint監査を再利用可能にしたい |
-| observation | coreから監査層への逆依存はなく、BFT adapterだけが`mizchi/converge/types`を必要とする |
+| source | `mizchi/converge`のCRDT coreを保ちつつ、敵対環境向けevent認証とcheckpoint監査を再利用可能にしたい |
+| observation | coreから監査層への逆依存はなく、audit adapterだけが`mizchi/converge/types`を必要とする |
 | model question | package identityと配置だけを変え、既存の安全性・liveness contractを保存できるか |
 | machine result | 307 MoonBit tests、200 proof goals、Quint/TLC正常4/破損7 module、Node 16 tests、Cloudflare 42 testsが移動後も通過 |
-| decision | mechanismをcompanion module `mizchi/bft`へ抽出し、finalization/replay/trust値は`x/game_audit`へ残す |
+| decision | mechanismをcompanion module `mizchi/converge_audit`へ抽出し、finalization/replay/trust値は`x/game_audit`へ残す |
 | lock | `just check-audit-boundary`, `moon test`, `just prove`, `just formal-check`, Node/Cloudflare adapter tests |

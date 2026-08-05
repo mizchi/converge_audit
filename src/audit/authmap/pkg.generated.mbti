@@ -1,15 +1,15 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/audit/authmap"
+package "mizchi/converge_audit/audit/authmap"
 
 import {
-  "mizchi/bft",
+  "mizchi/converge_audit",
   "moonbitlang/core/debug",
 }
 
 // Values
-pub fn verify_membership(&@bft.Hasher, @bft.Digest, AuthMapProof) -> Bool
+pub fn verify_membership(&@converge_audit.Hasher, @converge_audit.Digest, AuthMapProof) -> Bool
 
-pub fn verify_non_membership(&@bft.Hasher, @bft.Digest, AuthMapAbsenceProof) -> Bool
+pub fn verify_non_membership(&@converge_audit.Hasher, @converge_audit.Digest, AuthMapAbsenceProof) -> Bool
 
 // Errors
 
@@ -29,36 +29,36 @@ pub(all) enum AuthMapMutation {
 pub(all) struct AuthMapProof {
   key : String
   value : String
-  left_digest : @bft.Digest
-  right_digest : @bft.Digest
+  left_digest : @converge_audit.Digest
+  right_digest : @converge_audit.Digest
   entry_count : Int
   path : Array[AuthMapStep]
 } derive(Eq, @debug.Debug)
 
 pub(all) enum AuthMapStep {
-  DescendedLeft(String, String, @bft.Digest)
-  DescendedRight(String, String, @bft.Digest)
+  DescendedLeft(String, String, @converge_audit.Digest)
+  DescendedRight(String, String, @converge_audit.Digest)
 } derive(Eq, @debug.Debug)
 
 pub enum AuthNode {
   Empty
-  Branch(String, String, @bft.Digest, @bft.Digest, AuthNode, AuthNode)
+  Branch(String, String, @converge_audit.Digest, @converge_audit.Digest, AuthNode, AuthNode)
 }
 
 pub struct AuthenticatedMap {
-  hasher : &@bft.Hasher
-  empty_digest : @bft.Digest
+  hasher : &@converge_audit.Hasher
+  empty_digest : @converge_audit.Digest
   mut root_node : AuthNode
   mut entry_count : Int
 }
 pub fn AuthenticatedMap::absence_proof(Self, String) -> AuthMapAbsenceProof?
 pub fn AuthenticatedMap::fork(Self) -> Self
 pub fn AuthenticatedMap::get(Self, String) -> String?
-pub fn AuthenticatedMap::new(&@bft.Hasher) -> Self
+pub fn AuthenticatedMap::new(&@converge_audit.Hasher) -> Self
 pub fn AuthenticatedMap::proof(Self, String) -> AuthMapProof?
 pub fn AuthenticatedMap::put(Self, String, String) -> AuthMapMutation
 pub fn AuthenticatedMap::remove(Self, String) -> Bool
-pub fn AuthenticatedMap::root(Self) -> @bft.Digest
+pub fn AuthenticatedMap::root(Self) -> @converge_audit.Digest
 pub fn AuthenticatedMap::size(Self) -> Int
 
 // Type aliases

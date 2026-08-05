@@ -17,7 +17,11 @@ fn pvp_session_fixture() -> PvpSessionFixture raise Error {
   let referee = @bft.MockSigner::new("referee")
   let alice = @bft.MockSigner::new("alice")
   let bob = @bft.MockSigner::new("bob")
-  let adapter = @bft.BFTAdapter::new(hasher, verifier, session_id="pvp-session")
+  let adapter = @bft.AuditAdapter::new(
+    hasher,
+    verifier,
+    session_id="pvp-session",
+  )
   assert_true(
     adapter.register_peer(@types.PeerId("referee"), referee.public_key()),
   )

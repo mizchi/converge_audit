@@ -3,7 +3,7 @@ fn benchmark_replayed_effects(
   effects : Array[@replay.AssetEffect],
   counter_offset : Int,
 ) -> (Array[@bft.AuthenticatedEvent], Array[@replay.ReplayedAssetEffect]) {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id="benchmark",

@@ -38,7 +38,7 @@ fn encounter_attack(
 
 ///|
 fn accept_encounter_event(
-  adapter : @bft.BFTAdapter,
+  adapter : @bft.AuditAdapter,
   signer : &@bft.Signer,
   event : @types.Event,
   dependency_hashes : Array[@bft.Digest],
@@ -56,7 +56,7 @@ fn encounter_transcript(
   dodge_player? : String = "",
   dodge_to_x? : Int = 0,
 ) -> DungeonAttackTranscript raise Error {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id="encounter-session",
@@ -173,7 +173,7 @@ fn encounter_asset_source(
   effect : AssetEffect,
   counter? : Int = 100,
 ) -> @bft.AuthenticatedEvent raise Error {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     session_id="encounter-session",

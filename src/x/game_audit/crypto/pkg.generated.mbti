@@ -1,8 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/crypto"
+package "mizchi/converge_audit/x/game_audit/crypto"
 
 import {
-  "mizchi/bft",
+  "mizchi/converge_audit",
   "mizchi/experimental_crypto/ed25519",
 }
 
@@ -13,21 +13,21 @@ import {
 // Types and methods
 pub struct ExperimentalEd25519Signer {
   private_key : @ed25519.PrivateKey
-  public_key : @bft.PublicKey
+  public_key : @converge_audit.PublicKey
 }
 pub fn ExperimentalEd25519Signer::from_seed_hex(String) -> Self?
 pub fn ExperimentalEd25519Signer::new(Bytes) -> Self raise @ed25519.Ed25519Error
-pub impl @bft.Signer for ExperimentalEd25519Signer
+pub impl @converge_audit.Signer for ExperimentalEd25519Signer
 
 pub struct ExperimentalEd25519Verifier {
 }
 pub fn ExperimentalEd25519Verifier::new() -> Self
-pub impl @bft.Verifier for ExperimentalEd25519Verifier
+pub impl @converge_audit.Verifier for ExperimentalEd25519Verifier
 
 pub struct ExperimentalSha256Hasher {
 }
 pub fn ExperimentalSha256Hasher::new() -> Self
-pub impl @bft.Hasher for ExperimentalSha256Hasher
+pub impl @converge_audit.Hasher for ExperimentalSha256Hasher
 
 // Type aliases
 

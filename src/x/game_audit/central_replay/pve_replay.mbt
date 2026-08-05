@@ -127,7 +127,7 @@ fn pve_signed_events(bundle : @wire.PveReplayBundle) -> Array[@bft.SignedEvent] 
 
 ///|
 fn pve_roster_boundary_valid(
-  adapter : @bft.BFTAdapter,
+  adapter : @bft.AuditAdapter,
   bundle : @wire.PveReplayBundle,
   expected_authority_key : @bft.PublicKey,
 ) -> Bool {
@@ -165,7 +165,7 @@ fn authenticate_pve_event_graph(
   expected_session_id : String,
   expected_authority_key : @bft.PublicKey,
 ) -> Result[Map[String, @bft.AuthenticatedEvent], PveCentralReplayRefusal] {
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     hasher,
     verifier,
     session_id=expected_session_id,

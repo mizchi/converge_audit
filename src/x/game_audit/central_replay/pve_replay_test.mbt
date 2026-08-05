@@ -8,7 +8,7 @@ priv struct PveReplayFixture {
 
 ///|
 fn accepted_for_fixture(
-  adapter : @bft.BFTAdapter,
+  adapter : @bft.AuditAdapter,
   signed : @bft.SignedEvent,
 ) -> @bft.AuthenticatedEvent raise Error {
   match adapter.deliver(signed) {
@@ -24,7 +24,7 @@ fn pve_replay_fixture() -> PveReplayFixture raise Error {
   let authority = @bft.MockSigner::new("authority")
   let alice = @bft.MockSigner::new("alice")
   let session_id = "dungeon:central-replay"
-  let adapter = @bft.BFTAdapter::new(hasher, verifier, session_id~)
+  let adapter = @bft.AuditAdapter::new(hasher, verifier, session_id~)
   assert_true(
     adapter.register_peer(@types.PeerId("authority"), authority.public_key()),
   )

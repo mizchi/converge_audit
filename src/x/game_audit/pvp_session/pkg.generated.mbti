@@ -1,18 +1,18 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/bft/x/game_audit/pvp_session"
+package "mizchi/converge_audit/x/game_audit/pvp_session"
 
 import {
-  "mizchi/bft",
-  "mizchi/bft/x/game_audit/attestation",
-  "mizchi/bft/x/game_audit/checkpoint",
-  "mizchi/bft/x/game_audit/replay",
+  "mizchi/converge_audit",
+  "mizchi/converge_audit/x/game_audit/attestation",
+  "mizchi/converge_audit/x/game_audit/checkpoint",
+  "mizchi/converge_audit/x/game_audit/replay",
   "moonbitlang/core/debug",
 }
 
 // Values
-pub fn prepare_pvp_replay_witness_session(&@bft.Hasher, &@bft.Verifier, @checkpoint.PreparedCheckpoint, @replay.PvpEpochResolution, referee_key~ : @bft.PublicKey, witnesses~ : Array[@attestation.Participant], max_faults~ : Int) -> PvpReplayWitnessSessionBuildResult
+pub fn prepare_pvp_replay_witness_session(&@converge_audit.Hasher, &@converge_audit.Verifier, @checkpoint.PreparedCheckpoint, @replay.PvpEpochResolution, referee_key~ : @converge_audit.PublicKey, witnesses~ : Array[@attestation.Participant], max_faults~ : Int) -> PvpReplayWitnessSessionBuildResult
 
-pub fn sign_pvp_replay_witness(&@bft.Hasher, &@bft.Signer, @checkpoint.PreparedCheckpoint, @replay.PvpEpochResolution, referee_key~ : @bft.PublicKey, witness_id~ : String, choice~ : @attestation.AttestationChoice) -> PvpReplayWitnessSigningResult
+pub fn sign_pvp_replay_witness(&@converge_audit.Hasher, &@converge_audit.Signer, @checkpoint.PreparedCheckpoint, @replay.PvpEpochResolution, referee_key~ : @converge_audit.PublicKey, witness_id~ : String, choice~ : @attestation.AttestationChoice) -> PvpReplayWitnessSigningResult
 
 // Errors
 

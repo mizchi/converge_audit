@@ -1,8 +1,8 @@
 ///|
-/// BFT validation adapter that wraps CRDT event delivery.
+/// Adversarial audit adapter that wraps CRDT event delivery.
 /// Validates hash integrity, signatures, equivocation, and causal ordering
 /// before accepting events.
-pub struct BFTAdapter {
+pub struct AuditAdapter {
   hasher : &Hasher
   verifier : &Verifier
   session : String
@@ -19,17 +19,17 @@ pub struct BFTAdapter {
   /// Events flushed from the buffer after dependencies are met
   flushed_events : Array[AuthenticatedEvent]
   /// Validation failures discovered while flushing buffered events.
-  flushed_alerts : Array[BFTAlert]
+  flushed_alerts : Array[AuditAlert]
 }
 
 ///|
-/// Create a new BFTAdapter with given hasher and verifier.
-pub fn BFTAdapter::new(
+/// Create a new AuditAdapter with given hasher and verifier.
+pub fn AuditAdapter::new(
   hasher : &Hasher,
   verifier : &Verifier,
   session_id~ : String,
-) -> BFTAdapter {
-  BFTAdapter::{
+) -> AuditAdapter {
+  AuditAdapter::{
     hasher,
     verifier,
     session: session_id,
@@ -44,15 +44,15 @@ pub fn BFTAdapter::new(
 }
 
 ///|
-pub fn BFTAdapter::session_id(self : BFTAdapter) -> String {
+pub fn AuditAdapter::session_id(self : AuditAdapter) -> String {
   self.session
 }
 
 ///|
 /// Register a peer's signing key from a trusted session manifest.
 /// Registration is idempotent, but an existing peer cannot be rebound.
-pub fn BFTAdapter::register_peer(
-  self : BFTAdapter,
+pub fn AuditAdapter::register_peer(
+  self : AuditAdapter,
   peer : @types.PeerId,
   key : PublicKey,
 ) -> Bool {
@@ -67,8 +67,8 @@ pub fn BFTAdapter::register_peer(
 
 ///|
 /// Sign an event, producing a SignedEvent with hash and signature.
-pub fn BFTAdapter::sign(
-  self : BFTAdapter,
+pub fn AuditAdapter::sign(
+  self : AuditAdapter,
   signer : &Signer,
   event : @types.Event,
   dep_hashes : Array[Digest],
@@ -88,17 +88,17 @@ pub fn BFTAdapter::sign(
 }
 
 ///|
-/// Deliver a signed event through the BFT validation pipeline.
+/// Deliver a signed event through the audit validation pipeline.
 /// Returns Accepted if valid, Buffered if waiting for deps, or Rejected with alert.
-pub fn BFTAdapter::deliver(
-  self : BFTAdapter,
+pub fn AuditAdapter::deliver(
+  self : AuditAdapter,
   signed : SignedEvent,
 ) -> DeliveryResult {
   let event = signed.event
   let peer_id = event.id.peer
   // Step 1: Reject cross-session replay before accepting any event identity.
   if signed.session_id != self.session {
-    return Rejected(BFTAlert::{
+    return Rejected(AuditAlert::{
       kind: SessionMismatch,
       peer: peer_id,
       digest: signed.digest,
@@ -113,7 +113,7 @@ pub fn BFTAdapter::deliver(
   )
   let recomputed = self.hasher.hash_string(serialized)
   if recomputed != signed.digest {
-    return Rejected(BFTAlert::{
+    return Rejected(AuditAlert::{
       kind: HashMismatch,
       peer: peer_id,
       digest: signed.digest,
@@ -123,7 +123,7 @@ pub fn BFTAdapter::deliver(
   // Step 3: Bind event authorship to the trusted session roster.
   match self.peer_keys.get(peer_id.0) {
     None =>
-      return Rejected(BFTAlert::{
+      return Rejected(AuditAlert::{
         kind: UnknownPeer,
         peer: peer_id,
         digest: signed.digest,
@@ -131,7 +131,7 @@ pub fn BFTAdapter::deliver(
       })
     Some(expected_key) =>
       if expected_key != signed.author_key {
-        return Rejected(BFTAlert::{
+        return Rejected(AuditAlert::{
           kind: AuthorKeyMismatch,
           peer: peer_id,
           digest: signed.digest,
@@ -144,7 +144,7 @@ pub fn BFTAdapter::deliver(
   }
   // Step 4: Signature verification
   if !self.verifier.verify(signed.author_key, signed.digest, signed.signature) {
-    return Rejected(BFTAlert::{
+    return Rejected(AuditAlert::{
       kind: InvalidSignature,
       peer: peer_id,
       digest: signed.digest,
@@ -159,7 +159,7 @@ pub fn BFTAdapter::deliver(
   match self.event_digests.get(eq_key) {
     Some(existing) =>
       if existing != signed.digest {
-        return Rejected(BFTAlert::{
+        return Rejected(AuditAlert::{
           kind: Equivocation,
           peer: peer_id,
           digest: signed.digest,
@@ -228,7 +228,7 @@ pub fn AuthenticatedEvent::event(self : AuthenticatedEvent) -> @types.Event {
 
 ///|
 /// Accept a validated event: store its digest and try to flush buffered events.
-fn BFTAdapter::accept(self : BFTAdapter, signed : SignedEvent) -> Unit {
+fn AuditAdapter::accept(self : AuditAdapter, signed : SignedEvent) -> Unit {
   let event = signed.event
   let eq_key = event.id.peer.0 + ":" + event.id.counter.to_string()
   self.digest_store[signed.digest.0] = true
@@ -241,7 +241,7 @@ fn BFTAdapter::accept(self : BFTAdapter, signed : SignedEvent) -> Unit {
 ///|
 /// Try to flush buffered events whose dependencies are now satisfied.
 /// Uses a queue-based approach for O(n) instead of O(n²) repeated scans.
-fn BFTAdapter::try_flush(self : BFTAdapter) -> Unit {
+fn AuditAdapter::try_flush(self : AuditAdapter) -> Unit {
   let len = self.pending_buffer.length()
   if len == 0 {
     return
@@ -317,8 +317,8 @@ fn BFTAdapter::try_flush(self : BFTAdapter) -> Unit {
 }
 
 ///|
-fn BFTAdapter::dependencies_match(
-  self : BFTAdapter,
+fn AuditAdapter::dependencies_match(
+  self : AuditAdapter,
   signed : SignedEvent,
 ) -> Bool {
   if signed.event.deps.length() != signed.dep_hashes.length() {
@@ -334,10 +334,10 @@ fn BFTAdapter::dependencies_match(
 }
 
 ///|
-fn BFTAdapter::dependency_mismatch_alert(
-  self : BFTAdapter,
+fn AuditAdapter::dependency_mismatch_alert(
+  self : AuditAdapter,
   signed : SignedEvent,
-) -> BFTAlert {
+) -> AuditAlert {
   ignore(self)
   {
     kind: DependencyMismatch,
@@ -349,7 +349,9 @@ fn BFTAdapter::dependency_mismatch_alert(
 
 ///|
 /// Take all events that were flushed from the buffer, clearing the list.
-pub fn BFTAdapter::take_flushed(self : BFTAdapter) -> Array[AuthenticatedEvent] {
+pub fn AuditAdapter::take_flushed(
+  self : AuditAdapter,
+) -> Array[AuthenticatedEvent] {
   let result = self.flushed_events.copy()
   self.flushed_events.clear()
   result
@@ -357,7 +359,9 @@ pub fn BFTAdapter::take_flushed(self : BFTAdapter) -> Array[AuthenticatedEvent] 
 
 ///|
 /// Take validation alerts discovered during causal buffer flushing.
-pub fn BFTAdapter::take_flushed_alerts(self : BFTAdapter) -> Array[BFTAlert] {
+pub fn AuditAdapter::take_flushed_alerts(
+  self : AuditAdapter,
+) -> Array[AuditAlert] {
   let result = self.flushed_alerts.copy()
   self.flushed_alerts.clear()
   result

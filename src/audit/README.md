@@ -51,7 +51,7 @@ backpressure、上限付き指数backoff、成功reset、認証済みresponseの
 fork優先をpure contractとして持つ。socket/WebTransport/WebSocketと端末credentialは未接続である。
 
 ゲーム固有の preset、PvE/PvP kernel、witness rosterの選定とfinality条件、open-world sampling、
-inventory、marketplace は `src/x/game_audit/` に残す。したがって `mizchi/bft` の汎用層を使っても、
+inventory、marketplace は `src/x/game_audit/` に残す。したがって `mizchi/converge_audit` の汎用層を使っても、
 「その操作がゲーム上合法」という結論は application の replay verifier なしには得られない。
 詳細な昇格基準と保証境界は
 [ライブラリ境界](../../docs/library-boundary-ja.md)に記録する。

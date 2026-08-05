@@ -34,7 +34,7 @@ quint typecheck formal/quint/WitnessQuorumModels.qnt
 quint typecheck formal/quint/AssetOwnership.qnt
 quint typecheck formal/quint/AssetOwnershipModels.qnt
 
-audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/bft-quint.XXXXXX")"
+audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
 
 check_expected_failure \

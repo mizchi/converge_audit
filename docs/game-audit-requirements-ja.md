@@ -141,7 +141,7 @@ eventはcanonical payload、session、author key、counter、causal dependency�
 
 依存eventが未着ならbufferまたはgap recoveryへ送り、依存関係が満たされるまでgame stateへ適用しない。
 
-状態: in-memory BFT adapterは`Tested`。bounded fanout、指数retry、backpressure、
+状態: in-memory audit adapterは`Tested`。bounded fanout、指数retry、backpressure、
 認証済みresponse/fork選択はpure runtime contractとして`Tested`。production socket transportは`Pending`。
 
 ### AUD-REPLAY-001: 正当性はdeterministic kernelで決める（MUST）

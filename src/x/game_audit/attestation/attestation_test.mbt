@@ -352,7 +352,11 @@ fn authority_replay_fixture() -> (
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("authority")
-  let adapter = @bft.BFTAdapter::new(hasher, verifier, session_id="dungeon-42")
+  let adapter = @bft.AuditAdapter::new(
+    hasher,
+    verifier,
+    session_id="dungeon-42",
+  )
   assert_true(
     adapter.register_peer(@types.PeerId("authority"), authority.public_key()),
   )

@@ -65,7 +65,7 @@ fn pvp_witnesses() -> Array[@witness_manifest.ReplayWitnessIdentity] {
 
 ///|
 fn accept_pvp_event(
-  adapter : @bft.BFTAdapter,
+  adapter : @bft.AuditAdapter,
   signer : &@bft.Signer,
   event : @types.Event,
   dependency_hashes : Array[@bft.Digest],
@@ -83,7 +83,7 @@ fn pvp_transcript(
 ) -> Array[PvpCommandEvidence] raise Error {
   let config = pvp_config(damage~)
   let hasher = @bft.FnvHasher::new()
-  let adapter = @bft.BFTAdapter::new(
+  let adapter = @bft.AuditAdapter::new(
     hasher,
     @bft.MockVerifier::new(),
     session_id="pvp-session",
