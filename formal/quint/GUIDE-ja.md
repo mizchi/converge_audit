@@ -15,6 +15,9 @@
 | `WitnessQuorumModels.qnt` | safety/liveness構成とproducer/rosterのRed構成 |
 | `WitnessQuorumTests.qnt` | quorum、intruder、expiryの実行可能scenario |
 | `WitnessQuorumMbt.qnt` | 実Ed25519 MoonBit認証gateへ再生する決定的なITF trace driver |
+| `AssetOwnership.qnt` | asset owner head、二重署名transfer、listing/cancelの状態機械とproperty |
+| `AssetOwnershipModels.qnt` | 正常構成とrecipient/version/listing gateを外したRed構成 |
+| `AssetOwnershipTests.qnt` | transfer、listing、cancel、旧nonce replay拒否と新nonce再出品の実行可能scenario |
 | `ConfigContracts.qnt` | 許可しない定数構成 |
 | `check*.sh` | scenario、正常検証、Red反例、設定契約をCIへ接続するscript |
 
@@ -29,6 +32,11 @@
 7. `*Models.qnt`で正常構成とRed構成の差分を確認する。
 8. `*Tests.qnt`を、期待する代表traceの実行可能ドキュメントとして読む。
 9. `CheckpointDeliveryMbt.qnt`とNode replayerで、選んだtraceの実装射影を確認する。
+
+asset ownershipを読む場合は、`ownerVersion`をassetごとの単調なhead、`listingVersion`を
+出品時に固定したheadとして読む。`Canceled`はassetやowner head全体の永久禁止ではなく、
+`canceledListingNonces`に入った旧listing identityだけを再利用できない状態である。新nonceでの再出品と、
+正当なtransfer後に新ownerが行う出品はどちらも許可する。
 
 ## Quintの定義種別
 

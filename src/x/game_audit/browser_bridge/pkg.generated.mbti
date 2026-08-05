@@ -1,0 +1,22 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/bft/x/game_audit/browser_bridge"
+
+// Values
+pub fn audit_browser_ed25519_public_key(String) -> String
+
+pub fn audit_browser_ed25519_sign(String, String) -> String
+
+pub fn audit_browser_ed25519_verify(String, String, String) -> Bool
+
+pub fn audit_browser_merkle_root(Array[String]) -> String
+
+pub fn audit_browser_sha256(String) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

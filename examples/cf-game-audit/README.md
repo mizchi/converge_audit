@@ -3,6 +3,38 @@
 `src/x/game_audit` の versioned CBOR、SHA-256/Ed25519検証、証明済みhead classifierを
 SQLite-backed Durable Objectsへ接続する実験環境である。production認定ではない。
 
+## Browser reference game
+
+`web/`は、この監査基盤を実際のゲームへ接続するための最小縦切り **Audit Survivors** である。
+Vampire Survivors風の即時移動・自動攻撃、resolve tickを先に見せる円形予兆、seedとkill履歴から
+一意に決まるDiablo風dropを持つ。取得itemはすぐローカルinventoryで使える一方、authorityの
+verification receiptが適用されるまでmarketplace出品はfail-closedになる。
+
+```sh
+# http://127.0.0.1:8787 で静的gameとWorker APIを同時に起動
+pnpm dev
+
+# browser assetsだけをhot reload（APIは別途起動する）
+pnpm web:dev
+```
+
+simulation kernelはDOMから分離した純粋な整数状態遷移で、30 tick/sを前提とする。描画だけを
+`requestAnimationFrame`で補間する。30 leafごとのMerkle micro checkpointはMoonBit bridgeで生成し、
+leaf transcriptとgame stateを完全なcheckpoint境界でIndexedDBへ保存する。reload時はchain/root/stateを
+再検証し、未完区間ではなく最後の完全な境界へ復帰する。dropを含むsealed segmentだけを
+`game-item-verifications`へ送り、Workerが同じkernelをreplayして返したauthority receiptを適用すると
+出品gateが開く。後続epochのdropでは、最後のauthority ACK以後のsegmentを1秒単位で順にbackfillする。
+run固有Ed25519公開鍵はgenesisへcommitされ、item精算と`game-market-listings`出品はその秘密鍵の署名を要求する。
+`game-item-transfers`は旧ownerのhandoffと新ownerのacceptanceを同じ直前headへ署名し、per-asset owner versionを
+SQLite transactionで1だけ進める。current ownerだけが出品でき、active listing中のtransferは拒否する。
+`game-market-listing-cancellations`は出品時headに対するcurrent-owner署名を要求し、取消後はtransferを再許可する。
+30Hz入力そのものは中央へ送らない。peer witnessとのowner head接続、価格精算は次段階である。詳細は
+[`docs/reference-hack-and-slash-game-ja.md`](../../docs/reference-hack-and-slash-game-ja.md)を参照する。
+
+UI変更は[VLMKit](https://mizchi.github.io/vlmkit/)向けの観測JSON、要求、locator制約を`specs/`に保存し、
+Playwrightで実ブラウザをgateする。LLM providerを設定した上で`pnpm ui:plan`、`pnpm ui:generate`を実行し、
+通常の回帰試験は`pnpm test:e2e`で再現できる。
+
 ## Pattern mapping
 
 | mode | Durable Object id | 主な相互検証 | 中央へ送る契機 |
@@ -33,7 +65,10 @@ SQLite tablesは`audit_config`、`anchor_head`、`anchor_history`、`anchor_fork
 `checkpoint_receiver_config`、`checkpoint_receiver_head`、
 `checkpoint_receiver_history`、`checkpoint_receiver_forks`、署名収集用の
 `checkpoint_witness_collections`、`checkpoint_witness_approvals`、`checkpoint_witness_conflicts`、
-送信元隔離用の`checkpoint_witness_source_windows`。gap endpointは
+送信元隔離用の`checkpoint_witness_source_windows`、reference game用の
+`reference_game_checkpoint_states`、`reference_game_item_receipts`、
+`reference_game_asset_ownership_heads`、`reference_game_item_transfers`、
+`reference_game_market_listings`、`reference_game_verification_source_windows`。gap endpointは
 保存済みhistoryから最大256 envelopeの連続pageだけを返す。
 
 checkpoint runtimeは、固定したboundary・初期head・必要destination集合・outbox容量に対して、
@@ -212,6 +247,12 @@ open-worldではさらに、検証済みitem生成だけがSQLiteへ入り、管
 生成直後のownerと、署名checkpoint・3/4 replay witness・origin receipt・authenticated inventory proofで
 更新したcurrent ownerだけが`eligible_current_owner`になることを確認する。wrong parentとversion rollbackは
 409で拒否し、古いownerのproofなし照会も拒否する。
+さらに、pure game kernelの移動・予兆resolve・決定的drop・出品gateと、Wrangler test harness上で
+Static Assetsのgame shellと`run_worker_first`対象の`/health`が共存することを確認する。reference gameでは
+epoch 0からのreplay、保存済みparent stateによる後続epoch、parent欠落、DO eviction後の復元、item receipt、
+receipt偽造・seller不一致・owner署名不正のlisting拒否、二者署名transfer、stale owner拒否、listing冪等性、
+署名済みcancel、cancel後transfer、取消済みnonceのreplay拒否、新nonceでの再出品を確認し、Playwrightで
+provisional、backfill、verified、listed、canceling、再出品可能状態のUI遷移を実ブラウザ検査する。
 
 ローカルbenchmarkは二つのterminalで実行する。
 
@@ -451,6 +492,8 @@ artifact:
 - local workerd値はCloudflare global networkのlatency/CPU billing値ではない。remote値も
   東京の単一clientからbest-effort hintを付けた各20-sample runであり、全地域の代表値ではない。
 - `experimental_crypto`は未監査であり、本番暗号backendではない。
+- reference gameのrun鍵seedはplayer-local IndexedDBへ保存する実験用custodyである。本番ではaccountへ登録した
+  non-exportable keystore key、回復、rotation、失効へ置換する。
 - mode固有bundleの期待checkpointは現在、管理tokenで認証した要求に固定したdigestである。
   current-owner proofとper-asset monotonic headは実装済み。transparency log headのremote witness、
   private-key custody、ancestry revocation、multi-asset atomic head、pruningは未実装。

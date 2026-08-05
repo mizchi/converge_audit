@@ -1,0 +1,100 @@
+[
+  {
+    "url": "http://127.0.0.1:8788/?seed=4660&run=observed-initial",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Audit Survivors\"",
+      "heading \"Inventory\"",
+      "heading \"Audit pipeline\"",
+      "heading \"Event log\"",
+      "button \"新しいrun\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "recording 15 / 30",
+      "30Hz local event",
+      "1s micro checkpoint",
+      "authority ACK"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:8788/?seed=4661&run=observed-provisional",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Inventory\"",
+      "button \"監査待ち\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "local checkpoint e0 / ACK待ち",
+      "ember-blade",
+      "common · provisional",
+      "loot picked up (provisional)"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:8792/?seed=4661&run=observed-verified",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Inventory\"",
+      "heading \"Event log\"",
+      "button \"マーケットへ出品\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "ember-blade",
+      "common · authority verified",
+      "authority verified loot-v1:1235:enemy-0:30:0:5af78368",
+      "loot picked up (provisional)"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:8792/?seed=4661&run=observed-listed",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Inventory\"",
+      "heading \"Event log\"",
+      "button \"出品を取り消す\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "ember-blade",
+      "common · market listed",
+      "market listed loot-v1:1235:enemy-0:30:0:5af78368"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:8792/?seed=4661&run=observed-canceling",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Inventory\"",
+      "button \"取消中\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "ember-blade",
+      "common · market listed"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:8792/?seed=4661&run=observed-canceled",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Inventory\"",
+      "heading \"Event log\"",
+      "button \"マーケットへ出品\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "ember-blade",
+      "common · authority verified",
+      "market canceled loot-v1:1235:enemy-0:30:0:5af78368"
+    ]
+  }
+]

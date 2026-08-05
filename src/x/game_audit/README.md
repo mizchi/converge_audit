@@ -15,6 +15,7 @@ src/audit/{policy, commitment, head, merkle, authmap, layered,
               │
               ▼
 policy / audit / checkpoint / attestation / witness_manifest / wire / crypto / worker
+                                              └──── browser_bridge
               │
               ├──── open_world / central_replay / pvp_session
               ▼
@@ -98,6 +99,10 @@ the exact parent, an increasing epoch, and owner/version consistency;
 observer signing-store durability, transparency-head remote witness quorum,
 multi-asset atomic inventory heads, ancestry revocation, and production
 cryptography remain open.
+
+`browser_bridge` is a smaller JavaScript boundary for the reference game's hot
+path. It exposes only SHA-256 and the game-neutral `audit/merkle` root builder,
+so the browser journal does not maintain a second Merkle framing algorithm.
 
 Run the isolated checks with:
 

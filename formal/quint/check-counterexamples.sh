@@ -31,6 +31,8 @@ quint typecheck formal/quint/CheckpointDelivery.qnt
 quint typecheck formal/quint/CheckpointDeliveryModels.qnt
 quint typecheck formal/quint/WitnessQuorum.qnt
 quint typecheck formal/quint/WitnessQuorumModels.qnt
+quint typecheck formal/quint/AssetOwnership.qnt
+quint typecheck formal/quint/AssetOwnershipModels.qnt
 
 audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/bft-quint.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
@@ -77,3 +79,21 @@ check_expected_failure \
   invariant \
   readyRequiresAuthenticatedDistinctRosterQuorum \
   "$audit_quint_tmp/witness-roster.log"
+check_expected_failure \
+  formal/quint/AssetOwnershipModels.qnt \
+  assetOwnershipBrokenRecipient \
+  invariant \
+  transferRequiresDualAuthentication \
+  "$audit_quint_tmp/asset-recipient.log"
+check_expected_failure \
+  formal/quint/AssetOwnershipModels.qnt \
+  assetOwnershipBrokenVersion \
+  invariant \
+  ownerVersionAdvancesExactlyOnce \
+  "$audit_quint_tmp/asset-version.log"
+check_expected_failure \
+  formal/quint/AssetOwnershipModels.qnt \
+  assetOwnershipBrokenListingGate \
+  invariant \
+  activeListingMatchesCurrentOwnerHead \
+  "$audit_quint_tmp/asset-listing.log"

@@ -9,6 +9,12 @@ import {
 } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
+  audit_browser_ed25519_public_key,
+  audit_browser_ed25519_sign,
+  audit_browser_merkle_root,
+  audit_browser_sha256,
+} from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
+import {
   audit_benchmark_make_anchor_envelope,
   audit_benchmark_make_checkpoint_delivery_authentication,
   audit_benchmark_make_inventory_listing_proof_bundle,
@@ -24,6 +30,22 @@ import worker, {
   type ReplayJob,
 } from "../src/index";
 import { checkpointDeliveryIdempotencyKey } from "../src/checkpoint-runtime";
+import {
+  appendAuditTick,
+  createGameAuditJournal,
+  type AuditDigestAdapter,
+} from "../game/audit/journal";
+import {
+  authenticateGameItemVerificationRequest,
+  buildGameCheckpointVerificationRequest,
+  buildGameItemVerificationRequest,
+} from "../game/authority/item-verification";
+import {
+  gameItemTransferProofDigest,
+  signGameMarketListingCancelProof,
+  signGameMarketListingProof,
+} from "../game/authority/owner-authentication";
+import { advanceGame, createInitialGame } from "../game/kernel";
 
 const SEED =
   "000102030405060708090a0b0c0d0e0f" +
@@ -341,7 +363,732 @@ function nextJsonMessage(socket: WebSocket): Promise<Record<string, unknown>> {
   });
 }
 
+const referenceGameDigest: AuditDigestAdapter = {
+  hashString: audit_browser_sha256,
+  merkleRoot: audit_browser_merkle_root,
+};
+const referenceGameOwnerPublicKey = audit_browser_ed25519_public_key(SEED);
+const referenceGameRecipientPublicKey = audit_browser_ed25519_public_key(
+  PLAYER_SEED,
+);
+const referenceGameOwnerSigner = {
+  publicKey: referenceGameOwnerPublicKey,
+  signDigest: (value: string) => audit_browser_ed25519_sign(SEED, value),
+};
+
+function referenceGameRun(
+  lastTick: number,
+  horizontalAt: (tick: number) => -1 | 0 | 1 = () => 0,
+) {
+  let game = createInitialGame({ seed: 0x1234, playerId: "player-1" });
+  let audit = createGameAuditJournal({
+    seed: game.seed,
+    playerId: game.player.id,
+    ownerPublicKey: referenceGameOwnerPublicKey,
+    cadenceTicks: 30,
+  }, referenceGameDigest);
+  while (game.tick < lastTick) {
+    const input = {
+      tick: game.tick + 1,
+      horizontal: horizontalAt(game.tick + 1),
+      vertical: 0 as const,
+    };
+    const advanced = advanceGame(game, input);
+    if (!advanced.ok) throw new Error(advanced.reason);
+    const appended = appendAuditTick(audit, {
+      input,
+      effects: advanced.effects,
+      state: advanced.state,
+    }, referenceGameDigest);
+    if (!appended.ok) throw new Error(appended.reason);
+    game = advanced.state;
+    audit = appended.state;
+  }
+  return audit;
+}
+
+function referenceGameItemRequest(unit: string) {
+  const audit = referenceGameRun(30);
+  const assetId = audit.checkpoints[0].createdAssetIds[0];
+  return authenticateGameItemVerificationRequest(
+    unit,
+    buildGameItemVerificationRequest(audit, assetId),
+    referenceGameDigest,
+    referenceGameOwnerSigner,
+  );
+}
+
 describe.sequential("Cloudflare game audit shard", () => {
+  it("lists only a reference-game item with its exact authority receipt", async () => {
+    const unit = `reference-game-market-${crypto.randomUUID()}`;
+    const request = referenceGameItemRequest(unit);
+    const verified = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+    expect(verified.status).toBe(201);
+    const verification = await verified.json() as {
+      receipt: {
+        authority_receipt_id: string;
+        owner_public_key: string;
+        owner_version: number;
+        owner_head_id: string;
+      };
+    };
+    const listingNonce = "1".repeat(64);
+    const listingRequest = {
+      asset_id: request.asset_id,
+      seller_id: request.player_id,
+      authority_receipt_id: verification.receipt.authority_receipt_id,
+      owner_public_key: referenceGameOwnerPublicKey,
+      owner_version: verification.receipt.owner_version,
+      owner_head_id: verification.receipt.owner_head_id,
+      listing_nonce: listingNonce,
+      owner_signature: signGameMarketListingProof(
+        unit,
+        {
+          assetId: request.asset_id,
+          sellerId: request.player_id,
+          authorityReceiptId: verification.receipt.authority_receipt_id,
+          ownerPublicKey: referenceGameOwnerPublicKey,
+          ownerVersion: verification.receipt.owner_version,
+          ownerHeadId: verification.receipt.owner_head_id,
+          listingNonce,
+        },
+        referenceGameDigest,
+        referenceGameOwnerSigner,
+      ),
+    };
+    const list = (body: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-market-listings`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    const forged = await list({
+      ...listingRequest,
+      authority_receipt_id: "f".repeat(64),
+    });
+    expect(forged.status).toBe(403);
+    await expect(forged.json()).resolves.toMatchObject({
+      ok: true,
+      allowed: false,
+      decision: "authority_receipt_mismatch",
+    });
+
+    const wrongSeller = await list({
+      ...listingRequest,
+      seller_id: "different-player",
+    });
+    expect(wrongSeller.status).toBe(403);
+    await expect(wrongSeller.json()).resolves.toMatchObject({
+      ok: true,
+      allowed: false,
+      decision: "seller_mismatch",
+    });
+
+    const stolenReceipt = await list({
+      ...listingRequest,
+      owner_signature: "f".repeat(128),
+    });
+    expect(stolenReceipt.status).toBe(403);
+    await expect(stolenReceipt.json()).resolves.toMatchObject({
+      ok: true,
+      allowed: false,
+      decision: "owner_authentication_refused",
+    });
+
+    const listed = await list(listingRequest);
+    expect(listed.status).toBe(201);
+    const first = await listed.json() as Record<string, unknown>;
+    expect(first).toMatchObject({
+      ok: true,
+      allowed: true,
+      decision: "listed",
+      listing: {
+        asset_id: request.asset_id,
+        seller_id: request.player_id,
+        authority_receipt_id: verification.receipt.authority_receipt_id,
+        status: "active",
+      },
+    });
+
+    await evictAuditShard("pve", unit);
+    const duplicate = await list(listingRequest);
+    expect(duplicate.status).toBe(200);
+    await expect(duplicate.json()).resolves.toEqual({
+      ...first,
+      decision: "duplicate",
+    });
+  });
+
+  it("transfers an item with dual signatures and lists only the current owner", async () => {
+    const unit = `reference-game-transfer-${crypto.randomUUID()}`;
+    const itemRequest = referenceGameItemRequest(unit);
+    const verified = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(itemRequest),
+      },
+    );
+    expect(verified.status).toBe(201);
+    const verifiedBody = await verified.json() as {
+      receipt: {
+        authority_receipt_id: string;
+        owner_version: number;
+        owner_head_id: string;
+      };
+    };
+    const transferBoundary = {
+      assetId: itemRequest.asset_id,
+      authorityReceiptId: verifiedBody.receipt.authority_receipt_id,
+      previousHeadId: verifiedBody.receipt.owner_head_id,
+      fromOwnerId: itemRequest.player_id,
+      fromOwnerPublicKey: referenceGameOwnerPublicKey,
+      toOwnerId: "player-2",
+      toOwnerPublicKey: referenceGameRecipientPublicKey,
+      previousVersion: verifiedBody.receipt.owner_version,
+      nextVersion: verifiedBody.receipt.owner_version + 1,
+    };
+    const transferDigest = gameItemTransferProofDigest(
+      unit,
+      transferBoundary,
+      referenceGameDigest,
+    );
+    const transferRequest = {
+      asset_id: transferBoundary.assetId,
+      authority_receipt_id: transferBoundary.authorityReceiptId,
+      previous_head_id: transferBoundary.previousHeadId,
+      from_owner_id: transferBoundary.fromOwnerId,
+      from_owner_public_key: transferBoundary.fromOwnerPublicKey,
+      to_owner_id: transferBoundary.toOwnerId,
+      to_owner_public_key: transferBoundary.toOwnerPublicKey,
+      previous_version: transferBoundary.previousVersion,
+      next_version: transferBoundary.nextVersion,
+      sender_signature: audit_browser_ed25519_sign(SEED, transferDigest),
+      recipient_signature: audit_browser_ed25519_sign(
+        PLAYER_SEED,
+        transferDigest,
+      ),
+    };
+    const post = (action: string, body: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/${action}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    const forgedAcceptance = await post("game-item-transfers", {
+      ...transferRequest,
+      recipient_signature: "f".repeat(128),
+    });
+    expect(forgedAcceptance.status).toBe(403);
+    await expect(forgedAcceptance.json()).resolves.toMatchObject({
+      transferred: false,
+      decision: "recipient_authentication_refused",
+    });
+
+    const transferred = await post("game-item-transfers", transferRequest);
+    expect(transferred.status).toBe(201);
+    const transferredBody = await transferred.json() as {
+      owner_head: {
+        owner_id: string;
+        owner_public_key: string;
+        owner_version: number;
+        owner_head_id: string;
+      };
+      transfer: { transfer_id: string };
+    };
+    expect(transferredBody).toMatchObject({
+      owner_head: {
+        owner_id: "player-2",
+        owner_public_key: referenceGameRecipientPublicKey,
+        owner_version: 1,
+      },
+    });
+
+    const duplicateOriginReceipt = await post(
+      "game-item-verifications",
+      itemRequest,
+    );
+    expect(duplicateOriginReceipt.status).toBe(200);
+    await expect(duplicateOriginReceipt.json()).resolves.toMatchObject({
+      decision: "duplicate",
+      receipt: {
+        owner_version: 0,
+        owner_head_id: transferBoundary.previousHeadId,
+      },
+    });
+
+    await evictAuditShard("pve", unit);
+    const duplicate = await post("game-item-transfers", transferRequest);
+    expect(duplicate.status).toBe(200);
+    await expect(duplicate.json()).resolves.toMatchObject({
+      transferred: true,
+      decision: "duplicate",
+      transfer: { transfer_id: transferredBody.transfer.transfer_id },
+    });
+
+    const oldOwnerListing = {
+      asset_id: itemRequest.asset_id,
+      seller_id: itemRequest.player_id,
+      authority_receipt_id: transferBoundary.authorityReceiptId,
+      owner_public_key: referenceGameOwnerPublicKey,
+      owner_version: transferBoundary.previousVersion,
+      owner_head_id: transferBoundary.previousHeadId,
+      listing_nonce: "2".repeat(64),
+      owner_signature: signGameMarketListingProof(
+        unit,
+        {
+          assetId: itemRequest.asset_id,
+          sellerId: itemRequest.player_id,
+          authorityReceiptId: transferBoundary.authorityReceiptId,
+          ownerPublicKey: referenceGameOwnerPublicKey,
+          ownerVersion: transferBoundary.previousVersion,
+          ownerHeadId: transferBoundary.previousHeadId,
+          listingNonce: "2".repeat(64),
+        },
+        referenceGameDigest,
+        referenceGameOwnerSigner,
+      ),
+    };
+    const staleListing = await post("game-market-listings", oldOwnerListing);
+    expect(staleListing.status).toBe(403);
+    await expect(staleListing.json()).resolves.toMatchObject({
+      allowed: false,
+      decision: "seller_mismatch",
+    });
+
+    const recipientSigner = {
+      publicKey: referenceGameRecipientPublicKey,
+      signDigest: (value: string) =>
+        audit_browser_ed25519_sign(PLAYER_SEED, value),
+    };
+    const currentListingBoundary = {
+      assetId: itemRequest.asset_id,
+      sellerId: "player-2",
+      authorityReceiptId: transferBoundary.authorityReceiptId,
+      ownerPublicKey: referenceGameRecipientPublicKey,
+      ownerVersion: transferredBody.owner_head.owner_version,
+      ownerHeadId: transferredBody.owner_head.owner_head_id,
+      listingNonce: "3".repeat(64),
+    };
+    const currentListing = await post("game-market-listings", {
+      asset_id: currentListingBoundary.assetId,
+      seller_id: currentListingBoundary.sellerId,
+      authority_receipt_id: currentListingBoundary.authorityReceiptId,
+      owner_public_key: currentListingBoundary.ownerPublicKey,
+      owner_version: currentListingBoundary.ownerVersion,
+      owner_head_id: currentListingBoundary.ownerHeadId,
+      listing_nonce: currentListingBoundary.listingNonce,
+      owner_signature: signGameMarketListingProof(
+        unit,
+        currentListingBoundary,
+        referenceGameDigest,
+        recipientSigner,
+      ),
+    });
+    expect(currentListing.status).toBe(201);
+    const currentListingBody = await currentListing.json() as {
+      listing: { listing_id: string };
+    };
+    expect(currentListingBody).toMatchObject({
+      allowed: true,
+      decision: "listed",
+      listing: {
+        seller_id: "player-2",
+        owner_version: 1,
+        owner_head_id: transferredBody.owner_head.owner_head_id,
+      },
+    });
+
+    const thirdOwnerSeed = CHECKPOINT_WITNESS_SEEDS[0];
+    const thirdOwnerPublicKey = audit_browser_ed25519_public_key(thirdOwnerSeed);
+    const listedTransferBoundary = {
+      assetId: itemRequest.asset_id,
+      authorityReceiptId: transferBoundary.authorityReceiptId,
+      previousHeadId: transferredBody.owner_head.owner_head_id,
+      fromOwnerId: "player-2",
+      fromOwnerPublicKey: referenceGameRecipientPublicKey,
+      toOwnerId: "player-3",
+      toOwnerPublicKey: thirdOwnerPublicKey,
+      previousVersion: transferredBody.owner_head.owner_version,
+      nextVersion: transferredBody.owner_head.owner_version + 1,
+    };
+    const listedTransferDigest = gameItemTransferProofDigest(
+      unit,
+      listedTransferBoundary,
+      referenceGameDigest,
+    );
+    const listedTransferRequest = {
+      asset_id: listedTransferBoundary.assetId,
+      authority_receipt_id: listedTransferBoundary.authorityReceiptId,
+      previous_head_id: listedTransferBoundary.previousHeadId,
+      from_owner_id: listedTransferBoundary.fromOwnerId,
+      from_owner_public_key: listedTransferBoundary.fromOwnerPublicKey,
+      to_owner_id: listedTransferBoundary.toOwnerId,
+      to_owner_public_key: listedTransferBoundary.toOwnerPublicKey,
+      previous_version: listedTransferBoundary.previousVersion,
+      next_version: listedTransferBoundary.nextVersion,
+      sender_signature: audit_browser_ed25519_sign(
+        PLAYER_SEED,
+        listedTransferDigest,
+      ),
+      recipient_signature: audit_browser_ed25519_sign(
+        thirdOwnerSeed,
+        listedTransferDigest,
+      ),
+    };
+    const blockedByListing = await post(
+      "game-item-transfers",
+      listedTransferRequest,
+    );
+    expect(blockedByListing.status).toBe(409);
+    await expect(blockedByListing.json()).resolves.toMatchObject({
+      transferred: false,
+      decision: "asset_listed",
+    });
+
+    const cancelBoundary = {
+      listingId: currentListingBody.listing.listing_id,
+      ...currentListingBoundary,
+    };
+    const cancelSignature = signGameMarketListingCancelProof(
+      unit,
+      cancelBoundary,
+      referenceGameDigest,
+      recipientSigner,
+    );
+    const cancelRequest = {
+      listing_id: cancelBoundary.listingId,
+      asset_id: cancelBoundary.assetId,
+      seller_id: cancelBoundary.sellerId,
+      authority_receipt_id: cancelBoundary.authorityReceiptId,
+      owner_public_key: cancelBoundary.ownerPublicKey,
+      owner_version: cancelBoundary.ownerVersion,
+      owner_head_id: cancelBoundary.ownerHeadId,
+      listing_nonce: cancelBoundary.listingNonce,
+      cancel_signature: cancelSignature,
+    };
+    const forgedCancellation = await post(
+      "game-market-listing-cancellations",
+      { ...cancelRequest, cancel_signature: "f".repeat(128) },
+    );
+    expect(forgedCancellation.status).toBe(403);
+    await expect(forgedCancellation.json()).resolves.toMatchObject({
+      canceled: false,
+      decision: "owner_authentication_refused",
+    });
+
+    const canceled = await post(
+      "game-market-listing-cancellations",
+      cancelRequest,
+    );
+    expect(canceled.status).toBe(201);
+    const canceledBody = await canceled.json() as Record<string, unknown>;
+    expect(canceledBody).toMatchObject({
+      canceled: true,
+      decision: "canceled",
+      listing: {
+        listing_id: cancelBoundary.listingId,
+        status: "canceled",
+        cancel_signature: cancelSignature,
+      },
+    });
+
+    const canceledHeadRelisting = await post("game-market-listings", {
+      asset_id: currentListingBoundary.assetId,
+      seller_id: currentListingBoundary.sellerId,
+      authority_receipt_id: currentListingBoundary.authorityReceiptId,
+      owner_public_key: currentListingBoundary.ownerPublicKey,
+      owner_version: currentListingBoundary.ownerVersion,
+      owner_head_id: currentListingBoundary.ownerHeadId,
+      listing_nonce: currentListingBoundary.listingNonce,
+      owner_signature: signGameMarketListingProof(
+        unit,
+        currentListingBoundary,
+        referenceGameDigest,
+        recipientSigner,
+      ),
+    });
+    expect(canceledHeadRelisting.status).toBe(409);
+    await expect(canceledHeadRelisting.json()).resolves.toMatchObject({
+      allowed: false,
+      decision: "listing_canceled",
+    });
+
+    const freshListingBoundary = {
+      ...currentListingBoundary,
+      listingNonce: "4".repeat(64),
+    };
+    const freshListing = await post("game-market-listings", {
+      asset_id: freshListingBoundary.assetId,
+      seller_id: freshListingBoundary.sellerId,
+      authority_receipt_id: freshListingBoundary.authorityReceiptId,
+      owner_public_key: freshListingBoundary.ownerPublicKey,
+      owner_version: freshListingBoundary.ownerVersion,
+      owner_head_id: freshListingBoundary.ownerHeadId,
+      listing_nonce: freshListingBoundary.listingNonce,
+      owner_signature: signGameMarketListingProof(
+        unit,
+        freshListingBoundary,
+        referenceGameDigest,
+        recipientSigner,
+      ),
+    });
+    expect(freshListing.status).toBe(201);
+    const freshListingBody = await freshListing.json() as {
+      listing: { listing_id: string };
+    };
+    expect(freshListingBody).toMatchObject({
+      allowed: true,
+      decision: "listed",
+      listing: { listing_nonce: freshListingBoundary.listingNonce },
+    });
+
+    const freshCancelBoundary = {
+      listingId: freshListingBody.listing.listing_id,
+      ...freshListingBoundary,
+    };
+    const freshCancelSignature = signGameMarketListingCancelProof(
+      unit,
+      freshCancelBoundary,
+      referenceGameDigest,
+      recipientSigner,
+    );
+    const freshCancellation = await post(
+      "game-market-listing-cancellations",
+      {
+        listing_id: freshCancelBoundary.listingId,
+        asset_id: freshCancelBoundary.assetId,
+        seller_id: freshCancelBoundary.sellerId,
+        authority_receipt_id: freshCancelBoundary.authorityReceiptId,
+        owner_public_key: freshCancelBoundary.ownerPublicKey,
+        owner_version: freshCancelBoundary.ownerVersion,
+        owner_head_id: freshCancelBoundary.ownerHeadId,
+        listing_nonce: freshCancelBoundary.listingNonce,
+        cancel_signature: freshCancelSignature,
+      },
+    );
+    expect(freshCancellation.status).toBe(201);
+    await expect(freshCancellation.json()).resolves.toMatchObject({
+      canceled: true,
+      decision: "canceled",
+      listing: { listing_id: freshCancelBoundary.listingId },
+    });
+
+    const transferredAfterCancellation = await post(
+      "game-item-transfers",
+      listedTransferRequest,
+    );
+    expect(transferredAfterCancellation.status).toBe(201);
+    await expect(transferredAfterCancellation.json()).resolves.toMatchObject({
+      transferred: true,
+      decision: "transferred",
+      owner_head: {
+        owner_id: "player-3",
+        owner_version: 2,
+      },
+    });
+
+    await evictAuditShard("pve", unit);
+    const duplicateCancellation = await post(
+      "game-market-listing-cancellations",
+      cancelRequest,
+    );
+    expect(duplicateCancellation.status).toBe(200);
+    await expect(duplicateCancellation.json()).resolves.toEqual({
+      ...canceledBody,
+      decision: "duplicate",
+    });
+  });
+
+  it("issues an item receipt from a later authority-verified epoch", async () => {
+    const unit = `reference-game-later-item-${crypto.randomUUID()}`;
+    const audit = referenceGameRun(60, (tick) => tick <= 30 ? -1 : 1);
+    const firstRequest = buildGameCheckpointVerificationRequest(audit, 0);
+    const itemRequest = authenticateGameItemVerificationRequest(
+      unit,
+      buildGameItemVerificationRequest(
+        audit,
+        audit.checkpoints[1].createdAssetIds[0],
+      ),
+      referenceGameDigest,
+      referenceGameOwnerSigner,
+    );
+    const submit = (action: string, body: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/${action}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    const parent = await submit("game-checkpoint-verifications", firstRequest);
+    expect(parent.status).toBe(201);
+    const item = await submit("game-item-verifications", itemRequest);
+    expect(item.status).toBe(201);
+    await expect(item.json()).resolves.toMatchObject({
+      ok: true,
+      decision: "verified",
+      receipt: {
+        asset_id: itemRequest.asset_id,
+        checkpoint_digest: itemRequest.checkpoint.checkpoint_digest,
+        inventory_epoch: 1,
+      },
+    });
+  });
+
+  it("persists replayed checkpoint state and advances from it after eviction", async () => {
+    const unit = `reference-game-checkpoints-${crypto.randomUUID()}`;
+    const audit = referenceGameRun(60);
+    const firstRequest = buildGameCheckpointVerificationRequest(audit, 0);
+    const secondRequest = buildGameCheckpointVerificationRequest(audit, 1);
+    const submit = (body: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-checkpoint-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    const missingParent = await submit(secondRequest);
+    expect(missingParent.status).toBe(409);
+    await expect(missingParent.json()).resolves.toEqual({
+      ok: false,
+      error: "reference_game_parent_not_verified",
+    });
+
+    const first = await submit(firstRequest);
+    expect(first.status).toBe(201);
+    await expect(first.json()).resolves.toMatchObject({
+      ok: true,
+      decision: "verified",
+      receipt: {
+        version: 1,
+        epoch: 0,
+        last_tick: 30,
+        checkpoint_digest: firstRequest.checkpoint.checkpoint_digest,
+      },
+    });
+
+    await evictAuditShard("pve", unit);
+    const second = await submit(secondRequest);
+    expect(second.status).toBe(201);
+    const acceptedSecond = await second.json() as Record<string, unknown>;
+    expect(acceptedSecond).toMatchObject({
+      ok: true,
+      decision: "verified",
+      receipt: {
+        version: 1,
+        epoch: 1,
+        last_tick: 60,
+        checkpoint_digest: secondRequest.checkpoint.checkpoint_digest,
+      },
+    });
+
+    await evictAuditShard("pve", unit);
+    const duplicate = await submit(secondRequest);
+    expect(duplicate.status).toBe(200);
+    await expect(duplicate.json()).resolves.toEqual({
+      ...acceptedSecond,
+      decision: "duplicate",
+    });
+  });
+
+  it("replays a high-value item segment and persists an idempotent receipt", async () => {
+    const unit = `reference-game-${crypto.randomUUID()}`;
+    const request = referenceGameItemRequest(unit);
+    const submit = () => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+
+    const accepted = await submit();
+    expect(accepted.status).toBe(201);
+    const first = await accepted.json() as Record<string, unknown>;
+    expect(first).toMatchObject({
+      ok: true,
+      decision: "verified",
+      receipt: {
+        version: 1,
+        asset_id: request.asset_id,
+        owner_id: request.player_id,
+        checkpoint_digest: request.checkpoint.checkpoint_digest,
+        inventory_epoch: 0,
+      },
+    });
+
+    await evictAuditShard("pve", unit);
+    const duplicate = await submit();
+    expect(duplicate.status).toBe(200);
+    await expect(duplicate.json()).resolves.toEqual({
+      ...first,
+      decision: "duplicate",
+    });
+  });
+
+  it("refuses a stolen item transcript without the genesis owner signature", async () => {
+    const unit = `reference-game-stolen-transcript-${crypto.randomUUID()}`;
+    const request = referenceGameItemRequest(unit);
+    request.owner_signature = "f".repeat(128);
+
+    const response = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "owner_authentication_refused",
+    });
+  });
+
+  it("refuses a claimed item that differs from authority replay", async () => {
+    const unit = `reference-game-tamper-${crypto.randomUUID()}`;
+    const request = referenceGameItemRequest(unit);
+    const last = JSON.parse(request.events.at(-1)!.canonical_payload);
+    last[4][2][5][0] = "forged-asset";
+    request.events.at(-1)!.canonical_payload = JSON.stringify(last);
+    request.events.at(-1)!.created_asset_ids = ["forged-asset"];
+
+    const response = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "event_replay_mismatch",
+    });
+  });
+
   it("fails closed when witness source bucketing has no server secret", async () => {
     const auditEnv = env as unknown as AuditEnv;
     const response = await worker.fetch(
@@ -363,6 +1110,30 @@ describe.sequential("Cloudflare game audit shard", () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
       error: "checkpoint_witness_source_bucketing_not_configured",
+    });
+  });
+
+  it("fails closed when reference-game source bucketing has no server secret", async () => {
+    const auditEnv = env as unknown as AuditEnv;
+    const response = await worker.fetch(
+      new Request(
+        "https://example.test/v1/pve/missing-source-secret/game-market-listings",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      ),
+      {
+        AUDIT_SHARD: auditEnv.AUDIT_SHARD,
+        REPLAY_QUEUE: auditEnv.REPLAY_QUEUE,
+        ADMIN_TOKEN: "test-admin-token",
+        WITNESS_SOURCE_BUCKET_KEY: "",
+      } as AuditEnv,
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "reference_game_source_bucketing_not_configured",
     });
   });
 

@@ -23,6 +23,8 @@
   - 文献から採用した考え、全体構成、1:N/N:N の違い、保証と未保証、roadmap
 - [検証可能なリアルタイムゲームの設計](./telegraph-game-design-ja.md)
   - 予兆、回避窓、client prediction、ゲームの面白さを損ねにくい表現
+- [Cloudflare参照ゲーム: Audit Survivors](./reference-hack-and-slash-game-ja.md)
+  - 30Hz決定的kernel、予兆回避、seed固定drop、provisional itemと出品gate
 - [公開状態 PvP epoch と N:N 相互検証](./pvp-epoch-ja.md)
   - 同時移動/攻撃/score、equivocation、witness接続、計算量と実測
 - [不規則 encounter の選択的アンチチート](./open-world-audit-ja.md)

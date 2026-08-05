@@ -119,6 +119,19 @@ It uses Cloudflare Workers, SQLite-backed Durable Objects, and Queues. Normal
 checkpoints go directly to an authority. Queue-backed transcript replay is
 reserved for samples, challenges, forks, high-value outcomes, and marketplaces.
 
+It also contains **Audit Survivors**, a browser-game vertical slice: local-first
+30 Hz movement and auto-attacks, resolve-tick AoE telegraphs, deterministic loot,
+and a marketplace gate that keeps provisional items usable but unlistable until
+an authority receipt is applied. Later epochs backfill only unverified one-second
+segments. A per-run Ed25519 key is committed by the genesis checkpoint, so the
+initial owner must sign item settlement. Dual-signed transfers advance a per-asset
+owner head, and only that current owner can sign the exact origin-receipt listing;
+copying a receipt alone is insufficient. A signed cancellation preserves listing
+history and prevents a canceled listing nonce from being replayed, while a fresh
+nonce permits intentional relisting or transfer to a new owner head.
+Vite assets and the Worker API are served from
+one Cloudflare deployment. Run it locally with `just dev-cf-game`.
+
 | Pattern | Peer auditing target | Central settlement target |
 | --- | --- | --- |
 | 1:N PvE / dungeon | Authority events, participant samples, telegraphs, input receipts | Whether clears and loot follow from a valid event sequence |
@@ -170,11 +183,13 @@ just prove
 just formal-check
 just test-node-audit-runtime
 just test-cf-game-audit
+just dev-cf-game
 ```
 
 Start with [docs/README.md](docs/README.md). See the
 [game-audit overview](docs/game-audit-overview-ja.md),
 [telegraph and real-time game design](docs/telegraph-game-design-ja.md), and
+[Audit Survivors reference game](docs/reference-hack-and-slash-game-ja.md), and
 [selective open-world auditing](docs/open-world-audit-ja.md) for the detailed
 design. The [Quint protocol model](formal/quint/README.md) records the finite
 state boundary and verification commands.

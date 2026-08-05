@@ -14,15 +14,33 @@ importers:
       '@cloudflare/workers-types':
         specifier: 5.20260804.1
         version: 5.20260804.1
+      '@mizchi/vlmkit':
+        specifier: 0.9.1
+        version: 0.9.1(@playwright/test@1.62.1)(playwright@1.62.1)
+      '@mizchi/vlmkit-generate':
+        specifier: 0.9.1
+        version: 0.9.1(playwright@1.62.1)
+      '@mizchi/vlmkit-plan':
+        specifier: 0.9.1
+        version: 0.9.1(playwright@1.62.1)
+      '@playwright/test':
+        specifier: 1.62.1
+        version: 1.62.1
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
+      playwright:
+        specifier: 1.62.1
+        version: 1.62.1
       tsx:
         specifier: 4.20.6
         version: 4.20.6
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+      vite:
+        specifier: 8.2.0
+        version: 8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.20.6)
       vitest:
         specifier: 4.1.10
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.20.6))
@@ -404,6 +422,16 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@google/generative-ai@0.24.1':
+    resolution: {integrity: sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==}
+    engines: {node: '>=18.0.0'}
+
+  '@hono/node-server@1.19.17':
+    resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
+
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
     engines: {node: '>=18'}
@@ -576,8 +604,44 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
+  '@mizchi/vlmkit-ai@0.9.1':
+    resolution: {integrity: sha512-pnXRpi9mXqt9ta1h+EANQrecJr6PFh7pRtBGY/+Evmgd82A/ul0kd1lbhWbBXcPLoacf3RqsPP5zjZoKbMEPDg==}
+    engines: {node: '>=24'}
+
+  '@mizchi/vlmkit-core@0.9.1':
+    resolution: {integrity: sha512-XD/PhBQGXP9GDlhJxFNhEFm48ZMx7GEhe4KWkjxVY3yqZW5F2wsTYQqaPFUF4G77bduyw8g4zhDqPoB5HCFU5Q==}
+    engines: {node: '>=24'}
+    peerDependencies:
+      playwright: '>=1.61 <2'
+
+  '@mizchi/vlmkit-generate@0.9.1':
+    resolution: {integrity: sha512-StmJha5uOAhiCCyrHyx0Or4C7eq90otV7mIsGGqrqfZLbZTQrEmYwE4/K0zTyWn+d9kBHyibH7klgpH5ePeRbw==}
+    engines: {node: '>=24'}
+    hasBin: true
+
+  '@mizchi/vlmkit-plan@0.9.1':
+    resolution: {integrity: sha512-KQPtdA0i6szG6Aaj9dNpJooOvDUUOA47lvipYOU0Mb75QiTGFrJreAeVtrVlJF7XgFLaACOfZvLgw/9M6gEA1A==}
+    engines: {node: '>=24'}
+    hasBin: true
+
+  '@mizchi/vlmkit@0.9.1':
+    resolution: {integrity: sha512-xwRi2ywCgBL9SLnozqsBsFsjkuMqwVraagHsz7f9iUDOe1V6WGgIWbLPT1e4LxOuBkJ5I/08G3Pf2+3M0GVLxw==}
+    engines: {node: '>=24'}
+    hasBin: true
+    peerDependencies:
+      '@playwright/test': '>=1.61 <2'
+      playwright: '>=1.61 <2'
+    peerDependenciesMeta:
+      '@playwright/test':
+        optional: true
+
   '@oxc-project/types@0.142.0':
     resolution: {integrity: sha512-7W+2q5AKQVU36fkaryontrHn3YDt1RyUYXatw9i5H8ocYe2sPKSFB6eS8WNPeRKiN1qAWWZUPm7gwFzJGrccqQ==}
+
+  '@playwright/test@1.62.1':
+    resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@poppinss/colors@4.1.6':
     resolution: {integrity: sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg==}
@@ -739,6 +803,10 @@ packages:
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
 
+  cac@7.0.0:
+    resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
+    engines: {node: '>=20.19.0'}
+
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
@@ -789,6 +857,11 @@ packages:
       picomatch:
         optional: true
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -796,6 +869,10 @@ packages:
 
   get-tsconfig@4.14.1:
     resolution: {integrity: sha512-Dz/6HxkrxgNehhxLVeyv8sad9UzF2xBVeaKBQNDfJ5XiSXmp2gTR0eO0RWiT2NCKS5aGP9jjkOMggTN90qU50A==}
+
+  hono@4.13.0:
+    resolution: {integrity: sha512-jhunvfHWxd7J5EFfSgH4xsYJzSe/lfqbUCxiyyeaQasUsXeEHXtzVid+7EOGByc5JnFa23SSFL3Y2RV/z1T+eQ==}
+    engines: {node: '>=16.9.0'}
 
   kleur@4.1.5:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
@@ -904,6 +981,24 @@ packages:
     resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
     engines: {node: '>=12'}
 
+  pixelmatch@7.2.0:
+    resolution: {integrity: sha512-xhcb4yHu9sM/G7foGzoLtXYcC0zHEaOXXjRKhGup0fw78Nf2Tkiapv4EQyMzrbcmQPsllAI7DbFY2UT7PlI9Pg==}
+    hasBin: true
+
+  playwright-core@1.62.1:
+    resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.62.1:
+    resolution: {integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  pngjs@7.0.0:
+    resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
+    engines: {node: '>=14.19.0'}
+
   postcss@8.5.25:
     resolution: {integrity: sha512-DTPx3RWSSnWyzLxQnlH0rJP+EW5ekl16ZU4/psbIhA0e53kJfdgaN5vKM+xP7yJtXVu+nfdVFmlgFDEKAe4Pyw==}
     engines: {node: ^10 || ^12 || >=14}
@@ -967,6 +1062,11 @@ packages:
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -1312,6 +1412,12 @@ snapshots:
   '@esbuild/win32-x64@0.28.1':
     optional: true
 
+  '@google/generative-ai@0.24.1': {}
+
+  '@hono/node-server@1.19.17(hono@4.13.0)':
+    dependencies:
+      hono: 4.13.0
+
   '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.35.2':
@@ -1427,7 +1533,53 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@mizchi/vlmkit-ai@0.9.1(playwright@1.62.1)':
+    dependencies:
+      '@google/generative-ai': 0.24.1
+      '@mizchi/vlmkit-core': 0.9.1(playwright@1.62.1)
+    transitivePeerDependencies:
+      - playwright
+
+  '@mizchi/vlmkit-core@0.9.1(playwright@1.62.1)':
+    dependencies:
+      pixelmatch: 7.2.0
+      playwright: 1.62.1
+      pngjs: 7.0.0
+
+  '@mizchi/vlmkit-generate@0.9.1(playwright@1.62.1)':
+    dependencies:
+      '@mizchi/vlmkit-ai': 0.9.1(playwright@1.62.1)
+      typescript: 6.0.3
+    transitivePeerDependencies:
+      - playwright
+
+  '@mizchi/vlmkit-plan@0.9.1(playwright@1.62.1)':
+    dependencies:
+      '@mizchi/vlmkit-ai': 0.9.1(playwright@1.62.1)
+    transitivePeerDependencies:
+      - playwright
+
+  '@mizchi/vlmkit@0.9.1(@playwright/test@1.62.1)(playwright@1.62.1)':
+    dependencies:
+      '@hono/node-server': 1.19.17(hono@4.13.0)
+      cac: 7.0.0
+      hono: 4.13.0
+      pixelmatch: 7.2.0
+      playwright: 1.62.1
+      pngjs: 7.0.0
+      typescript: 6.0.3
+      ws: 8.21.0
+    optionalDependencies:
+      '@playwright/test': 1.62.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@oxc-project/types@0.142.0': {}
+
+  '@playwright/test@1.62.1':
+    dependencies:
+      playwright: 1.62.1
 
   '@poppinss/colors@4.1.6':
     dependencies:
@@ -1549,6 +1701,8 @@ snapshots:
 
   blake3-wasm@2.1.5: {}
 
+  cac@7.0.0: {}
+
   chai@6.2.2: {}
 
   cjs-module-lexer@1.2.3: {}
@@ -1631,12 +1785,17 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.5
 
+  fsevents@2.3.2:
+    optional: true
+
   fsevents@2.3.3:
     optional: true
 
   get-tsconfig@4.14.1:
     dependencies:
       resolve-pkg-maps: 1.0.0
+
+  hono@4.13.0: {}
 
   kleur@4.1.5: {}
 
@@ -1716,6 +1875,20 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.5: {}
+
+  pixelmatch@7.2.0:
+    dependencies:
+      pngjs: 7.0.0
+
+  playwright-core@1.62.1: {}
+
+  playwright@1.62.1:
+    dependencies:
+      playwright-core: 1.62.1
+    optionalDependencies:
+      fsevents: 2.3.2
+
+  pngjs@7.0.0: {}
 
   postcss@8.5.25:
     dependencies:
@@ -1811,6 +1984,8 @@ snapshots:
       fsevents: 2.3.3
 
   typescript@5.9.3: {}
+
+  typescript@6.0.3: {}
 
   undici-types@7.18.2: {}
 

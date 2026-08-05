@@ -3,6 +3,7 @@ set -eu
 
 quint typecheck formal/quint/CheckpointDeliveryTests.qnt
 quint typecheck formal/quint/WitnessQuorumTests.qnt
+quint typecheck formal/quint/AssetOwnershipTests.qnt
 
 quint test formal/quint/CheckpointDeliveryTests.qnt \
   --main=checkpointDeliveryTests \
@@ -12,4 +13,9 @@ quint test formal/quint/CheckpointDeliveryTests.qnt \
 quint test formal/quint/WitnessQuorumTests.qnt \
   --main=witnessQuorumTests \
   --match='^(threeDistinctApprovalsAdvanceReceiver|intruderDoesNotCountTowardQuorum|expiryDoesNotAdvanceReceiver)$' \
+  --verbosity=1
+
+quint test formal/quint/AssetOwnershipTests.qnt \
+  --main=assetOwnershipTests \
+  --match='^(transferListCancelTransfer|activeListingBlocksTransfer|recipientMustAcceptTransfer|canceledListingCannotReplay|canceledOwnerCanRelistWithFreshNonce)$' \
   --verbosity=1

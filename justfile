@@ -100,8 +100,9 @@ quint-witness-mbt:
 quint-docs:
   nix develop path:. --command quint docs formal/quint/CheckpointDelivery.qnt
   nix develop path:. --command quint docs formal/quint/WitnessQuorum.qnt
+  nix develop path:. --command quint docs formal/quint/AssetOwnership.qnt
 
-# Confirm that all seven load-bearing Quint guards produce counterexamples
+# Confirm that all ten load-bearing Quint guards produce counterexamples
 quint-counterexamples:
   nix develop path:. --command sh formal/quint/check-counterexamples.sh
 
@@ -135,6 +136,14 @@ bench-audit-layered:
 # Run the Cloudflare workerd/Durable Object integration tests
 test-cf-game-audit:
   pnpm --dir examples/cf-game-audit test
+
+# Start the browser game and local Worker/DO API together
+dev-cf-game:
+  pnpm --dir examples/cf-game-audit dev
+
+# Build only the browser game static assets
+build-cf-game-web:
+  pnpm --dir examples/cf-game-audit web:build
 
 # Type-check the Cloudflare game-audit adapter
 check-cf-game-audit:

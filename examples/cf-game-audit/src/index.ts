@@ -23,6 +23,31 @@ import {
 } from "./checkpoint-witness-collection";
 import { decodeAuditQueueBody } from "./queue-wire";
 import {
+  referenceGameDigest,
+  referenceGameOwnerVerifier,
+} from "./reference-game";
+import {
+  decodeGameCheckpointVerificationRequest,
+  verifyGameCheckpoint,
+  verifyGameItemCreation,
+  type GameCheckpointVerificationParent,
+  type GameCheckpointVerificationRequest,
+  type GameItemAuthorityReceipt,
+} from "../game/authority/item-verification";
+import type { GameState } from "../game/kernel";
+import {
+  gameItemTransferProofDigest,
+  verifyGameItemTransferProof,
+  verifyGameMarketListingCancelProof,
+  verifyGameMarketListingProof,
+} from "../game/authority/owner-authentication";
+import {
+  createInitialGameAssetOwnershipHead,
+  verifyAndApplyGameItemTransfer,
+  type GameAssetOwnershipHead,
+  type GameItemTransferRequest,
+} from "../game/authority/asset-ownership";
+import {
   classifyAnchorHead,
   classifyCentralReplayArtifacts,
   inventoryHeadAdvanceAllowed,
@@ -157,6 +182,84 @@ interface VerifiedItemCreationRow extends Record<string, SqlStorageValue> {
   created_at: number;
 }
 
+interface ReferenceGameItemReceiptRow extends Record<string, SqlStorageValue> {
+  asset_id: string;
+  authority_receipt_id: string;
+  owner_id: string;
+  owner_public_key: string | null;
+  checkpoint_digest: string;
+  inventory_epoch: number;
+  seed: number;
+  item_type: string;
+  power: number;
+  source_enemy_id: string;
+  kill_tick: number;
+  drop_index: number;
+  created_at: number;
+}
+
+interface ReferenceGameCheckpointStateRow extends Record<string, SqlStorageValue> {
+  player_id: string;
+  owner_public_key: string | null;
+  seed: number;
+  epoch: number;
+  checkpoint_digest: string;
+  state_digest: string;
+  last_tick: number;
+  state_json: string;
+  created_at: number;
+}
+
+interface ReferenceGameMarketListingRow extends Record<string, SqlStorageValue> {
+  listing_id: string;
+  asset_id: string;
+  seller_id: string;
+  authority_receipt_id: string;
+  owner_public_key: string | null;
+  owner_signature: string | null;
+  owner_version: number | null;
+  owner_head_id: string | null;
+  listing_nonce: string;
+  status: "active" | "canceled";
+  listed_at: number;
+  cancel_signature: string | null;
+  canceled_at: number | null;
+}
+
+interface ReferenceGameAssetOwnershipHeadRow
+  extends Record<string, SqlStorageValue> {
+  asset_id: string;
+  authority_receipt_id: string;
+  owner_id: string;
+  owner_public_key: string;
+  owner_version: number;
+  owner_head_id: string;
+  last_transfer_id: string;
+  updated_at: number;
+}
+
+interface ReferenceGameItemTransferRow extends Record<string, SqlStorageValue> {
+  transfer_id: string;
+  asset_id: string;
+  authority_receipt_id: string;
+  previous_head_id: string;
+  next_head_id: string;
+  from_owner_id: string;
+  from_owner_public_key: string;
+  to_owner_id: string;
+  to_owner_public_key: string;
+  previous_version: number;
+  next_version: number;
+  sender_signature: string;
+  recipient_signature: string;
+  transferred_at: number;
+}
+
+interface ReferenceGameSourceWindowRow extends Record<string, SqlStorageValue> {
+  window_started_at: number;
+  attempts: number;
+}
+
 interface CommitResult {
   decision: "initialized" | AnchorHeadDecision;
   epoch: number;
@@ -170,6 +273,15 @@ const MAX_REPLAY_BUNDLE_HEX_CHARS = 2_097_152;
 const MAX_INVENTORY_BUNDLE_HEX_CHARS = 524_288;
 const MAX_GAP_ITEMS = 256;
 const CHECKPOINT_DELIVERY_LEASE_MS = 30_000;
+const REFERENCE_GAME_VERIFICATION_WINDOW_MS = 60_000;
+const REFERENCE_GAME_VERIFICATIONS_PER_WINDOW = 30;
+const REFERENCE_GAME_PUBLIC_ACTIONS = new Set([
+  "game-checkpoint-verifications",
+  "game-item-verifications",
+  "game-item-transfers",
+  "game-market-listings",
+  "game-market-listing-cancellations",
+]);
 const LOCATION_HINTS = new Set([
   "wnam",
   "enam",
@@ -228,11 +340,16 @@ const worker = {
     const headers = new Headers(request.headers);
     headers.delete("x-audit-internal");
     headers.delete("x-audit-source-bucket");
-    if (route.action === "checkpoint-witness-approvals") {
+    if (
+      route.action === "checkpoint-witness-approvals" ||
+      REFERENCE_GAME_PUBLIC_ACTIONS.has(route.action)
+    ) {
       if (!env.WITNESS_SOURCE_BUCKET_KEY ||
         env.WITNESS_SOURCE_BUCKET_KEY.length < 32) {
         return jsonError(
-          "checkpoint_witness_source_bucketing_not_configured",
+          REFERENCE_GAME_PUBLIC_ACTIONS.has(route.action)
+            ? "reference_game_source_bucketing_not_configured"
+            : "checkpoint_witness_source_bucketing_not_configured",
           503,
         );
       }
@@ -567,8 +684,84 @@ export class GameAuditShard extends DurableObject<Env> {
         created_at INTEGER NOT NULL,
         UNIQUE(source_event, output_index)
       );
+      CREATE TABLE IF NOT EXISTS reference_game_item_receipts (
+        asset_id TEXT PRIMARY KEY,
+        authority_receipt_id TEXT NOT NULL UNIQUE,
+        owner_id TEXT NOT NULL,
+        owner_public_key TEXT NOT NULL CHECK (length(owner_public_key) = 64),
+        checkpoint_digest TEXT NOT NULL,
+        inventory_epoch INTEGER NOT NULL CHECK (inventory_epoch >= 0),
+        seed INTEGER NOT NULL CHECK (seed >= 0),
+        item_type TEXT NOT NULL,
+        power INTEGER NOT NULL CHECK (power > 0),
+        source_enemy_id TEXT NOT NULL,
+        kill_tick INTEGER NOT NULL CHECK (kill_tick >= 0),
+        drop_index INTEGER NOT NULL CHECK (drop_index >= 0),
+        created_at INTEGER NOT NULL CHECK (created_at >= 0)
+      );
+      CREATE TABLE IF NOT EXISTS reference_game_checkpoint_states (
+        player_id TEXT NOT NULL,
+        owner_public_key TEXT NOT NULL CHECK (length(owner_public_key) = 64),
+        seed INTEGER NOT NULL CHECK (seed >= 0),
+        epoch INTEGER NOT NULL CHECK (epoch >= 0),
+        checkpoint_digest TEXT NOT NULL,
+        state_digest TEXT NOT NULL,
+        last_tick INTEGER NOT NULL CHECK (last_tick >= 0),
+        state_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL CHECK (created_at >= 0),
+        PRIMARY KEY(player_id, seed, epoch),
+        UNIQUE(checkpoint_digest)
+      );
+      CREATE TABLE IF NOT EXISTS reference_game_market_listings (
+        listing_id TEXT PRIMARY KEY,
+        asset_id TEXT NOT NULL,
+        seller_id TEXT NOT NULL,
+        authority_receipt_id TEXT NOT NULL,
+        owner_public_key TEXT CHECK (length(owner_public_key) = 64),
+        owner_signature TEXT CHECK (length(owner_signature) = 128),
+        owner_version INTEGER CHECK (owner_version >= 0),
+        owner_head_id TEXT CHECK (length(owner_head_id) = 64),
+        listing_nonce TEXT NOT NULL CHECK (length(listing_nonce) = 64),
+        status TEXT NOT NULL CHECK (status IN ('active', 'canceled')),
+        listed_at INTEGER NOT NULL CHECK (listed_at >= 0),
+        cancel_signature TEXT CHECK (length(cancel_signature) = 128),
+        canceled_at INTEGER CHECK (canceled_at >= 0)
+      );
+      CREATE TABLE IF NOT EXISTS reference_game_asset_ownership_heads (
+        asset_id TEXT PRIMARY KEY,
+        authority_receipt_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        owner_public_key TEXT NOT NULL CHECK (length(owner_public_key) = 64),
+        owner_version INTEGER NOT NULL CHECK (owner_version >= 0),
+        owner_head_id TEXT NOT NULL UNIQUE CHECK (length(owner_head_id) = 64),
+        last_transfer_id TEXT NOT NULL CHECK (length(last_transfer_id) = 64),
+        updated_at INTEGER NOT NULL CHECK (updated_at >= 0)
+      );
+      CREATE TABLE IF NOT EXISTS reference_game_item_transfers (
+        transfer_id TEXT PRIMARY KEY CHECK (length(transfer_id) = 64),
+        asset_id TEXT NOT NULL,
+        authority_receipt_id TEXT NOT NULL,
+        previous_head_id TEXT NOT NULL CHECK (length(previous_head_id) = 64),
+        next_head_id TEXT NOT NULL UNIQUE CHECK (length(next_head_id) = 64),
+        from_owner_id TEXT NOT NULL,
+        from_owner_public_key TEXT NOT NULL CHECK (length(from_owner_public_key) = 64),
+        to_owner_id TEXT NOT NULL,
+        to_owner_public_key TEXT NOT NULL CHECK (length(to_owner_public_key) = 64),
+        previous_version INTEGER NOT NULL CHECK (previous_version >= 0),
+        next_version INTEGER NOT NULL CHECK (next_version > 0),
+        sender_signature TEXT NOT NULL CHECK (length(sender_signature) = 128),
+        recipient_signature TEXT NOT NULL CHECK (length(recipient_signature) = 128),
+        transferred_at INTEGER NOT NULL CHECK (transferred_at >= 0),
+        UNIQUE(asset_id, next_version)
+      );
+      CREATE TABLE IF NOT EXISTS reference_game_verification_source_windows (
+        source_bucket TEXT PRIMARY KEY CHECK (length(source_bucket) = 64),
+        window_started_at INTEGER NOT NULL CHECK (window_started_at >= 0),
+        attempts INTEGER NOT NULL CHECK (attempts > 0)
+      );
     `);
     this.migrateReplayArtifacts();
+    this.migrateReferenceGameMarketListings();
     this.addAuditConfigColumnIfMissing("initial_epoch", "INTEGER");
     this.addAuditConfigColumnIfMissing("initial_previous_digest", "TEXT");
     this.addReplayOutboxColumnIfMissing("replay_decision", "TEXT");
@@ -593,6 +786,51 @@ export class GameAuditShard extends DurableObject<Env> {
       "TEXT",
     );
     this.addVerifiedItemCreationColumnIfMissing("inventory_last_event", "TEXT");
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_item_receipts",
+      "owner_public_key",
+      "TEXT",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_checkpoint_states",
+      "owner_public_key",
+      "TEXT",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_market_listings",
+      "owner_public_key",
+      "TEXT",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_market_listings",
+      "owner_signature",
+      "TEXT",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_market_listings",
+      "owner_version",
+      "INTEGER",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_market_listings",
+      "owner_head_id",
+      "TEXT",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_market_listings",
+      "listing_nonce",
+      "TEXT",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_market_listings",
+      "cancel_signature",
+      "TEXT",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_market_listings",
+      "canceled_at",
+      "INTEGER",
+    );
     this.ctx.storage.sql.exec(`
       UPDATE verified_item_creations
       SET inventory_session_id = COALESCE(
@@ -642,6 +880,16 @@ export class GameAuditShard extends DurableObject<Env> {
         return this.requestCentralReplay(request, mode, unit);
       case "POST market-listing":
         return this.checkMarketListing(request, mode, unit);
+      case "POST game-item-verifications":
+        return this.verifyReferenceGameItem(request, mode, unit);
+      case "POST game-item-transfers":
+        return this.transferReferenceGameItem(request, mode, unit);
+      case "POST game-checkpoint-verifications":
+        return this.verifyReferenceGameCheckpoint(request, mode, unit);
+      case "POST game-market-listings":
+        return this.listReferenceGameItem(request, mode, unit);
+      case "POST game-market-listing-cancellations":
+        return this.cancelReferenceGameMarketListing(request, mode, unit);
       case "POST replay-delivered":
         return request.headers.get("x-audit-internal") === "queue-consumer"
           ? this.classifyDeliveredReplay(request, mode, unit)
@@ -1998,6 +2246,1094 @@ export class GameAuditShard extends DurableObject<Env> {
     });
   }
 
+  private reserveReferenceGameVerification(
+    sourceBucket: string,
+    now: number,
+  ): { allowed: true } | { allowed: false; retryAfterMs: number } {
+    return this.ctx.storage.transactionSync(() => {
+      const current = this.ctx.storage.sql.exec<ReferenceGameSourceWindowRow>(
+        `SELECT window_started_at, attempts
+         FROM reference_game_verification_source_windows
+         WHERE source_bucket = ?`,
+        sourceBucket,
+      ).toArray()[0];
+      if (
+        !current ||
+        now < current.window_started_at ||
+        now - current.window_started_at >= REFERENCE_GAME_VERIFICATION_WINDOW_MS
+      ) {
+        this.ctx.storage.sql.exec(
+          `INSERT INTO reference_game_verification_source_windows
+           (source_bucket, window_started_at, attempts)
+           VALUES (?, ?, 1)
+           ON CONFLICT(source_bucket) DO UPDATE SET
+             window_started_at = excluded.window_started_at,
+             attempts = 1`,
+          sourceBucket,
+          now,
+        );
+        return { allowed: true };
+      }
+      if (current.attempts >= REFERENCE_GAME_VERIFICATIONS_PER_WINDOW) {
+        return {
+          allowed: false,
+          retryAfterMs: Math.max(
+            1,
+            current.window_started_at + REFERENCE_GAME_VERIFICATION_WINDOW_MS - now,
+          ),
+        };
+      }
+      this.ctx.storage.sql.exec(
+        `UPDATE reference_game_verification_source_windows
+         SET attempts = attempts + 1
+         WHERE source_bucket = ? AND window_started_at = ? AND attempts = ?`,
+        sourceBucket,
+        current.window_started_at,
+        current.attempts,
+      );
+      return { allowed: true };
+    });
+  }
+
+  private referenceGameCheckpointStateAt(
+    playerId: string,
+    seed: number,
+    epoch: number,
+  ): ReferenceGameCheckpointStateRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameCheckpointStateRow>(
+      `SELECT player_id, owner_public_key, seed, epoch, checkpoint_digest, state_digest,
+              last_tick, state_json, created_at
+       FROM reference_game_checkpoint_states
+       WHERE player_id = ? AND seed = ? AND epoch = ?`,
+      playerId,
+      seed,
+      epoch,
+    ).toArray()[0];
+  }
+
+  private referenceGameItemReceiptAt(
+    assetId: string,
+  ): ReferenceGameItemReceiptRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameItemReceiptRow>(
+      `SELECT asset_id, authority_receipt_id, owner_id, owner_public_key,
+              checkpoint_digest, inventory_epoch, seed, item_type, power,
+              source_enemy_id, kill_tick, drop_index, created_at
+       FROM reference_game_item_receipts WHERE asset_id = ?`,
+      assetId,
+    ).toArray()[0];
+  }
+
+  private referenceGameOwnershipHeadAt(
+    assetId: string,
+  ): ReferenceGameAssetOwnershipHeadRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameAssetOwnershipHeadRow>(
+      `SELECT asset_id, authority_receipt_id, owner_id, owner_public_key,
+              owner_version, owner_head_id, last_transfer_id, updated_at
+       FROM reference_game_asset_ownership_heads WHERE asset_id = ?`,
+      assetId,
+    ).toArray()[0];
+  }
+
+  private referenceGameItemTransferAt(
+    transferId: string,
+  ): ReferenceGameItemTransferRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameItemTransferRow>(
+      `SELECT transfer_id, asset_id, authority_receipt_id, previous_head_id,
+              next_head_id, from_owner_id, from_owner_public_key, to_owner_id,
+              to_owner_public_key, previous_version, next_version,
+              sender_signature, recipient_signature, transferred_at
+       FROM reference_game_item_transfers WHERE transfer_id = ?`,
+      transferId,
+    ).toArray()[0];
+  }
+
+  private ensureReferenceGameOwnershipHead(
+    unit: string,
+    creation: ReferenceGameItemReceiptRow,
+    now: number,
+  ): ReferenceGameAssetOwnershipHeadRow | undefined {
+    const existing = this.referenceGameOwnershipHeadAt(creation.asset_id);
+    if (existing) return existing;
+    if (
+      !creation.owner_public_key ||
+      !/^[0-9a-f]{64}$/.test(creation.owner_public_key)
+    ) {
+      return undefined;
+    }
+    const initial = createInitialGameAssetOwnershipHead(
+      unit,
+      {
+        assetId: creation.asset_id,
+        authorityReceiptId: creation.authority_receipt_id,
+        ownerId: creation.owner_id,
+        ownerPublicKey: creation.owner_public_key,
+      },
+      referenceGameDigest,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT OR IGNORE INTO reference_game_asset_ownership_heads
+       (asset_id, authority_receipt_id, owner_id, owner_public_key,
+        owner_version, owner_head_id, last_transfer_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      initial.assetId,
+      initial.authorityReceiptId,
+      initial.ownerId,
+      initial.ownerPublicKey,
+      initial.version,
+      initial.headId,
+      initial.lastTransferId,
+      now,
+    );
+    const stored = this.referenceGameOwnershipHeadAt(creation.asset_id);
+    return stored &&
+        stored.authority_receipt_id === initial.authorityReceiptId &&
+        stored.owner_id === initial.ownerId &&
+        stored.owner_public_key === initial.ownerPublicKey &&
+        stored.owner_version === initial.version &&
+        stored.owner_head_id === initial.headId &&
+        stored.last_transfer_id === initial.lastTransferId
+      ? stored
+      : undefined;
+  }
+
+  private referenceGameVerificationParent(
+    request: GameCheckpointVerificationRequest,
+  ):
+    | { ok: true; parent?: GameCheckpointVerificationParent }
+    | { ok: false; response: Response } {
+    if (request.checkpoint.epoch === 0) return { ok: true };
+    const row = this.referenceGameCheckpointStateAt(
+      request.player_id,
+      request.seed,
+      request.checkpoint.epoch - 1,
+    );
+    if (!row) {
+      return {
+        ok: false,
+        response: jsonError("reference_game_parent_not_verified", 409),
+      };
+    }
+    if (!row.owner_public_key || !/^[0-9a-f]{64}$/.test(row.owner_public_key)) {
+      return {
+        ok: false,
+        response: jsonError("reference_game_parent_owner_key_unavailable", 409),
+      };
+    }
+    try {
+      return {
+        ok: true,
+        parent: {
+          checkpointDigest: row.checkpoint_digest,
+          stateDigest: row.state_digest,
+          ownerPublicKey: row.owner_public_key,
+          state: JSON.parse(row.state_json) as GameState,
+        },
+      };
+    } catch {
+      return {
+        ok: false,
+        response: jsonError("reference_game_parent_state_corrupt", 500),
+      };
+    }
+  }
+
+  private storeReferenceGameCheckpoint(
+    request: GameCheckpointVerificationRequest,
+    state: GameState,
+    now: number,
+  ): "verified" | "duplicate" | "conflict" {
+    const checkpoint = request.checkpoint;
+    const stateJson = JSON.stringify(state);
+    const existing = this.referenceGameCheckpointStateAt(
+      request.player_id,
+      request.seed,
+      checkpoint.epoch,
+    );
+    if (existing) {
+      return existing.checkpoint_digest === checkpoint.checkpoint_digest &&
+          existing.owner_public_key === request.owner_public_key &&
+          existing.state_digest === checkpoint.state_digest &&
+          existing.last_tick === checkpoint.last_tick &&
+          existing.state_json === stateJson
+        ? "duplicate"
+        : "conflict";
+    }
+    const digestOwner = this.ctx.storage.sql.exec<ReferenceGameCheckpointStateRow>(
+      `SELECT player_id, owner_public_key, seed, epoch, checkpoint_digest, state_digest,
+              last_tick, state_json, created_at
+       FROM reference_game_checkpoint_states WHERE checkpoint_digest = ?`,
+      checkpoint.checkpoint_digest,
+    ).toArray()[0];
+    if (digestOwner) return "conflict";
+    this.ctx.storage.sql.exec(
+      `INSERT INTO reference_game_checkpoint_states
+       (player_id, owner_public_key, seed, epoch, checkpoint_digest, state_digest, last_tick,
+        state_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      request.player_id,
+      request.owner_public_key,
+      request.seed,
+      checkpoint.epoch,
+      checkpoint.checkpoint_digest,
+      checkpoint.state_digest,
+      checkpoint.last_tick,
+      stateJson,
+      now,
+    );
+    return "verified";
+  }
+
+  private async verifyReferenceGameCheckpoint(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      const response = jsonError("reference_game_verification_rate_limited", 429);
+      response.headers.set(
+        "retry-after",
+        String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))),
+      );
+      return response;
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const decoded = decodeGameCheckpointVerificationRequest(body.value);
+    if (!decoded) return jsonError("invalid_request", 400);
+    const parent = this.referenceGameVerificationParent(decoded);
+    if (!parent.ok) return parent.response;
+    const verification = verifyGameCheckpoint(
+      decoded,
+      referenceGameDigest,
+      parent.parent,
+    );
+    if (!verification.ok) {
+      const status = verification.reason === "invalid_request" ? 400 :
+        verification.reason === "unverified_parent" ? 409 :
+        verification.reason === "invalid_parent_state" ? 500 : 422;
+      return jsonResponse({ ok: false, error: verification.reason }, status);
+    }
+    const decision = this.storeReferenceGameCheckpoint(
+      decoded,
+      verification.state,
+      Date.now(),
+    );
+    if (decision === "conflict") {
+      return jsonError("reference_game_checkpoint_conflict", 409);
+    }
+    await this.ctx.storage.sync();
+    return jsonResponse({
+      ok: true,
+      decision,
+      receipt: referenceGameCheckpointReceiptWire(unit, decoded),
+    }, decision === "verified" ? 201 : 200);
+  }
+
+  private async verifyReferenceGameItem(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      const response = jsonError("reference_game_verification_rate_limited", 429);
+      response.headers.set(
+        "retry-after",
+        String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))),
+      );
+      return response;
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const decoded = decodeGameCheckpointVerificationRequest(body.value);
+    if (!decoded) return jsonError("invalid_request", 400);
+    const parent = this.referenceGameVerificationParent(decoded);
+    if (!parent.ok) return parent.response;
+    const verification = verifyGameItemCreation(
+      unit,
+      body.value,
+      referenceGameDigest,
+      referenceGameOwnerVerifier,
+      parent.parent,
+    );
+    if (!verification.ok) {
+      const status = verification.reason === "invalid_request" ? 400 :
+        verification.reason === "owner_authentication_refused" ? 403 :
+        verification.reason === "unverified_parent" ? 409 :
+        verification.reason === "invalid_parent_state" ? 500 : 422;
+      return jsonResponse({ ok: false, error: verification.reason }, status);
+    }
+
+    const { receipt, item } = verification;
+    const now = Date.now();
+    const checkpointDecision = this.storeReferenceGameCheckpoint(
+      decoded,
+      verification.state,
+      now,
+    );
+    if (checkpointDecision === "conflict") {
+      return jsonError("reference_game_checkpoint_conflict", 409);
+    }
+    const existing = this.referenceGameItemReceiptAt(receipt.assetId);
+    if (existing) {
+      const duplicate = existing.authority_receipt_id === receipt.authorityReceiptId &&
+        existing.owner_id === receipt.ownerId &&
+        existing.owner_public_key === receipt.ownerPublicKey &&
+        existing.checkpoint_digest === receipt.checkpointDigest &&
+        existing.inventory_epoch === receipt.inventoryEpoch &&
+        existing.seed === decoded.seed &&
+        existing.item_type === item.itemType &&
+        existing.power === item.power &&
+        existing.source_enemy_id === item.sourceEnemyId &&
+        existing.kill_tick === item.killTick &&
+        existing.drop_index === item.dropIndex;
+      if (!duplicate) return jsonError("reference_game_item_conflict", 409);
+      const ownershipHead = this.ensureReferenceGameOwnershipHead(
+        unit,
+        existing,
+        now,
+      );
+      if (
+        !ownershipHead ||
+        ownershipHead.authority_receipt_id !== receipt.authorityReceiptId
+      ) {
+        return jsonError("reference_game_owner_head_conflict", 409);
+      }
+      return jsonResponse({
+        ok: true,
+        decision: "duplicate",
+        receipt: referenceGameReceiptWire(receipt),
+      });
+    }
+    const creation: ReferenceGameItemReceiptRow = {
+      asset_id: receipt.assetId,
+      authority_receipt_id: receipt.authorityReceiptId,
+      owner_id: receipt.ownerId,
+      owner_public_key: receipt.ownerPublicKey,
+      checkpoint_digest: receipt.checkpointDigest,
+      inventory_epoch: receipt.inventoryEpoch,
+      seed: decoded.seed,
+      item_type: item.itemType,
+      power: item.power,
+      source_enemy_id: item.sourceEnemyId,
+      kill_tick: item.killTick,
+      drop_index: item.dropIndex,
+      created_at: now,
+    };
+    const ownerHeadStored = this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO reference_game_item_receipts
+         (asset_id, authority_receipt_id, owner_id, owner_public_key,
+          checkpoint_digest, inventory_epoch, seed, item_type, power,
+          source_enemy_id, kill_tick, drop_index, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        creation.asset_id,
+        creation.authority_receipt_id,
+        creation.owner_id,
+        creation.owner_public_key,
+        creation.checkpoint_digest,
+        creation.inventory_epoch,
+        creation.seed,
+        creation.item_type,
+        creation.power,
+        creation.source_enemy_id,
+        creation.kill_tick,
+        creation.drop_index,
+        creation.created_at,
+      );
+      const stored = this.ensureReferenceGameOwnershipHead(unit, creation, now);
+      if (
+        !stored ||
+        stored.owner_version !== receipt.ownerVersion ||
+        stored.owner_head_id !== receipt.ownerHeadId
+      ) {
+        throw new Error("reference game owner head was not stored atomically");
+      }
+      return stored;
+    });
+    void ownerHeadStored;
+    await this.ctx.storage.sync();
+    return jsonResponse({
+      ok: true,
+      decision: "verified",
+      receipt: referenceGameReceiptWire(receipt),
+    }, 201);
+  }
+
+  private async transferReferenceGameItem(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      const response = jsonError("reference_game_verification_rate_limited", 429);
+      response.headers.set(
+        "retry-after",
+        String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))),
+      );
+      return response;
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const assetId = stringField(body.value, "asset_id");
+    const authorityReceiptId = stringField(body.value, "authority_receipt_id");
+    const previousHeadId = stringField(body.value, "previous_head_id");
+    const fromOwnerId = stringField(body.value, "from_owner_id");
+    const fromOwnerPublicKey = stringField(
+      body.value,
+      "from_owner_public_key",
+    );
+    const toOwnerId = stringField(body.value, "to_owner_id");
+    const toOwnerPublicKey = stringField(body.value, "to_owner_public_key");
+    const previousVersion = numberField(body.value, "previous_version");
+    const nextVersion = numberField(body.value, "next_version");
+    const senderSignature = stringField(body.value, "sender_signature");
+    const recipientSignature = stringField(body.value, "recipient_signature");
+    if (
+      assetId === undefined || authorityReceiptId === undefined ||
+      previousHeadId === undefined || fromOwnerId === undefined ||
+      fromOwnerPublicKey === undefined || toOwnerId === undefined ||
+      toOwnerPublicKey === undefined || previousVersion === undefined ||
+      nextVersion === undefined || senderSignature === undefined ||
+      recipientSignature === undefined
+    ) {
+      return jsonError("invalid_reference_game_transfer", 400);
+    }
+    const transferRequest: GameItemTransferRequest = {
+      assetId,
+      authorityReceiptId,
+      previousHeadId,
+      fromOwnerId,
+      fromOwnerPublicKey,
+      toOwnerId,
+      toOwnerPublicKey,
+      previousVersion,
+      nextVersion,
+      senderSignature,
+      recipientSignature,
+    };
+    const creation = this.referenceGameItemReceiptAt(assetId);
+    if (!creation) {
+      return jsonResponse({
+        ok: true,
+        transferred: false,
+        decision: "creation_not_verified",
+        asset_id: assetId,
+      }, 404);
+    }
+    if (creation.authority_receipt_id !== authorityReceiptId) {
+      return jsonResponse({
+        ok: true,
+        transferred: false,
+        decision: "authority_receipt_mismatch",
+        asset_id: assetId,
+      }, 403);
+    }
+    const proof = verifyGameItemTransferProof(
+      unit,
+      transferRequest,
+      senderSignature,
+      recipientSignature,
+      referenceGameDigest,
+      referenceGameOwnerVerifier,
+    );
+    if (!proof.ok) {
+      return jsonResponse({
+        ok: true,
+        transferred: false,
+        decision: proof.reason,
+        asset_id: assetId,
+      }, 403);
+    }
+    const transferId = gameItemTransferProofDigest(
+      unit,
+      transferRequest,
+      referenceGameDigest,
+    );
+    const existing = this.referenceGameItemTransferAt(transferId);
+    if (existing) {
+      const current = this.referenceGameOwnershipHeadAt(assetId);
+      const duplicate = referenceGameTransferRowMatches(existing, transferRequest) &&
+        current?.owner_head_id === existing.next_head_id &&
+        current.owner_id === existing.to_owner_id &&
+        current.owner_public_key === existing.to_owner_public_key &&
+        current.owner_version === existing.next_version;
+      if (!duplicate) return jsonError("reference_game_transfer_conflict", 409);
+      return jsonResponse({
+        ok: true,
+        transferred: true,
+        decision: "duplicate",
+        transfer: referenceGameItemTransferWire(existing),
+        owner_head: referenceGameOwnershipHeadWire(current),
+      });
+    }
+    const currentRow = this.ensureReferenceGameOwnershipHead(
+      unit,
+      creation,
+      Date.now(),
+    );
+    if (!currentRow) {
+      return jsonError("reference_game_owner_head_unavailable", 409);
+    }
+    const applied = verifyAndApplyGameItemTransfer(
+      unit,
+      referenceGameOwnershipHeadFromRow(currentRow),
+      transferRequest,
+      referenceGameDigest,
+      referenceGameOwnerVerifier,
+    );
+    if (!applied.ok) {
+      const status = applied.reason === "invalid_transfer" ? 400 :
+        applied.reason === "authority_receipt_mismatch" ? 403 :
+        applied.reason === "sender_authentication_refused" ||
+            applied.reason === "recipient_authentication_refused"
+        ? 403
+        : 409;
+      return jsonResponse({
+        ok: true,
+        transferred: false,
+        decision: applied.reason,
+        asset_id: assetId,
+      }, status);
+    }
+    const transferredAt = Date.now();
+    const transferRow: ReferenceGameItemTransferRow = {
+      transfer_id: applied.transferId,
+      asset_id: assetId,
+      authority_receipt_id: authorityReceiptId,
+      previous_head_id: previousHeadId,
+      next_head_id: applied.head.headId,
+      from_owner_id: fromOwnerId,
+      from_owner_public_key: fromOwnerPublicKey,
+      to_owner_id: toOwnerId,
+      to_owner_public_key: toOwnerPublicKey,
+      previous_version: previousVersion,
+      next_version: nextVersion,
+      sender_signature: senderSignature,
+      recipient_signature: recipientSignature,
+      transferred_at: transferredAt,
+    };
+    const committed = this.ctx.storage.transactionSync(() => {
+      const latest = this.referenceGameOwnershipHeadAt(assetId);
+      const activeListing = this.ctx.storage.sql.exec<{ listing_id: string }>(
+        `SELECT listing_id FROM reference_game_market_listings
+         WHERE asset_id = ? AND status = 'active'`,
+        assetId,
+      ).toArray()[0];
+      if (
+        !latest ||
+        latest.owner_head_id !== previousHeadId ||
+        latest.owner_version !== previousVersion ||
+        activeListing
+      ) {
+        return activeListing ? "asset_listed" as const : "head_raced" as const;
+      }
+      this.ctx.storage.sql.exec(
+        `INSERT INTO reference_game_item_transfers
+         (transfer_id, asset_id, authority_receipt_id, previous_head_id,
+          next_head_id, from_owner_id, from_owner_public_key, to_owner_id,
+          to_owner_public_key, previous_version, next_version,
+          sender_signature, recipient_signature, transferred_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        transferRow.transfer_id,
+        transferRow.asset_id,
+        transferRow.authority_receipt_id,
+        transferRow.previous_head_id,
+        transferRow.next_head_id,
+        transferRow.from_owner_id,
+        transferRow.from_owner_public_key,
+        transferRow.to_owner_id,
+        transferRow.to_owner_public_key,
+        transferRow.previous_version,
+        transferRow.next_version,
+        transferRow.sender_signature,
+        transferRow.recipient_signature,
+        transferRow.transferred_at,
+      );
+      this.ctx.storage.sql.exec(
+        `UPDATE reference_game_asset_ownership_heads
+         SET owner_id = ?, owner_public_key = ?, owner_version = ?,
+             owner_head_id = ?, last_transfer_id = ?, updated_at = ?
+         WHERE asset_id = ? AND owner_head_id = ? AND owner_version = ?`,
+        applied.head.ownerId,
+        applied.head.ownerPublicKey,
+        applied.head.version,
+        applied.head.headId,
+        applied.head.lastTransferId,
+        transferredAt,
+        assetId,
+        previousHeadId,
+        previousVersion,
+      );
+      return "transferred" as const;
+    });
+    if (committed === "asset_listed") {
+      return jsonResponse({
+        ok: true,
+        transferred: false,
+        decision: "asset_listed",
+        asset_id: assetId,
+      }, 409);
+    }
+    if (committed === "head_raced") {
+      return jsonResponse({
+        ok: true,
+        transferred: false,
+        decision: "stale_owner_head",
+        asset_id: assetId,
+      }, 409);
+    }
+    await this.ctx.storage.sync();
+    const storedHead = this.referenceGameOwnershipHeadAt(assetId);
+    if (!storedHead || storedHead.owner_head_id !== applied.head.headId) {
+      return jsonError("reference_game_owner_head_not_stored", 500);
+    }
+    return jsonResponse({
+      ok: true,
+      transferred: true,
+      decision: "transferred",
+      transfer: referenceGameItemTransferWire(transferRow),
+      owner_head: referenceGameOwnershipHeadWire(storedHead),
+    }, 201);
+  }
+
+  private async listReferenceGameItem(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      const response = jsonError("reference_game_verification_rate_limited", 429);
+      response.headers.set(
+        "retry-after",
+        String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))),
+      );
+      return response;
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const assetId = stringField(body.value, "asset_id");
+    const sellerId = stringField(body.value, "seller_id");
+    const authorityReceiptId = stringField(
+      body.value,
+      "authority_receipt_id",
+    );
+    const ownerSignature = stringField(body.value, "owner_signature");
+    const ownerPublicKey = stringField(body.value, "owner_public_key");
+    const ownerVersion = numberField(body.value, "owner_version");
+    const ownerHeadId = stringField(body.value, "owner_head_id");
+    const listingNonce = stringField(body.value, "listing_nonce");
+    if (
+      !assetId || assetId.length > 1_024 ||
+      !sellerId || sellerId.length > 256 ||
+      !authorityReceiptId || !/^[0-9a-f]{64}$/.test(authorityReceiptId) ||
+      !ownerPublicKey || !/^[0-9a-f]{64}$/.test(ownerPublicKey) ||
+      ownerVersion === undefined || ownerVersion < 0 ||
+      !ownerHeadId || !/^[0-9a-f]{64}$/.test(ownerHeadId) ||
+      !listingNonce || !/^[0-9a-f]{64}$/.test(listingNonce) ||
+      !ownerSignature || !/^[0-9a-f]{128}$/.test(ownerSignature)
+    ) {
+      return jsonError("invalid_reference_game_listing", 400);
+    }
+    const creation = this.referenceGameItemReceiptAt(assetId);
+    if (!creation) {
+      return jsonResponse({
+        ok: true,
+        allowed: false,
+        decision: "creation_not_verified",
+        asset_id: assetId,
+        seller_id: sellerId,
+      }, 404);
+    }
+    if (creation.authority_receipt_id !== authorityReceiptId) {
+      return jsonResponse({
+        ok: true,
+        allowed: false,
+        decision: "authority_receipt_mismatch",
+        asset_id: assetId,
+        seller_id: sellerId,
+      }, 403);
+    }
+    const ownerHead = this.ensureReferenceGameOwnershipHead(
+      unit,
+      creation,
+      Date.now(),
+    );
+    if (
+      !ownerHead ||
+      ownerHead.authority_receipt_id !== authorityReceiptId
+    ) {
+      return jsonError("reference_game_owner_head_unavailable", 409);
+    }
+    if (ownerHead.owner_id !== sellerId) {
+      return jsonResponse({
+        ok: true,
+        allowed: false,
+        decision: "seller_mismatch",
+        asset_id: assetId,
+        seller_id: sellerId,
+      }, 403);
+    }
+    if (ownerHead.owner_public_key !== ownerPublicKey) {
+      return jsonResponse({
+        ok: true,
+        allowed: false,
+        decision: "owner_key_mismatch",
+        asset_id: assetId,
+        seller_id: sellerId,
+      }, 403);
+    }
+    if (
+      ownerHead.owner_version !== ownerVersion ||
+      ownerHead.owner_head_id !== ownerHeadId
+    ) {
+      return jsonResponse({
+        ok: true,
+        allowed: false,
+        decision: "stale_owner_head",
+        asset_id: assetId,
+        seller_id: sellerId,
+      }, 409);
+    }
+    if (
+      !verifyGameMarketListingProof(
+        unit,
+        {
+          assetId,
+          sellerId,
+          authorityReceiptId,
+          ownerPublicKey,
+          ownerVersion,
+          ownerHeadId,
+          listingNonce,
+        },
+        ownerSignature,
+        referenceGameDigest,
+        referenceGameOwnerVerifier,
+      )
+    ) {
+      return jsonResponse({
+        ok: true,
+        allowed: false,
+        decision: "owner_authentication_refused",
+        asset_id: assetId,
+        seller_id: sellerId,
+      }, 403);
+    }
+    const listingId = referenceGameDigest.hashString(JSON.stringify([
+      "audit-survivors-market-listing-v3",
+      unit,
+      assetId,
+      sellerId,
+      authorityReceiptId,
+      ownerPublicKey,
+      ownerVersion,
+      ownerHeadId,
+      listingNonce,
+    ]));
+    const existing = this.ctx.storage.sql.exec<ReferenceGameMarketListingRow>(
+      `SELECT listing_id, asset_id, seller_id, authority_receipt_id,
+              owner_public_key, owner_signature, owner_version, owner_head_id,
+              listing_nonce, status, listed_at, cancel_signature, canceled_at
+       FROM reference_game_market_listings WHERE listing_id = ?`,
+      listingId,
+    ).toArray()[0];
+    if (existing) {
+      if (
+        existing.asset_id !== assetId ||
+        existing.seller_id !== sellerId ||
+        existing.authority_receipt_id !== authorityReceiptId ||
+        existing.owner_public_key !== ownerPublicKey ||
+        existing.owner_signature !== ownerSignature ||
+        existing.owner_version !== ownerVersion ||
+        existing.owner_head_id !== ownerHeadId ||
+        existing.listing_nonce !== listingNonce
+      ) {
+        return jsonError("reference_game_listing_conflict", 409);
+      }
+      if (existing.status === "canceled") {
+        return jsonResponse({
+          ok: true,
+          allowed: false,
+          decision: "listing_canceled",
+          asset_id: assetId,
+          seller_id: sellerId,
+        }, 409);
+      }
+      return jsonResponse({
+        ok: true,
+        allowed: true,
+        decision: "duplicate",
+        listing: referenceGameMarketListingWire(existing, creation),
+      });
+    }
+    const activeListing = this.ctx.storage.sql.exec<{
+      listing_id: string;
+    }>(
+      `SELECT listing_id FROM reference_game_market_listings
+       WHERE asset_id = ? AND status = 'active'`,
+      assetId,
+    ).toArray()[0];
+    if (activeListing) {
+      return jsonError("reference_game_listing_conflict", 409);
+    }
+    const listing: ReferenceGameMarketListingRow = {
+      listing_id: listingId,
+      asset_id: assetId,
+      seller_id: sellerId,
+      authority_receipt_id: authorityReceiptId,
+      owner_public_key: ownerPublicKey,
+      owner_signature: ownerSignature,
+      owner_version: ownerVersion,
+      owner_head_id: ownerHeadId,
+      listing_nonce: listingNonce,
+      status: "active",
+      listed_at: Date.now(),
+      cancel_signature: null,
+      canceled_at: null,
+    };
+    this.ctx.storage.sql.exec(
+      `INSERT INTO reference_game_market_listings
+       (listing_id, asset_id, seller_id, authority_receipt_id, owner_public_key,
+        owner_signature, owner_version, owner_head_id, status, listed_at,
+        listing_nonce, cancel_signature, canceled_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      listing.listing_id,
+      listing.asset_id,
+      listing.seller_id,
+      listing.authority_receipt_id,
+      listing.owner_public_key,
+      listing.owner_signature,
+      listing.owner_version,
+      listing.owner_head_id,
+      listing.status,
+      listing.listed_at,
+      listing.listing_nonce,
+      listing.cancel_signature,
+      listing.canceled_at,
+    );
+    await this.ctx.storage.sync();
+    return jsonResponse({
+      ok: true,
+      allowed: true,
+      decision: "listed",
+      listing: referenceGameMarketListingWire(listing, creation),
+    }, 201);
+  }
+
+  private async cancelReferenceGameMarketListing(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      const response = jsonError("reference_game_verification_rate_limited", 429);
+      response.headers.set(
+        "retry-after",
+        String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))),
+      );
+      return response;
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const listingId = stringField(body.value, "listing_id");
+    const assetId = stringField(body.value, "asset_id");
+    const sellerId = stringField(body.value, "seller_id");
+    const authorityReceiptId = stringField(
+      body.value,
+      "authority_receipt_id",
+    );
+    const ownerPublicKey = stringField(body.value, "owner_public_key");
+    const ownerVersion = numberField(body.value, "owner_version");
+    const ownerHeadId = stringField(body.value, "owner_head_id");
+    const listingNonce = stringField(body.value, "listing_nonce");
+    const cancelSignature = stringField(body.value, "cancel_signature");
+    if (
+      !listingId || !/^[0-9a-f]{64}$/.test(listingId) ||
+      !assetId || assetId.length > 1_024 ||
+      !sellerId || sellerId.length > 256 ||
+      !authorityReceiptId || !/^[0-9a-f]{64}$/.test(authorityReceiptId) ||
+      !ownerPublicKey || !/^[0-9a-f]{64}$/.test(ownerPublicKey) ||
+      ownerVersion === undefined || ownerVersion < 0 ||
+      !isMoonBitInt(ownerVersion) ||
+      !ownerHeadId || !/^[0-9a-f]{64}$/.test(ownerHeadId) ||
+      !listingNonce || !/^[0-9a-f]{64}$/.test(listingNonce) ||
+      !cancelSignature || !/^[0-9a-f]{128}$/.test(cancelSignature)
+    ) {
+      return jsonError("invalid_reference_game_listing_cancellation", 400);
+    }
+    const listing = this.ctx.storage.sql.exec<ReferenceGameMarketListingRow>(
+      `SELECT listing_id, asset_id, seller_id, authority_receipt_id,
+              owner_public_key, owner_signature, owner_version, owner_head_id,
+              listing_nonce, status, listed_at, cancel_signature, canceled_at
+       FROM reference_game_market_listings WHERE listing_id = ?`,
+      listingId,
+    ).toArray()[0];
+    if (!listing) {
+      return jsonResponse({
+        ok: true,
+        canceled: false,
+        decision: "listing_not_found",
+        listing_id: listingId,
+        asset_id: assetId,
+      }, 404);
+    }
+    if (
+      listing.asset_id !== assetId ||
+      listing.seller_id !== sellerId ||
+      listing.authority_receipt_id !== authorityReceiptId ||
+      listing.owner_public_key !== ownerPublicKey ||
+      listing.owner_version !== ownerVersion ||
+      listing.owner_head_id !== ownerHeadId ||
+      listing.listing_nonce !== listingNonce
+    ) {
+      return jsonResponse({
+        ok: true,
+        canceled: false,
+        decision: "listing_mismatch",
+        listing_id: listingId,
+        asset_id: assetId,
+      }, 409);
+    }
+    if (
+      !verifyGameMarketListingCancelProof(
+        unit,
+        {
+          listingId,
+          assetId,
+          sellerId,
+          authorityReceiptId,
+          ownerPublicKey,
+          ownerVersion,
+          ownerHeadId,
+          listingNonce,
+        },
+        cancelSignature,
+        referenceGameDigest,
+        referenceGameOwnerVerifier,
+      )
+    ) {
+      return jsonResponse({
+        ok: true,
+        canceled: false,
+        decision: "owner_authentication_refused",
+        listing_id: listingId,
+        asset_id: assetId,
+      }, 403);
+    }
+    const creation = this.referenceGameItemReceiptAt(assetId);
+    if (!creation) {
+      return jsonError("reference_game_listing_creation_unavailable", 409);
+    }
+    if (listing.status === "canceled") {
+      if (listing.cancel_signature !== cancelSignature) {
+        return jsonError("reference_game_listing_cancellation_conflict", 409);
+      }
+      return jsonResponse({
+        ok: true,
+        canceled: true,
+        decision: "duplicate",
+        listing: referenceGameMarketListingWire(listing, creation),
+      });
+    }
+    const ownerHead = this.referenceGameOwnershipHeadAt(assetId);
+    if (
+      !ownerHead ||
+      ownerHead.authority_receipt_id !== authorityReceiptId ||
+      ownerHead.owner_id !== sellerId ||
+      ownerHead.owner_public_key !== ownerPublicKey ||
+      ownerHead.owner_version !== ownerVersion ||
+      ownerHead.owner_head_id !== ownerHeadId
+    ) {
+      return jsonResponse({
+        ok: true,
+        canceled: false,
+        decision: "stale_owner_head",
+        listing_id: listingId,
+        asset_id: assetId,
+      }, 409);
+    }
+    const canceledAt = Date.now();
+    let canceledListing: ReferenceGameMarketListingRow | undefined;
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `UPDATE reference_game_market_listings
+         SET status = 'canceled', cancel_signature = ?, canceled_at = ?
+         WHERE listing_id = ? AND status = 'active'`,
+        cancelSignature,
+        canceledAt,
+        listingId,
+      );
+      canceledListing = this.ctx.storage.sql.exec<
+        ReferenceGameMarketListingRow
+      >(
+        `SELECT listing_id, asset_id, seller_id, authority_receipt_id,
+                owner_public_key, owner_signature, owner_version, owner_head_id,
+                listing_nonce, status, listed_at, cancel_signature, canceled_at
+         FROM reference_game_market_listings WHERE listing_id = ?`,
+        listingId,
+      ).toArray()[0];
+    });
+    if (
+      !canceledListing ||
+      canceledListing.status !== "canceled" ||
+      canceledListing.cancel_signature !== cancelSignature
+    ) {
+      return jsonError("reference_game_listing_cancellation_not_stored", 500);
+    }
+    await this.ctx.storage.sync();
+    return jsonResponse({
+      ok: true,
+      canceled: true,
+      decision: "canceled",
+      listing: referenceGameMarketListingWire(canceledListing, creation),
+    }, 201);
+  }
+
   private async checkMarketListing(
     request: Request,
     mode: AuditMode,
@@ -2700,6 +4036,119 @@ export class GameAuditShard extends DurableObject<Env> {
     }
   }
 
+  private addReferenceGameColumnIfMissing(
+    table:
+      | "reference_game_item_receipts"
+      | "reference_game_checkpoint_states"
+      | "reference_game_market_listings",
+    name: string,
+    sqlType: string,
+  ): void {
+    const columns = this.ctx.storage.sql.exec<{ name: string }>(
+      `PRAGMA table_info(${table})`,
+    ).toArray();
+    if (!columns.some((column) => column.name === name)) {
+      this.ctx.storage.sql.exec(
+        `ALTER TABLE ${table} ADD COLUMN ${name} ${sqlType}`,
+      );
+    }
+  }
+
+  private migrateReferenceGameMarketListings(): void {
+    const columns = this.ctx.storage.sql.exec<{
+      name: string;
+      pk: number;
+    }>("PRAGMA table_info(reference_game_market_listings)").toArray();
+    const columnNames = new Set(columns.map((column) => column.name));
+    const schema = this.ctx.storage.sql.exec<{ sql: string }>(
+      `SELECT sql FROM sqlite_master
+       WHERE type = 'table' AND name = 'reference_game_market_listings'`,
+    ).toArray()[0]?.sql;
+    const listingIdIsPrimaryKey = columns.some((column) =>
+      column.name === "listing_id" && column.pk === 1
+    );
+    const currentSchema = Boolean(
+      schema &&
+        listingIdIsPrimaryKey &&
+        columnNames.has("owner_public_key") &&
+        columnNames.has("listing_nonce") &&
+        columnNames.has("cancel_signature") &&
+        columnNames.has("canceled_at") &&
+        schema.includes("'canceled'"),
+    );
+    if (currentSchema) {
+      this.ctx.storage.sql.exec(
+        `CREATE UNIQUE INDEX IF NOT EXISTS
+         reference_game_market_listings_active_asset
+         ON reference_game_market_listings(asset_id)
+         WHERE status = 'active'`,
+      );
+      return;
+    }
+    if (!schema) return;
+
+    const columnOr = (name: string, fallback: string) =>
+      columnNames.has(name) ? name : fallback;
+    const ownerPublicKey = columnNames.has("owner_public_key")
+      ? "owner_public_key"
+      : `COALESCE(
+          (SELECT owner_public_key
+           FROM reference_game_asset_ownership_heads AS ownership
+           WHERE ownership.asset_id = legacy.asset_id),
+          (SELECT owner_public_key
+           FROM reference_game_item_receipts AS receipt
+           WHERE receipt.asset_id = legacy.asset_id)
+        )`;
+    const status = columnNames.has("status")
+      ? "CASE WHEN status = 'canceled' THEN 'canceled' ELSE 'active' END"
+      : "'active'";
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        `ALTER TABLE reference_game_market_listings
+         RENAME TO reference_game_market_listings_legacy`,
+      );
+      this.ctx.storage.sql.exec(`
+        CREATE TABLE reference_game_market_listings (
+          listing_id TEXT PRIMARY KEY,
+          asset_id TEXT NOT NULL,
+          seller_id TEXT NOT NULL,
+          authority_receipt_id TEXT NOT NULL,
+          owner_public_key TEXT CHECK (length(owner_public_key) = 64),
+          owner_signature TEXT CHECK (length(owner_signature) = 128),
+          owner_version INTEGER CHECK (owner_version >= 0),
+          owner_head_id TEXT CHECK (length(owner_head_id) = 64),
+          listing_nonce TEXT NOT NULL CHECK (length(listing_nonce) = 64),
+          status TEXT NOT NULL CHECK (status IN ('active', 'canceled')),
+          listed_at INTEGER NOT NULL CHECK (listed_at >= 0),
+          cancel_signature TEXT CHECK (length(cancel_signature) = 128),
+          canceled_at INTEGER CHECK (canceled_at >= 0)
+        )
+      `);
+      this.ctx.storage.sql.exec(`
+        INSERT INTO reference_game_market_listings
+        (listing_id, asset_id, seller_id, authority_receipt_id,
+         owner_public_key, owner_signature, owner_version, owner_head_id,
+         listing_nonce, status, listed_at, cancel_signature, canceled_at)
+        SELECT listing_id, asset_id, seller_id, authority_receipt_id,
+               ${ownerPublicKey}, ${columnOr("owner_signature", "NULL")},
+               ${columnOr("owner_version", "NULL")},
+               ${columnOr("owner_head_id", "NULL")},
+               ${columnOr("listing_nonce", "listing_id")}, ${status}, listed_at,
+               ${columnOr("cancel_signature", "NULL")},
+               ${columnOr("canceled_at", "NULL")}
+        FROM reference_game_market_listings_legacy AS legacy
+      `);
+      this.ctx.storage.sql.exec(
+        "DROP TABLE reference_game_market_listings_legacy",
+      );
+      this.ctx.storage.sql.exec(
+        `CREATE UNIQUE INDEX reference_game_market_listings_active_asset
+         ON reference_game_market_listings(asset_id)
+         WHERE status = 'active'`,
+      );
+    });
+  }
+
   private migrateReplayArtifacts(): void {
     const schema = this.ctx.storage.sql.exec<{ sql: string }>(
       `SELECT sql FROM sqlite_master
@@ -2785,6 +4234,138 @@ export class GameAuditShard extends DurableObject<Env> {
       this.ctx.storage.sql.exec("DROP TABLE replay_artifacts_legacy");
     });
   }
+}
+
+function referenceGameReceiptWire(receipt: GameItemAuthorityReceipt) {
+  return {
+    version: receipt.version,
+    authority_receipt_id: receipt.authorityReceiptId,
+    asset_id: receipt.assetId,
+    owner_id: receipt.ownerId,
+    owner_public_key: receipt.ownerPublicKey,
+    owner_version: receipt.ownerVersion,
+    owner_head_id: receipt.ownerHeadId,
+    checkpoint_digest: receipt.checkpointDigest,
+    inventory_epoch: receipt.inventoryEpoch,
+  };
+}
+
+function referenceGameOwnershipHeadFromRow(
+  row: ReferenceGameAssetOwnershipHeadRow,
+): GameAssetOwnershipHead {
+  return {
+    assetId: row.asset_id,
+    authorityReceiptId: row.authority_receipt_id,
+    ownerId: row.owner_id,
+    ownerPublicKey: row.owner_public_key,
+    version: row.owner_version,
+    headId: row.owner_head_id,
+    lastTransferId: row.last_transfer_id,
+  };
+}
+
+function referenceGameOwnershipHeadWire(
+  row: ReferenceGameAssetOwnershipHeadRow,
+) {
+  return {
+    version: 1,
+    asset_id: row.asset_id,
+    authority_receipt_id: row.authority_receipt_id,
+    owner_id: row.owner_id,
+    owner_public_key: row.owner_public_key,
+    owner_version: row.owner_version,
+    owner_head_id: row.owner_head_id,
+    last_transfer_id: row.last_transfer_id,
+    updated_at: row.updated_at,
+  };
+}
+
+function referenceGameTransferRowMatches(
+  row: ReferenceGameItemTransferRow,
+  request: GameItemTransferRequest,
+): boolean {
+  return row.asset_id === request.assetId &&
+    row.authority_receipt_id === request.authorityReceiptId &&
+    row.previous_head_id === request.previousHeadId &&
+    row.from_owner_id === request.fromOwnerId &&
+    row.from_owner_public_key === request.fromOwnerPublicKey &&
+    row.to_owner_id === request.toOwnerId &&
+    row.to_owner_public_key === request.toOwnerPublicKey &&
+    row.previous_version === request.previousVersion &&
+    row.next_version === request.nextVersion &&
+    row.sender_signature === request.senderSignature &&
+    row.recipient_signature === request.recipientSignature;
+}
+
+function referenceGameItemTransferWire(row: ReferenceGameItemTransferRow) {
+  return {
+    version: 1,
+    transfer_id: row.transfer_id,
+    asset_id: row.asset_id,
+    authority_receipt_id: row.authority_receipt_id,
+    previous_head_id: row.previous_head_id,
+    next_head_id: row.next_head_id,
+    from_owner_id: row.from_owner_id,
+    from_owner_public_key: row.from_owner_public_key,
+    to_owner_id: row.to_owner_id,
+    to_owner_public_key: row.to_owner_public_key,
+    previous_version: row.previous_version,
+    next_version: row.next_version,
+    sender_signature: row.sender_signature,
+    recipient_signature: row.recipient_signature,
+    transferred_at: row.transferred_at,
+  };
+}
+
+function referenceGameCheckpointReceiptWire(
+  unit: string,
+  request: GameCheckpointVerificationRequest,
+) {
+  const checkpoint = request.checkpoint;
+  return {
+    version: 1,
+    authority_checkpoint_receipt_id: referenceGameDigest.hashString(JSON.stringify([
+      "audit-survivors-authority-checkpoint-receipt-v1",
+      unit,
+      request.player_id,
+      request.seed,
+      checkpoint.epoch,
+      checkpoint.checkpoint_digest,
+    ])),
+    player_id: request.player_id,
+    owner_public_key: request.owner_public_key,
+    seed: request.seed,
+    epoch: checkpoint.epoch,
+    last_tick: checkpoint.last_tick,
+    checkpoint_digest: checkpoint.checkpoint_digest,
+    created_asset_ids: [...checkpoint.created_asset_ids],
+  };
+}
+
+function referenceGameMarketListingWire(
+  listing: ReferenceGameMarketListingRow,
+  creation: ReferenceGameItemReceiptRow,
+) {
+  return {
+    version: 1,
+    listing_id: listing.listing_id,
+    asset_id: listing.asset_id,
+    seller_id: listing.seller_id,
+    authority_receipt_id: listing.authority_receipt_id,
+    owner_public_key: listing.owner_public_key,
+    owner_version: listing.owner_version,
+    owner_head_id: listing.owner_head_id,
+    listing_nonce: listing.listing_nonce,
+    owner_signature: listing.owner_signature,
+    checkpoint_digest: creation.checkpoint_digest,
+    inventory_epoch: creation.inventory_epoch,
+    item_type: creation.item_type,
+    power: creation.power,
+    status: listing.status,
+    listed_at: listing.listed_at,
+    cancel_signature: listing.cancel_signature,
+    canceled_at: listing.canceled_at,
+  };
 }
 
 function parseRoute(pathname: string): {

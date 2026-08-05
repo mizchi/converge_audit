@@ -7,6 +7,9 @@ _apalache-out/
 .mooncakes/
 .moonagent/
 node_modules/
+examples/cf-game-audit/dist/
+examples/cf-game-audit/test-results/
+examples/cf-game-audit/playwright-report/
 .wrangler/
 *.sqlite
 *.sqlite3

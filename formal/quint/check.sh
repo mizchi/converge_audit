@@ -5,6 +5,8 @@ quint typecheck formal/quint/CheckpointDelivery.qnt
 quint typecheck formal/quint/CheckpointDeliveryModels.qnt
 quint typecheck formal/quint/WitnessQuorum.qnt
 quint typecheck formal/quint/WitnessQuorumModels.qnt
+quint typecheck formal/quint/AssetOwnership.qnt
+quint typecheck formal/quint/AssetOwnershipModels.qnt
 
 quint verify formal/quint/CheckpointDeliveryModels.qnt \
   --backend=tlc \
@@ -60,4 +62,14 @@ quint verify formal/quint/WitnessQuorumModels.qnt \
     timeoutNeverMarksInvalid \
     expiredCollectionNeverAdvances \
   --temporal=allHonestApprovalsEventuallyReady \
+  --verbosity=1
+
+quint verify formal/quint/AssetOwnershipModels.qnt \
+  --backend=tlc \
+  --main=assetOwnershipSafety \
+  --invariants \
+    typeOk \
+    ownerVersionAdvancesExactlyOnce \
+    transferRequiresDualAuthentication \
+    activeListingMatchesCurrentOwnerHead \
   --verbosity=1

@@ -15,6 +15,7 @@ pub struct ExperimentalEd25519Signer {
   private_key : @ed25519.PrivateKey
   public_key : @bft.PublicKey
 }
+pub fn ExperimentalEd25519Signer::from_seed_hex(String) -> Self?
 pub fn ExperimentalEd25519Signer::new(Bytes) -> Self raise @ed25519.Ed25519Error
 pub impl @bft.Signer for ExperimentalEd25519Signer
 

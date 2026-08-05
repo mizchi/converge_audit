@@ -1,0 +1,51 @@
+import { describe, expect, it } from "vitest";
+import {
+  audit_browser_ed25519_public_key,
+  audit_browser_ed25519_sign,
+  audit_browser_ed25519_verify,
+  audit_browser_merkle_root,
+  audit_browser_sha256,
+} from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
+import {
+  deviceKeyFromSeedHex,
+  generateDeviceKey,
+} from "../web/src/audit/device-key";
+
+describe("MoonBit browser audit bridge", () => {
+  it("exposes SHA-256 and the generic Merkle implementation to JavaScript", () => {
+    expect(audit_browser_sha256("abc")).toBe(
+      "ba7816bf8f01cfea414140de5dae2223" +
+        "b00361a396177a9cb410ff61f20015ad",
+    );
+    const root = audit_browser_merkle_root(["a", "b", "c"]);
+    expect(root).toMatch(/^[0-9a-f]{64}$/);
+    expect(audit_browser_merkle_root(["b", "a", "c"])).not.toBe(root);
+  });
+
+  it("creates a deterministic owner signer at the MoonBit crypto boundary", () => {
+    const seed =
+      "000102030405060708090a0b0c0d0e0f" +
+      "101112131415161718191a1b1c1d1e1f";
+    const signer = deviceKeyFromSeedHex(seed);
+    const signature = signer.signDigest("checkpoint-digest");
+
+    expect(signer.publicKey).toBe(audit_browser_ed25519_public_key(seed));
+    expect(signature).toBe(audit_browser_ed25519_sign(seed, "checkpoint-digest"));
+    expect(audit_browser_ed25519_verify(
+      signer.publicKey,
+      "checkpoint-digest",
+      signature,
+    )).toBe(true);
+  });
+
+  it("generates exactly 32 random seed bytes", () => {
+    const signer = generateDeviceKey((bytes) => {
+      expect(bytes).toHaveLength(32);
+      bytes.fill(0x5a);
+      return bytes;
+    });
+
+    expect(signer.seedHex).toBe("5a".repeat(32));
+    expect(signer.publicKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+});

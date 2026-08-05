@@ -90,6 +90,20 @@ pub fn ExperimentalEd25519Signer::new(
 }
 
 ///|
+/// Decode the lowercase/uppercase hex wire form used by browser and Worker
+/// boundaries. Malformed hex and seeds other than 32 bytes are refused.
+pub fn ExperimentalEd25519Signer::from_seed_hex(
+  seed_hex : String,
+) -> ExperimentalEd25519Signer? {
+  let seed = match bytes_from_hex(seed_hex) {
+    Some(seed) => seed
+    None => return None
+  }
+  let signer = ExperimentalEd25519Signer::new(seed) catch { _ => return None }
+  Some(signer)
+}
+
+///|
 pub impl @bft.Signer for ExperimentalEd25519Signer with fn sign(
   self : ExperimentalEd25519Signer,
   digest : @bft.Digest,

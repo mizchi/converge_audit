@@ -1,0 +1,21 @@
+import {
+  "mizchi/bft",
+  "mizchi/bft/audit/merkle",
+  "mizchi/bft/x/game_audit/crypto",
+}
+
+supported_targets = "+js+wasm+wasm-gc"
+
+options(
+  link: {
+    "js": {
+      "exports": [
+        "audit_browser_sha256",
+        "audit_browser_merkle_root",
+        "audit_browser_ed25519_public_key",
+        "audit_browser_ed25519_sign",
+        "audit_browser_ed25519_verify",
+      ],
+    },
+  },
+)

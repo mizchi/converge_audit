@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="相互監査checkpointを使うCloudflare Workersブラウザゲーム参照実装"
+    />
+    <title>Audit Survivors</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">LOCAL-FIRST / MUTUAL AUDIT</p>
+          <h1>Audit Survivors</h1>
+          <p class="lede">予兆を避け、敵を自動攻撃し、監査可能な戦利品を拾う。</p>
+        </div>
+        <div class="run-controls">
+          <label>
+            Encounter seed
+            <input id="seed" inputmode="numeric" value="4660" />
+          </label>
+          <button id="restart" type="button">新しいrun</button>
+        </div>
+      </header>
+
+      <section class="status-strip" aria-label="encounter status">
+        <span>HP <strong id="hp">3 / 3</strong></span>
+        <span>Tick <strong id="tick">0</strong></span>
+        <span>Enemies <strong id="enemy-count">1</strong></span>
+        <span class="audit-state">● <strong id="audit-status">recording 0 / 30</strong></span>
+      </section>
+
+      <div class="workspace">
+        <section class="arena-panel">
+          <canvas
+            id="arena"
+            width="1280"
+            height="720"
+            aria-label="Audit Survivors game arena"
+          ></canvas>
+          <div class="controls-hint">
+            <kbd>WASD</kbd> / <kbd>矢印</kbd> 移動　攻撃は自動　橙色の予兆から退避
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <section class="panel">
+            <div class="panel-title">
+              <h2>Inventory</h2>
+              <span id="inventory-count">0</span>
+            </div>
+            <div id="inventory" class="inventory empty-state">
+              戦利品はまだない
+            </div>
+          </section>
+
+          <section class="panel audit-panel">
+            <h2>Audit pipeline</h2>
+            <ol>
+              <li id="event-stage" class="active">30Hz local event</li>
+              <li id="micro-stage">1s micro checkpoint</li>
+              <li>peer witness quorum</li>
+              <li id="authority-stage">authority item replay</li>
+              <li id="market-stage">market listing</li>
+            </ol>
+            <dl class="audit-metrics">
+              <div><dt>sealed</dt><dd id="micro-count">0</dd></div>
+              <div><dt>pending</dt><dd id="pending-count">0 / 30</dd></div>
+              <div><dt>rollback tick</dt><dd id="rollback-tick">0</dd></div>
+              <div class="digest-row">
+                <dt>latest root</dt><dd><code id="checkpoint-root">—</code></dd>
+              </div>
+            </dl>
+            <p>拾ったitemはすぐ使えるが、ACKまでは出品できない。</p>
+          </section>
+
+          <section class="panel">
+            <h2>Event log</h2>
+            <ol id="event-log" class="event-log"></ol>
+          </section>
+        </aside>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
