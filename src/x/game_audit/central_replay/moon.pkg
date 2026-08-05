@@ -1,0 +1,19 @@
+import {
+  "mizchi/bft/x/game_audit/attestation",
+  "mizchi/bft/x/game_audit/audit",
+  "mizchi/bft",
+  "mizchi/converge/types",
+  "mizchi/bft/x/game_audit/checkpoint",
+  "mizchi/bft/x/game_audit/inventory",
+  "mizchi/bft/x/game_audit/open_world",
+  "mizchi/bft/x/game_audit/market",
+  "mizchi/bft/x/game_audit/replay",
+  "mizchi/bft/x/game_audit/pvp_session",
+  "mizchi/bft/x/game_audit/wire",
+}
+
+import {
+  "mizchi/bft/audit/authmap",
+  "mizchi/bft/audit/merkle",
+  "mizchi/bft/x/game_audit/witness_manifest",
+} for "test"

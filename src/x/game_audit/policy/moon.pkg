@@ -1,0 +1,7 @@
+import {
+  "mizchi/bft/audit",
+}
+
+import {
+  "mizchi/bft/x/game_audit/audit" @game_audit,
+} for "test"
