@@ -14,5 +14,4 @@ TDD（探索 → Red → Green → Refactoring）で開発し、関心の分離�
 `src/audit` から `src/x/game_audit` への依存を禁止する。
 
 最終確認では `moon info && moon fmt`、`moon check --target all`、`moon test` を実行する。
-証明を変更した場合は `just prove`、protocolを変更した場合は `just tla-check` と
-`just tla-counterexamples` も実行する。
+証明を変更した場合は `just prove`、protocolを変更した場合は `just formal-check` も実行する。

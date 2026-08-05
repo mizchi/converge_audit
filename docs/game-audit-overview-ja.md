@@ -78,7 +78,7 @@ rendering frameではなく監査leafの時間slotであり、画面更新やcli
 
 - MoonBit: 362 tests passed。
 - Why3 1.7.2 + Z3 4.8.17: 汎用audit 31 + game audit 161、計192 proof goals proved。
-- TLA+ / TLC 2.18: 2 peer・2 epochのcrash/drop/partition/bounded-outboxモデルを11,340 distinct statesで検査し、
+- Quint 0.32 / TLC 2.19: 2 peer・2 epochのcrash/drop/partition/bounded-outboxモデルを11,340 distinct statesで検査し、
   safetyとnetwork安定後のauthority finalityに反例なし。witness collectionもsafety 30,720、liveness
   19,456 distinct statesで反例なし。6つの破損設定では期待した反例を検出。
 - Cloudflare workerd integration: 42 tests passed（atomic sealの4 fault rollback、restart復元、producer/witness署名拒否・収集、source secret fail-closed、rate isolation、peer client、direct authority ACK、MoonBit runtime capability、settlement/percentile metricを含む）。
@@ -139,9 +139,9 @@ prototypeのprotocol骨格は通ったが、production完成ではない。優�
 5. PvE raidのwire/loot binding、PvPのprojectile/visibilityなど実ゲームkernel。
    phase分離boss HP/player attack/cooldownとPvP cooldown/capture objectiveのreferenceは実装済み。
 6. packet loss/partitionを含むnetwork impairment試験、tail latency、実プレイテスト。
-7. TLA+モデルを複数authority shard、pruning/appealへ拡張。bounded outboxは実装・反例確認済み。
+7. Quintモデルを複数authority shard、pruning/appealへ拡張。bounded outboxは実装・反例確認済み。
 
-head propagationの最小TLA+モデルは追加した。durable outbox、最古未ACKのretry、exact-parentがあれば、
+head propagationの最小Quintモデルは追加した。durable outbox、最古未ACKのretry、exact-parentがあれば、
 networkが最終的に安定する公平な実行でauthorityがlatest epochへ到達することを有限状態で確認した。
 一方、任意peer/epoch数、witness quorum、Byzantine送信者、実際のDB/transportへの対応付けは未検証である。
 
@@ -151,8 +151,7 @@ networkが最終的に安定する公平な実行でauthorityがlatest epochへ�
 just check-all
 just test
 just prove
-just tla-check
-just tla-counterexamples
+just formal-check
 just test-cf-game-audit
 just check-cf-game-audit
 just build-cf-game-audit

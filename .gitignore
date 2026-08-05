@@ -2,6 +2,7 @@
 _build/
 target/
 target
+_apalache-out/
 /states/
 .mooncakes/
 .moonagent/

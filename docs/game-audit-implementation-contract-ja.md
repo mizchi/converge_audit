@@ -17,11 +17,11 @@ epoch close、checkpoint seal、outbox、ACK、head、gap recovery、crash recov
 | --- | --- |
 | 既存の公開型と純粋なhead/policy判定 | `src/audit/**/*.mbti`, `.mbtp`, runtime test |
 | persistence/transportが今後満たすべき契約 | 本文書 |
-| crash/drop/partitionを含む状態遷移 | `formal/tla/CheckpointDelivery.tla`, `formal/tla/WitnessQuorum.tla` |
+| crash/drop/partitionを含む状態遷移 | `formal/quint/CheckpointDelivery.qnt`, `formal/quint/WitnessQuorum.qnt` |
 | wire encoding、署名domain、decode budget | `docs/game-audit-wire-ja.md`とgame adapter |
 | event完全性、合法手、報酬、asset生成 | 個別gameのmanifestとdeterministic kernel |
 
-TLA+は本文書の一部を有限状態で検査するが、本文書全体の証明ではない。逆に、現在の
+Quint/TLCは本文書の一部を有限状態で検査するが、本文書全体の証明ではない。逆に、現在の
 prototype実装が本文書を満たしていない箇所は、既成事実として仕様を弱めず`Pending`として扱う。
 
 ## 2. 責務分離
@@ -358,7 +358,7 @@ receiverは全要素のsignature、boundary、epoch、parentを検査した後�
 | authority commit後・ACK消失 | historical `Duplicate` ACKで回復可能 |
 | ACK受信後・local commit前 | ACK再受信またはcheckpoint再送で回復可能 |
 
-authority process/storageのcrash recoveryは現在のTLA+モデル外だが、productionではhistory、head、
+authority process/storageのcrash recoveryは現在のQuintモデル外だが、productionではhistory、head、
 fork evidence、ACK結果をdurable transactionから復元しなければならない。
 
 ## 8. 活性契約と非保証
@@ -375,7 +375,7 @@ fork evidence、ACK結果をdurable transactionから復元しなければなら
 いずれかが満たされない場合、finalityは保証しない。withholding、長期partition、under-quorumは
 `Pending`またはcentral escalationであり、それだけでcheat確定にしない。
 
-TLA+で検査済みの性質は、2 peer・2 epoch・3 eventにおける上記の有限抽象である。
+Quint/TLCで検査済みの性質は、2 peer・2 epoch・3 eventにおける上記の有限抽象である。
 
 ## 9. mode別のclosure adapter
 
@@ -417,9 +417,9 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | authenticated success ACK | internal DO channel + opaque MoonBit ACK gate + SQLite tombstone | Proven core + remote 20/20 |
 | atomic gap batch | in-memory transportとCloudflare gap API | Partial |
 | server-side central replay outbox | Cloudflare `replay_outbox` | Tested locally |
-| checkpoint transportの有限safety/liveness | TLA+/TLC、bounded outbox込み11,340 distinct states | Model checked、capacity gate除去で反例 |
-| witness collectionの有限safety/liveness | TLA+/TLC、4 roster + 1 intruder、safety 30,720 / liveness 19,456 distinct states | Model checked |
-| authority DB crash/restore | Durable Object local testのみ、TLA+範囲外 | Partial |
+| checkpoint transportの有限safety/liveness | Quint/TLC、bounded outbox込み11,340 distinct states | Model checked、capacity gate除去で反例 |
+| witness collectionの有限safety/liveness | Quint/TLC、4 roster + 1 intruder、safety 30,720 / liveness 19,456 distinct states | Model checked |
+| authority DB crash/restore | Durable Object local testのみ、Quint範囲外 | Partial |
 
 管理者限定の`x-audit-checkpoint-dispatch: deferred`はfault injectionとQueue互換試験だけに使う。
 これは初回direct RPCを保留するが、entryはlease付き`in_flight`へ進み、30秒後のalarmはdirect retryする。
@@ -439,7 +439,7 @@ source独立性や全地域SLAと同一視してはならない。
 
 | 項目 | 内容 |
 | --- | --- |
-| source | TLA+ `SendCheckpoint`は`checkpoint \in AvailableOutbox(peer)`を要求する |
+| source | Quint `sendCheckpoint`は`checkpoint.in(availableOutbox(peer))`を要求する |
 | implementation observation | 以前のQueue consumerは自己整合した未知jobをreceiverへ先に渡せた |
 | model question | source outboxにないjobでauthority headを更新できるか |
 | machine result | workerd反例で偽造jobが先にacceptedされ、後続の正規jobがsame-epoch forkになった |
@@ -462,7 +462,7 @@ source独立性や全地域SLAと同一視してはならない。
 | model question | foreign/duplicate/timeout下で不正なready/receiver advanceを防ぎ、正直な未採用応答が公平ならeventually readyになるか |
 | machine result | safety 30,720、liveness 19,456 distinct statesで反例なし。弱い公平性ではhostile duplicate starvation反例を検出した |
 | decision | 活性仮定を「未採用の正直な応答が公平に処理される」へ限定する。reference adapterではhashed sourceごとのfixed windowを入れ、global fairnessはproduction要件として残す |
-| lock | `WitnessQuorum.tla`、producer/roster gateを外す2 broken config、workerd foreign/invalid/duplicate/quorum/expiry/source-isolation test、20-run local flood benchmark |
+| lock | `WitnessQuorum.qnt`、producer/roster gateを外す2 broken module、workerd foreign/invalid/duplicate/quorum/expiry/source-isolation test、20-run local flood benchmark |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -480,7 +480,7 @@ source独立性や全地域SLAと同一視してはならない。
 | model question | 公開row DTOを改ざん・欠損させたimageからorphan headやACK履歴なしのacknowledged outboxを復元できるか |
 | machine result | MoonBit正常imageはevent/equivocation/head/outbox/ACKを復元し、orphan headとACK footprint欠損を拒否した。Node SQLiteでもrestart後の同値image、stale CAS、容量超過、ACK footprint欠損を検査し、history/head/outbox/closure各書込み直後の例外は全旧状態へrollbackした |
 | decision | `PlayerLocalAuditStore`を汎用reference transaction、`PlayerLocalSealPlan::write_set()`をstorage-neutral境界とし、物理adapterは公開DTOを同一transactionで保存・再構築する。未認証network payloadからwrite-set/ACKを直接構築してはならない |
-| lock | MoonBit local store 22 tests、Node SQLite 9 tests、`just test-node-audit-runtime`。TLA+のatomic `SealNextCheckpoint`を実装へ対応付けるが、SQLite engine自体をmodel checkedしたとは主張しない |
+| lock | MoonBit local store 22 tests、Node SQLite 9 tests、`just test-node-audit-runtime`。Quintのatomic `sealNextCheckpoint`を実装へ対応付けるが、SQLite engine自体をmodel checkedしたとは主張しない |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -493,12 +493,12 @@ source独立性や全地域SLAと同一視してはならない。
 
 | 項目 | 内容 |
 | --- | --- |
-| source | `IMPL-PEER-SEND-001`とTLA+ retry抽象は、bounded fanout、crash後の再試行、未認証応答の無害化、認証済みforkの吸収を要求する |
+| source | `IMPL-PEER-SEND-001`とQuint retry抽象は、bounded fanout、crash後の再試行、未認証応答の無害化、認証済みforkの吸収を要求する |
 | implementation observation | pure schedulerだけではprocess再起動時のin-flight数を復元できず、送信timeoutがleaseより長い構成では正常稼働中にも同じrouteを再claimできる |
 | model question | durable lease中のrestart、1成功+1未認証/失敗、1成功+1署名済みforkで、backpressure・fair retry・fork evidenceは期待どおり残るか |
 | machine result | Node loopback 7 testsでMoonBit JS選択、2並列上限、restart lease、期限後retry、success/failure永続化、oversize拒否、署名済みfork quarantineを確認した。`timeout > lease`は構築時拒否に固定し、fork evidenceとquarantineの不一致はrestart時に破損として拒否した |
 | decision | route/lease/evidenceをSQLite state、選択/遷移をMoonBit policy、HTTPを交換可能I/Oへ分離する。HTTP到達や未認証bytesだけでcheat判定しない |
-| lock | `peer-checkpoint-transport.node-test.ts` 7 tests、Node package合計16 tests、`just test-node-audit-runtime`。既存TLA+抽象への実装refinement testでありHTTP stack自体のmodel checkではない |
+| lock | `peer-checkpoint-transport.node-test.ts` 7 tests、Node package合計16 tests、`just test-node-audit-runtime`。Quint抽象への実装refinement testでありHTTP stack自体のmodel checkではない |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -506,8 +506,8 @@ source独立性や全地域SLAと同一視してはならない。
 | implementation observation | capacityをruntime validationだけに置くと、時間的modelがbackpressureなしのseal列を許す可能性が残る |
 | model question | 未ACK outboxが容量1の間に次epochをsealできるか。network安定後のlatest finalityを壊さないか |
 | machine result | 正常設定は55,849 generated / 11,340 distinct statesで安全性・活性とも反例なし。capacity gate除去設定は`OutboxWithinCapacity`違反を検出した |
-| decision | capacity checkを`SealNextCheckpoint`のload-bearing guardとしてTLA+へ固定する |
-| lock | `CheckpointDeliveryBrokenBackpressure.cfg`を含む7 broken configsと`just tla-check` |
+| decision | capacity checkを`sealNextCheckpoint`のload-bearing guardとしてQuintへ固定する |
+| lock | `checkpointBrokenBackpressure`を含む7 broken moduleと`just formal-check` |
 
 ## 12. 受入テスト
 
@@ -533,8 +533,7 @@ production adapterは最低限、次を自動検査する。
 回帰入口:
 
 ```sh
-just tla-check
-just tla-counterexamples
+just formal-check
 just prove-audit-core
 just test-audit-layered
 just test-audit-runtime

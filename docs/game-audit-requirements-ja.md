@@ -254,10 +254,10 @@ originまたはtransferが後からreject/revokeされた場合、descendant own
 
 状態: SQLite Durable Object、中央replay Queue/idempotent outbox、checkpoint sealとatomicなoutbox、
 direct authority RPC、lease/alarm retry/ACK、restart testは`Tested locally + remote E2E`。
-2 peer・2 epochのTLA+有限モデルではcrash/drop/partitionとbounded outbox下の安全性、network安定後の
+2 peer・2 epochのQuint/TLC有限モデルではcrash/drop/partitionとbounded outbox下の安全性、network安定後の
 authority finalityを`Model checked`。player-local論理DBとNode SQLite参照adapterの
 atomic seal/restart/ACK/破損検知は`Tested`。observer DB、IndexedDB/mobile SQLiteへのproduction接続、
-witness quorum収集は公開pull/署名submit型referenceと有限TLA+モデルまで`Tested locally / Model checked`。
+witness quorum収集は公開pull/署名submit型referenceと有限Quint/TLCモデルまで`Tested locally / Model checked`。
 端末側のローカル署名clientとhashed sourceごとのfixed-window隔離は`Tested locally + 全mode remote E2E`。
 東京clientから全modeの`apac-ne`、PvPの`wnam`/`weur` hintを各20 run測り、単一egressのrate-limit
 回復後に並列3/4 quorumとsealが100/100成立した。
@@ -350,8 +350,7 @@ gameごとに次を定義しなければならない。
 moon check --target all
 moon test
 just prove
-just tla-check
-just tla-counterexamples
+just formal-check
 pnpm --dir examples/cf-game-audit test
 pnpm --dir examples/cf-game-audit typecheck
 pnpm --dir examples/cf-game-audit deploy:dry
@@ -371,7 +370,7 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 4. ancestry revocation、appeal window、multi-asset atomic checkpoint
 5. projectile/visibility、raid lootを含む実ゲームkernel完全化とmanifest/wire migration
 6. packet loss、partition、crash、Queue重複を含むfault-injection
-7. TLA+モデルを複数authority shard、pruning/appealへ拡張（bounded outboxは完了）
+7. Quintモデルを複数authority shard、pruning/appealへ拡張（bounded outboxは完了）
 8. 実プレイtelemetryとrollback納得感のplaytest
 
 現時点ではprototypeの受理条件と局所的不変条件は強く検査されているが、production-readyという
@@ -387,8 +386,8 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 | `src/x/game_audit/audit` | game finality、replay、open-world、asset、cooldown/objective/raid clear gateがfail-closed | MoonBit prove | 161 goals proved | `just prove-game-audit` |
 | game runtime packages | game classifierと汎用classifierが等価 | bounded exhaustive test | 400 combinations passed | `moon test src/x/game_audit/policy` |
 | Cloudflare adapter | Queue成功だけでverifiedにならず、seal途中のfaultで部分commitせず、producer/witness認証失敗でsource/receiverを変更しない | workerd integration + pure metric/capability test | 42 tests passed | `pnpm --dir examples/cf-game-audit test` |
-| checkpoint transport | durable bounded outbox、retry、exact-parentによりnetwork安定後authorityがlatest epochへ到達する | TLA+/TLC、2 peer・2 epoch、crash/drop/partition | 11,340 distinct states、反例なし。capacity gateを外すbroken modelも反例 | `just tla-check && just tla-counterexamples` |
-| witness collection | producer/roster/quorum/expiry/fairnessなしにreadyやreceiver更新へ進まない | TLA+/TLC、4 roster + 1 intruder | safety 30,720、liveness 19,456 distinct states、反例なし。2 broken gateは期待どおり反例 | `just tla-check && just tla-counterexamples` |
+| checkpoint transport | durable bounded outbox、retry、exact-parentによりnetwork安定後authorityがlatest epochへ到達する | Quint/TLC、2 peer・2 epoch、crash/drop/partition | 11,340 distinct states、反例なし。capacity gateを外すbroken modelも反例 | `just formal-check` |
+| witness collection | producer/roster/quorum/expiry/fairnessなしにreadyやreceiver更新へ進まない | Quint/TLC、4 roster + 1 intruder | safety 30,720、liveness 19,456 distinct states、反例なし。2 broken gateは期待どおり反例 | `just formal-check` |
 | witness source isolation | 同一sourceのinvalid floodは別sourceのquorum quotaを消費せず、client指定bucketを信用しない | workerd integration + local 20 run + remote単一egress20 run | HMAC secret欠落時503、local別source quorum 20/20、remote 429回復後quorum 20/20。異なるremote source間公平性は未測定 | `pnpm --dir examples/cf-game-audit bench:witness` |
 | remote checkpoint/witness infrastructure | Worker、direct authority RPC、durable retry、replay Queue、両Secret、公開route | current `a3c07778-037d-40cf-b2e9-5ad55afdec91`、direct 20-run + deferred alarm smoke artifacts | Deployed + authority ACK 20/20、現行version direct/deferred各1/1 | [Cloudflare実測](./cloudflare-game-audit-ja.md) |
 | production crypto | signature/hashが攻撃耐性を持つ | security audit未実施 | unresolved | audited backendなしにproduction claimを禁止 |

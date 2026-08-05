@@ -95,13 +95,13 @@ protocol`または「検証可能なcheckpoint監査基盤」と呼ぶ。
 
 | claim | model / implementation | epistemic status |
 | --- | --- | --- |
-| crashやdrop後もdurable outboxから再送できる | `formal/tla/CheckpointDelivery.tla` | 有限モデルで検査 |
-| producer認証とdistinct roster quorumなしにreceiverを進めない | `formal/tla/WitnessQuorum.tla` | 有限モデルで検査 |
+| crashやdrop後もdurable outboxから再送できる | `formal/quint/CheckpointDelivery.qnt` | 有限モデルで検査 |
+| producer認証とdistinct roster quorumなしにreceiverを進めない | `formal/quint/WitnessQuorum.qnt` | 有限モデルで検査 |
 | vote競合が順序非依存にequivocationへ収束する | `src/audit/quorum` test | bounded実装テスト |
 | delivery capabilityは全trust factsを要求する | `src/audit/runtime_contract.mbtp`, `audit/delivery_auth` | predicate証明 + 実装テスト |
 | game actionが合法である | `src/x/game_audit/replay`以下 | gameごとの実装・テスト |
 
-TLA+ではcryptographic verificationをBooleanへ抽象化しており、暗号強度やSQLite/HTTPの
+Quintではcryptographic verificationをBooleanへ抽象化しており、暗号強度やSQLite/HTTPの
 実装そのものをmodel checkedしたとは主張しない。
 
 ## Adapter境界
@@ -120,6 +120,6 @@ game Workerは既存Cloudflare API互換のcomposition endpointを維持する�
 | source | `mizchi/converge`のCRDT coreを保ちつつ、BFT event認証とcheckpoint監査を再利用可能にしたい |
 | observation | coreから監査層への逆依存はなく、BFT adapterだけが`mizchi/converge/types`を必要とする |
 | model question | package identityと配置だけを変え、既存の安全性・liveness contractを保存できるか |
-| machine result | 307 MoonBit tests、200 proof goals、TLA+正常4/破損7 configuration、Node 16 tests、Cloudflare 42 testsが移動後も通過 |
+| machine result | 307 MoonBit tests、200 proof goals、Quint/TLC正常4/破損7 module、Node 16 tests、Cloudflare 42 testsが移動後も通過 |
 | decision | mechanismをcompanion module `mizchi/bft`へ抽出し、finalization/replay/trust値は`x/game_audit`へ残す |
-| lock | `just check-audit-boundary`, `moon test`, `just prove`, `just tla-check`, `just tla-counterexamples`, Node/Cloudflare adapter tests |
+| lock | `just check-audit-boundary`, `moon test`, `just prove`, `just formal-check`, Node/Cloudflare adapter tests |

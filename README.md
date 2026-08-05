@@ -137,13 +137,13 @@ Each claim uses the smallest appropriate verifier.
 | Subject | Method | Current checked scope |
 | --- | --- | --- |
 | Cadence, retention, heads, seals, vote merge | MoonBit proof → Why3/Z3 | Pure predicates and mathematical integers; 200 goals |
-| Crash, drop, retry, bounded outbox, witness quorum | TLA+ / TLC | Finite actor/epoch safety and liveness; four healthy configurations without counterexamples |
-| Whether guards are load-bearing | Deliberately broken TLA+ configurations | All seven produce the expected counterexample |
+| Crash, drop, retry, bounded outbox, witness quorum | Quint / TLC | Finite actor/epoch safety and liveness; four healthy configurations without counterexamples |
+| Whether guards are load-bearing | Deliberately broken Quint modules | All seven produce the expected counterexample |
 | SQLite/DO/Queue/HTTP mapping | Integration tests and fault injection | Atomic rollback, restart, duplicate, fork, and ACK-loss behavior |
 | Communication cost and latency | Local and remote benchmarks | Environment-specific engineering baselines, not general SLAs |
 
 Formal tools decide only properties written into their models. Cryptographic
-verification is abstracted to a Boolean in TLA+, and MoonBit proofs do not prove
+verification is abstracted to a Boolean in Quint, and MoonBit proofs do not prove
 hash collision resistance, signature unforgeability, or concrete disk/network
 implementations.
 
@@ -167,8 +167,7 @@ than immediately label a player as cheating.
 just check-all
 just test
 just prove
-just tla-check
-just tla-counterexamples
+just formal-check
 just test-node-audit-runtime
 just test-cf-game-audit
 ```
@@ -177,7 +176,8 @@ Start with [docs/README.md](docs/README.md). See the
 [game-audit overview](docs/game-audit-overview-ja.md),
 [telegraph and real-time game design](docs/telegraph-game-design-ja.md), and
 [selective open-world auditing](docs/open-world-audit-ja.md) for the detailed
-design.
+design. The [Quint protocol model](formal/quint/README.md) records the finite
+state boundary and verification commands.
 
 ## License
 

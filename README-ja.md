@@ -131,12 +131,12 @@ checkpointを安価に受理し、疑わしい結果だけをdurableかつidempo
 | 対象 | 手段 | 現在確認している範囲 |
 | --- | --- | --- |
 | cadence、retention、head、seal、vote merge | MoonBit proof → Why3/Z3 | pure predicateと数学整数上の不変条件、計200 goals |
-| crash、drop、retry、bounded outbox、witness quorum | TLA+ / TLC | 有限actor・epochモデルのsafety/liveness。正常4設定で反例なし |
-| guardが本当に必要か | 意図的に壊したTLA+設定 | 7設定すべてで期待した反例を検出 |
+| crash、drop、retry、bounded outbox、witness quorum | Quint / TLC | 有限actor・epochモデルのsafety/liveness。正常4設定で反例なし |
+| guardが本当に必要か | 意図的に壊したQuint module | 7設定すべてで期待した反例を検出 |
 | SQLite/DO/Queue/HTTPへの写像 | integration testとfault injection | atomic rollback、restart、duplicate、fork、ACK loss |
 | 通信量・latency | local/remote benchmark | 特定環境のengineering baseline。一般SLAではない |
 
-形式手法は、モデルへ書いた性質についてのみ判断します。TLA+では暗号検証をBooleanへ抽象化しており、
+形式手法は、モデルへ書いた性質についてのみ判断します。Quintでは暗号検証をBooleanへ抽象化しており、
 MoonBit proofもhash衝突耐性、署名偽造困難性、disk/networkの実装を証明しません。
 
 ## 保証しないこと
@@ -158,8 +158,7 @@ MoonBit proofもhash衝突耐性、署名偽造困難性、disk/networkの実装
 just check-all
 just test
 just prove
-just tla-check
-just tla-counterexamples
+just formal-check
 just test-node-audit-runtime
 just test-cf-game-audit
 ```
@@ -167,7 +166,8 @@ just test-cf-game-audit
 最初に読む文書は[docs/README.md](docs/README.md)です。全体像は
 [ゲーム監査prototype](docs/game-audit-overview-ja.md)、ゲーム上の表現制約は
 [予兆とリアルタイム設計](docs/telegraph-game-design-ja.md)、不規則encounterは
-[open-world選択的監査](docs/open-world-audit-ja.md)を参照してください。
+[open-world選択的監査](docs/open-world-audit-ja.md)、配送・quorum形式モデルは
+[Quint protocol model](formal/quint/README.md)を参照してください。
 
 ## License
 

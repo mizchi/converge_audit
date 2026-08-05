@@ -76,16 +76,20 @@ prove-audit-core:
 # Backward-compatible alias
 prove-audit: prove-game-audit
 
-# Check the stable-network and crash/loss TLA+ models
-tla-check:
-  nix develop path:. --command tlc -cleanup -metadir target/tla/safety -workers auto -config formal/tla/CheckpointDeliverySafety.cfg formal/tla/CheckpointDelivery.tla
-  nix develop path:. --command tlc -cleanup -metadir target/tla/liveness -workers auto -config formal/tla/CheckpointDeliveryLiveness.cfg formal/tla/CheckpointDelivery.tla
-  nix develop path:. --command tlc -cleanup -metadir target/tla/witness-safety -workers auto -config formal/tla/WitnessQuorumSafety.cfg formal/tla/WitnessQuorum.tla
-  nix develop path:. --command tlc -cleanup -metadir target/tla/witness-liveness -workers auto -config formal/tla/WitnessQuorumLiveness.cfg formal/tla/WitnessQuorum.tla
+# Type-check and exhaustively verify the protocol models with Quint/TLC
+quint-check:
+  nix develop path:. --command sh formal/quint/check.sh
 
-# Confirm that removing each load-bearing guard produces a TLC counterexample
-tla-counterexamples:
-  nix develop path:. --command sh formal/tla/check-counterexamples.sh
+# Confirm that all seven load-bearing Quint guards produce counterexamples
+quint-counterexamples:
+  nix develop path:. --command sh formal/quint/check-counterexamples.sh
+
+# Run a bounded Apalache smoke check; this is not the exhaustive parity gate
+quint-apalache-smoke:
+  nix develop path:. --command sh formal/quint/check-apalache-smoke.sh
+
+# Verify every authoritative protocol model and load-bearing guard
+formal-check: quint-check quint-counterexamples
 
 # Build WASM-GC
 build:
@@ -128,4 +132,4 @@ build-cf-game-audit:
   pnpm --dir examples/cf-game-audit deploy:dry
 
 # Pre-release checks
-pre-release: fmt info check check-audit-boundary test build prove tla-check tla-counterexamples check-node-audit-runtime test-node-audit-runtime check-cf-game-audit test-cf-game-audit build-cf-game-audit
+pre-release: fmt info check check-audit-boundary test build prove formal-check check-node-audit-runtime test-node-audit-runtime check-cf-game-audit test-cf-game-audit build-cf-game-audit

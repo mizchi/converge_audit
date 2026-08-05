@@ -508,8 +508,8 @@ single-leaf SHA-256/Ed25519 envelopeは1,064 bytesで、pure MoonBit経路は署
 | open-world v2 bundleは4 checkpoint・2 publication proofs・遅延seed・`n-f` observer・eligible inclusion・PvE replay後だけverifiedになる | central replay/wire contract | canonical budget tests、real-crypto bridge、workerd Queue integration | Tested locally + remote benchmark |
 | open-world encounterは署名済みeligible sealに含まれる | capability contract | Merkle inclusionとtrusted digest tests | Tested locally |
 | audit plan/sealは独立publisherのtransparency checkpointに含まれる | deployment link contract | exact map membership capability、trusted head digest、workerd integration | Tested locally |
-| network安定後にauthorityがlatest checkpointへ到達する | TLA+ liveness contract | 2 peer・2 epoch、crash/drop/partition、容量1のdurable outbox、最古retryを11,340 distinct statesで検査 | Bounded model checked。capacity gate除去は反例。direct DO RPC + lease/alarm retryをremote接続し、ACK 20/20とauthority commit後のDuplicate回復を観測。無期限liveness/SLAはUnmet |
-| producer/roster/quorum不足やexpiryでwitness collection/receiverが不正に進まない | TLA+ witness collection contract | 4 roster + 1 intruder、safety 30,720 / liveness 19,456 distinct states、2 broken gate | Bounded model checked、pull/local-sign/submit + source isolationは全mode Tested locally + remote E2E |
+| network安定後にauthorityがlatest checkpointへ到達する | Quint/TLC liveness contract | 2 peer・2 epoch、crash/drop/partition、容量1のdurable outbox、最古retryを11,340 distinct statesで検査 | Finite model checked。capacity gate除去は反例。direct DO RPC + lease/alarm retryをremote接続し、ACK 20/20とauthority commit後のDuplicate回復を観測。無期限liveness/SLAはUnmet |
+| producer/roster/quorum不足やexpiryでwitness collection/receiverが不正に進まない | Quint/TLC witness collection contract | 4 roster + 1 intruder、safety 30,720 / liveness 19,456 distinct states、2 broken gate | Finite model checked、pull/local-sign/submit + source isolationは全mode Tested locally + remote E2E |
 | hostile sourceのinvalid flood後もquorumが進む | Cloudflare transport admission | local別source 20/20、remote単一egress429回復後の並列quorum 100/100 | Tested locally + remote、異なるremote source間のglobal fairnessはUnmet |
 | remote witness fanoutを並列化すると逐次よりquorum latencyを短縮する | apac-ne benchmark | 初回各20 run、並列mean/p50 1.093/0.940 s、逐次mean/p50 2.467/2.652 s。旧p95は集計不備で不採用 | Measured once、並列fanoutを実装要件に採用 |
 | accepted-seal latencyはmode値と地域配置へ分解できる | clean-path benchmark | 全mode apac-ne + PvP wnam/weur各20 run。apac-ne clean mean 0.744〜0.865 s、wnam 1.555 s、weur 1.831 s | Measured baseline、単一client/hintのためSLAはUnmet |
@@ -551,7 +551,7 @@ discharge したことを意味する。暗号仮定、I/O、overflow、モデ�
    key rotation、session manifestへのsuite bindingを実装する。
 7. network impairment と playtest で telegraph duration、backdate bound、reconcile
    animation を測定する。
-8. 初期TLA+ transport modelへbounded outbox/backpressureを追加し、gate除去の反例も固定した。
+8. Quint transport modelへbounded outbox/backpressureを追加し、gate除去の反例も固定した。
    次はwitness quorum、Byzantine sender、複数authority shard、pruning/appealを追加し、
    production DB/Queue actionと対応付ける。
 
@@ -562,4 +562,4 @@ discharge したことを意味する。暗号仮定、I/O、overflow、モデ�
 - [実装済み checkpoint/capability/benchmark](./game-audit-prototype.md)
 - [wire protocol v1 / open-world replay v2 と実暗号adapter](./game-audit-wire-ja.md)
 - [BFT-CRDT adapter の詳細](./bft-crdt-research.md)
-- [TLA+配送・永続化モデル](../formal/tla/README.md)
+- [Quint配送・永続化モデル](../formal/quint/README.md)

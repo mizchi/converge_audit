@@ -1,9 +1,12 @@
 {
-  description = "Verification toolchain for converge";
+  description = "Verification toolchain for mizchi/bft";
 
   inputs.nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2405";
+  # Quint was added after the MoonBit/Why3 toolchain pin above. Keep the
+  # existing verifier environment stable and source Quint from its own pin.
+  inputs.nixpkgs-quint.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-  outputs = { nixpkgs, ... }:
+  outputs = { nixpkgs, nixpkgs-quint, ... }:
     let
       systems = [
         "aarch64-darwin"
@@ -12,13 +15,14 @@
         "x86_64-linux"
       ];
       forAllSystems = f:
-        nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+        nixpkgs.lib.genAttrs systems (system:
+          f nixpkgs.legacyPackages.${system} nixpkgs-quint.legacyPackages.${system});
     in
     {
-      devShells = forAllSystems (pkgs: {
+      devShells = forAllSystems (pkgs: quintPkgs: {
         default = pkgs.mkShell {
           packages = [
-            pkgs.tlaplus
+            quintPkgs.quint
             pkgs.why3
             pkgs.z3
           ];
