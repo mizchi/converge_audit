@@ -1,0 +1,254 @@
+///|
+predicate player_local_checkpoint_prunable_post(
+  candidate_epoch : Int,
+  retention_anchor_epoch : Int,
+  retain_from_epoch : Int,
+  all_outbox_acknowledged : Bool,
+  unresolved_reference : Bool,
+  result : Bool,
+) {
+  if candidate_epoch >= 0 {
+    if retention_anchor_epoch >= -1 {
+      if candidate_epoch == retention_anchor_epoch + 1 {
+        if candidate_epoch < retain_from_epoch {
+          if all_outbox_acknowledged {
+            if unresolved_reference {
+              result == false
+            } else {
+              result == true
+            }
+          } else {
+            result == false
+          }
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_player_local_prune_requires_every_guard(
+  candidate_epoch : Int,
+  retention_anchor_epoch : Int,
+  retain_from_epoch : Int,
+  all_outbox_acknowledged : Bool,
+  unresolved_reference : Bool,
+) where {
+  proof_require: player_local_checkpoint_prunable_post(
+    candidate_epoch,
+    retention_anchor_epoch,
+    retain_from_epoch,
+    all_outbox_acknowledged,
+    unresolved_reference,
+    true,
+  ),
+  proof_ensure: candidate_epoch >= 0,
+  proof_ensure: retention_anchor_epoch >= -1,
+  proof_ensure: candidate_epoch == retention_anchor_epoch + 1,
+  proof_ensure: candidate_epoch < retain_from_epoch,
+  proof_ensure: all_outbox_acknowledged == true,
+  proof_ensure: unresolved_reference == false,
+} {
+}
+
+///|
+pub lemma unacknowledged_player_local_checkpoint_is_never_prunable(
+  candidate_epoch : Int,
+  retention_anchor_epoch : Int,
+  retain_from_epoch : Int,
+  unresolved_reference : Bool,
+) where {
+  proof_ensure: player_local_checkpoint_prunable_post(
+    candidate_epoch,
+    retention_anchor_epoch,
+    retain_from_epoch,
+    false,
+    unresolved_reference,
+    false,
+  ),
+} {
+}
+
+///|
+pub lemma protected_player_local_checkpoint_is_never_prunable(
+  candidate_epoch : Int,
+  retention_anchor_epoch : Int,
+  retain_from_epoch : Int,
+  all_outbox_acknowledged : Bool,
+) where {
+  proof_ensure: player_local_checkpoint_prunable_post(
+    candidate_epoch,
+    retention_anchor_epoch,
+    retain_from_epoch,
+    all_outbox_acknowledged,
+    true,
+    false,
+  ),
+} {
+}
+
+///|
+predicate evidence_hold_admission_post(
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+  authentication_succeeded : Bool,
+  result : Bool,
+) {
+  if boundary_matches {
+    if checkpoint_matches {
+      if authentication_succeeded {
+        result == true
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_hold_requires_authenticated_exact_binding(
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+  authentication_succeeded : Bool,
+) where {
+  proof_require: evidence_hold_admission_post(
+    boundary_matches,
+    checkpoint_matches,
+    authentication_succeeded,
+    true,
+  ),
+  proof_ensure: boundary_matches == true,
+  proof_ensure: checkpoint_matches == true,
+  proof_ensure: authentication_succeeded == true,
+} {
+}
+
+///|
+pub lemma unauthenticated_evidence_hold_is_never_admitted(
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+) where {
+  proof_ensure: evidence_hold_admission_post(
+    boundary_matches,
+    checkpoint_matches,
+    false,
+    false,
+  ),
+} {
+}
+
+///|
+predicate evidence_hold_resolution_post(
+  boundary_matches : Bool,
+  epoch_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  active : Bool,
+  authentication_succeeded : Bool,
+  result : Bool,
+) {
+  if boundary_matches {
+    if epoch_matches {
+      if checkpoint_matches {
+        if reference_matches {
+          if active {
+            if authentication_succeeded {
+              result == true
+            } else {
+              result == false
+            }
+          } else {
+            result == false
+          }
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_hold_resolution_requires_every_guard(
+  boundary_matches : Bool,
+  epoch_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  active : Bool,
+  authentication_succeeded : Bool,
+) where {
+  proof_require: evidence_hold_resolution_post(
+    boundary_matches,
+    epoch_matches,
+    checkpoint_matches,
+    reference_matches,
+    active,
+    authentication_succeeded,
+    true,
+  ),
+  proof_ensure: boundary_matches == true,
+  proof_ensure: epoch_matches == true,
+  proof_ensure: checkpoint_matches == true,
+  proof_ensure: reference_matches == true,
+  proof_ensure: active == true,
+  proof_ensure: authentication_succeeded == true,
+} {
+}
+
+///|
+pub lemma inactive_evidence_hold_is_never_resolved_again(
+  boundary_matches : Bool,
+  epoch_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  authentication_succeeded : Bool,
+) where {
+  proof_ensure: evidence_hold_resolution_post(
+    boundary_matches,
+    epoch_matches,
+    checkpoint_matches,
+    reference_matches,
+    false,
+    authentication_succeeded,
+    false,
+  ),
+} {
+}
+
+///|
+pub lemma unauthenticated_evidence_hold_resolution_is_never_allowed(
+  boundary_matches : Bool,
+  epoch_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  active : Bool,
+) where {
+  proof_ensure: evidence_hold_resolution_post(
+    boundary_matches,
+    epoch_matches,
+    checkpoint_matches,
+    reference_matches,
+    active,
+    false,
+    false,
+  ),
+} {
+}

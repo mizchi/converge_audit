@@ -24,8 +24,16 @@ import {
 import { decodeAuditQueueBody } from "./queue-wire";
 import {
   referenceGameDigest,
+  referenceGameLineageDecisionVerifiers,
   referenceGameOwnerVerifier,
 } from "./reference-game";
+import {
+  decodeLineageDecisionCertificate,
+  parseLineageDecisionArbiterRoster,
+  verifyLineageDecisionCertificate,
+  type LineageDecisionLifecycle,
+} from "./lineage-decision-certificate";
+import type { AuditDigestAdapter } from "../game/audit/journal";
 import {
   decodeGameCheckpointVerificationRequest,
   verifyGameCheckpoint,
@@ -49,6 +57,7 @@ import {
 } from "../game/authority/asset-ownership";
 import {
   assetLineageDecisionAllowed,
+  assetLineageCertificateAllowed,
   assetLineageUseAllowed,
   classifyAnchorHead,
   classifyCentralReplayArtifacts,
@@ -57,6 +66,7 @@ import {
   marketplaceCreationPersistAllowed,
   openCheckpointClosure,
   verifyAnchorEnvelope,
+  verifyInventoryCheckpointProofBundle,
   verifyInventoryLineageProofBundle,
   verifyInventoryListingProofBundle,
   verifyOpenWorldPveReplayBundle,
@@ -69,6 +79,7 @@ import {
   type CheckpointDeliveryApproval,
   type CheckpointDeliveryAuthenticationPolicy,
   type VerifiedAnchor,
+  type ExpectedInventoryCheckpointAsset,
   type VerifiedItemCreation,
 } from "./moonbit";
 
@@ -77,6 +88,8 @@ export interface Env {
   REPLAY_QUEUE: Queue<AuditQueueWireBody>;
   ADMIN_TOKEN: string;
   WITNESS_SOURCE_BUCKET_KEY: string;
+  LINEAGE_ARBITER_ROSTER?: string;
+  LINEAGE_DECISION_MAX_CLOCK_SKEW_MS?: string;
 }
 
 export type { CheckpointDeliveryJob } from "./checkpoint-runtime";
@@ -196,6 +209,9 @@ interface VerifiedAssetLineageHeadRow
   status: "eligible" | "revoked";
   last_decision_id: string;
   reason: string;
+  lifecycle: LineageDecisionLifecycle;
+  appeal_deadline_at: number | null;
+  finalized_at: number | null;
   updated_at: number;
 }
 
@@ -208,6 +224,15 @@ interface VerifiedAssetLineageDecisionRow
   revision: number;
   outcome: "eligible" | "revoked";
   reason: string;
+  arbiter_id: string;
+  authentication_scheme: string;
+  signature: string;
+  issued_at: number;
+  expires_at: number;
+  appeal_deadline_at: number | null;
+  appeal_of_decision_id: string | null;
+  finalized_at: number | null;
+  lifecycle: LineageDecisionLifecycle;
   decided_at: number;
 }
 
@@ -243,6 +268,25 @@ interface VerifiedAssetLineageProofRow
   checkpoint_digest: string;
   transfer_count: number;
   registered_at: number;
+}
+
+interface VerifiedInventoryCheckpointBatchRow
+  extends Record<string, SqlStorageValue> {
+  idempotency_key: string;
+  request_digest: string;
+  write_set_digest: string;
+  checkpoint_digest: string;
+  previous_checkpoint: string;
+  epoch: number;
+  asset_count: number;
+  bundle_bytes: number;
+  committed_at: number;
+}
+
+interface InventoryCheckpointRequestAsset {
+  asset_id: string;
+  expected_checkpoint_digest: string;
+  expected_version: number;
 }
 
 interface ReferenceGameItemReceiptRow extends Record<string, SqlStorageValue> {
@@ -329,6 +373,9 @@ interface ReferenceGameAssetLineageHeadRow
   status: "eligible" | "revoked";
   last_decision_id: string;
   reason: string;
+  lifecycle: LineageDecisionLifecycle;
+  appeal_deadline_at: number | null;
+  finalized_at: number | null;
   updated_at: number;
 }
 
@@ -341,6 +388,15 @@ interface ReferenceGameAssetLineageDecisionRow
   revision: number;
   outcome: "eligible" | "revoked";
   reason: string;
+  arbiter_id: string;
+  authentication_scheme: string;
+  signature: string;
+  issued_at: number;
+  expires_at: number;
+  appeal_deadline_at: number | null;
+  appeal_of_decision_id: string | null;
+  finalized_at: number | null;
+  lifecycle: LineageDecisionLifecycle;
   decided_at: number;
 }
 
@@ -356,11 +412,19 @@ interface CommitResult {
   replay_key?: string;
 }
 
+class InjectedInventoryCheckpointFault extends Error {
+  constructor(readonly afterAssetUpdates: number) {
+    super("injected inventory checkpoint fault");
+  }
+}
+
 const MAX_JSON_BODY_BYTES = 2_200_000;
 const MAX_ENVELOPE_HEX_CHARS = 131_072;
 const MAX_REPLAY_BUNDLE_HEX_CHARS = 2_097_152;
 const MAX_INVENTORY_BUNDLE_HEX_CHARS = 524_288;
 const MAX_INVENTORY_LINEAGE_BUNDLE_HEX_CHARS = 1_048_576;
+const MAX_INVENTORY_CHECKPOINT_BUNDLE_HEX_CHARS = 2_097_152;
+const MAX_INVENTORY_CHECKPOINT_ASSETS = 64;
 const MAX_RETAINED_LINEAGE_TRANSFERS_PER_ASSET = 256;
 const MAX_GAP_ITEMS = 256;
 const CHECKPOINT_DELIVERY_LEASE_MS = 30_000;
@@ -376,6 +440,7 @@ const REFERENCE_GAME_PUBLIC_ACTIONS = new Set([
 const AUDIT_ADMIN_ACTIONS = new Set([
   "asset-lineage-decisions",
   "asset-lineage-proofs",
+  "inventory-checkpoints",
   "game-asset-lineage-decisions",
 ]);
 const LOCATION_HINTS = new Set([
@@ -797,6 +862,11 @@ export class GameAuditShard extends DurableObject<Env> {
           length(last_decision_id) = 64
         ),
         reason TEXT NOT NULL,
+        lifecycle TEXT NOT NULL DEFAULT 'finalized' CHECK (
+          lifecycle IN ('appeal_open', 'finalized')
+        ),
+        appeal_deadline_at INTEGER,
+        finalized_at INTEGER,
         updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
         PRIMARY KEY(asset_id, ancestor_id)
       );
@@ -812,6 +882,17 @@ export class GameAuditShard extends DurableObject<Env> {
         revision INTEGER NOT NULL CHECK (revision > 0),
         outcome TEXT NOT NULL CHECK (outcome IN ('eligible', 'revoked')),
         reason TEXT NOT NULL,
+        arbiter_id TEXT,
+        authentication_scheme TEXT,
+        signature TEXT,
+        issued_at INTEGER,
+        expires_at INTEGER,
+        appeal_deadline_at INTEGER,
+        appeal_of_decision_id TEXT,
+        finalized_at INTEGER,
+        lifecycle TEXT NOT NULL DEFAULT 'finalized' CHECK (
+          lifecycle IN ('appeal_open', 'finalized')
+        ),
         decided_at INTEGER NOT NULL CHECK (decided_at >= 0),
         UNIQUE(asset_id, ancestor_id, revision)
       );
@@ -845,6 +926,38 @@ export class GameAuditShard extends DurableObject<Env> {
         transfer_count INTEGER NOT NULL CHECK (transfer_count > 0),
         registered_at INTEGER NOT NULL CHECK (registered_at >= 0)
       );
+      CREATE TABLE IF NOT EXISTS verified_inventory_checkpoint_batches (
+        idempotency_key TEXT PRIMARY KEY,
+        request_digest TEXT NOT NULL CHECK (length(request_digest) = 64),
+        write_set_digest TEXT NOT NULL CHECK (length(write_set_digest) = 64),
+        checkpoint_digest TEXT NOT NULL CHECK (length(checkpoint_digest) = 64),
+        previous_checkpoint TEXT NOT NULL,
+        epoch INTEGER NOT NULL CHECK (epoch >= 0),
+        asset_count INTEGER NOT NULL CHECK (
+          asset_count > 0 AND asset_count <= 64
+        ),
+        bundle_bytes INTEGER NOT NULL CHECK (bundle_bytes > 0),
+        committed_at INTEGER NOT NULL CHECK (committed_at >= 0)
+      );
+      CREATE TABLE IF NOT EXISTS verified_inventory_checkpoint_history (
+        asset_id TEXT NOT NULL,
+        checkpoint_digest TEXT NOT NULL CHECK (length(checkpoint_digest) = 64),
+        idempotency_key TEXT NOT NULL,
+        previous_checkpoint TEXT NOT NULL,
+        previous_owner_id TEXT NOT NULL,
+        next_owner_id TEXT NOT NULL,
+        previous_version INTEGER NOT NULL CHECK (previous_version >= 0),
+        next_version INTEGER NOT NULL CHECK (next_version >= 0),
+        epoch INTEGER NOT NULL CHECK (epoch >= 0),
+        public_state_root TEXT NOT NULL CHECK (length(public_state_root) = 64),
+        last_event TEXT NOT NULL CHECK (length(last_event) = 64),
+        lineage_root TEXT NOT NULL CHECK (length(lineage_root) = 64),
+        committed_at INTEGER NOT NULL CHECK (committed_at >= 0),
+        PRIMARY KEY(asset_id, checkpoint_digest),
+        UNIQUE(idempotency_key, asset_id)
+      );
+      CREATE INDEX IF NOT EXISTS verified_inventory_checkpoint_history_asset
+        ON verified_inventory_checkpoint_history(asset_id, epoch);
       CREATE TABLE IF NOT EXISTS reference_game_item_receipts (
         asset_id TEXT PRIMARY KEY,
         authority_receipt_id TEXT NOT NULL UNIQUE,
@@ -931,6 +1044,11 @@ export class GameAuditShard extends DurableObject<Env> {
           length(last_decision_id) = 64
         ),
         reason TEXT NOT NULL,
+        lifecycle TEXT NOT NULL DEFAULT 'finalized' CHECK (
+          lifecycle IN ('appeal_open', 'finalized')
+        ),
+        appeal_deadline_at INTEGER,
+        finalized_at INTEGER,
         updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
         PRIMARY KEY(asset_id, ancestor_id)
       );
@@ -946,6 +1064,17 @@ export class GameAuditShard extends DurableObject<Env> {
         revision INTEGER NOT NULL CHECK (revision > 0),
         outcome TEXT NOT NULL CHECK (outcome IN ('eligible', 'revoked')),
         reason TEXT NOT NULL,
+        arbiter_id TEXT,
+        authentication_scheme TEXT,
+        signature TEXT,
+        issued_at INTEGER,
+        expires_at INTEGER,
+        appeal_deadline_at INTEGER,
+        appeal_of_decision_id TEXT,
+        finalized_at INTEGER,
+        lifecycle TEXT NOT NULL DEFAULT 'finalized' CHECK (
+          lifecycle IN ('appeal_open', 'finalized')
+        ),
         decided_at INTEGER NOT NULL CHECK (decided_at >= 0),
         UNIQUE(asset_id, ancestor_id, revision)
       );
@@ -958,6 +1087,36 @@ export class GameAuditShard extends DurableObject<Env> {
     this.migrateReplayArtifacts();
     this.migrateReferenceGameMarketListings();
     this.migrateVerifiedAssetLineageDecisions();
+    for (const table of [
+      "verified_asset_lineage_heads",
+      "reference_game_asset_lineage_heads",
+    ] as const) {
+      this.addLineageColumnIfMissing(
+        table,
+        "lifecycle",
+        "TEXT NOT NULL DEFAULT 'finalized' CHECK (lifecycle IN ('appeal_open', 'finalized'))",
+      );
+      this.addLineageColumnIfMissing(table, "appeal_deadline_at", "INTEGER");
+      this.addLineageColumnIfMissing(table, "finalized_at", "INTEGER");
+    }
+    for (const table of [
+      "verified_asset_lineage_decisions",
+      "reference_game_asset_lineage_decisions",
+    ] as const) {
+      this.addLineageColumnIfMissing(table, "arbiter_id", "TEXT");
+      this.addLineageColumnIfMissing(table, "authentication_scheme", "TEXT");
+      this.addLineageColumnIfMissing(table, "signature", "TEXT");
+      this.addLineageColumnIfMissing(table, "issued_at", "INTEGER");
+      this.addLineageColumnIfMissing(table, "expires_at", "INTEGER");
+      this.addLineageColumnIfMissing(table, "appeal_deadline_at", "INTEGER");
+      this.addLineageColumnIfMissing(table, "appeal_of_decision_id", "TEXT");
+      this.addLineageColumnIfMissing(table, "finalized_at", "INTEGER");
+      this.addLineageColumnIfMissing(
+        table,
+        "lifecycle",
+        "TEXT NOT NULL DEFAULT 'finalized' CHECK (lifecycle IN ('appeal_open', 'finalized'))",
+      );
+    }
     this.addAuditConfigColumnIfMissing("initial_epoch", "INTEGER");
     this.addAuditConfigColumnIfMissing("initial_previous_digest", "TEXT");
     this.addReplayOutboxColumnIfMissing("replay_decision", "TEXT");
@@ -1084,6 +1243,8 @@ export class GameAuditShard extends DurableObject<Env> {
         return this.requestCentralReplay(request, mode, unit);
       case "POST market-listing":
         return this.checkMarketListing(request, mode, unit);
+      case "POST inventory-checkpoints":
+        return this.commitVerifiedInventoryCheckpoint(request, mode, unit);
       case "POST asset-lineage-decisions":
         return this.decideVerifiedAssetLineage(request, mode, unit);
       case "POST asset-lineage-proofs":
@@ -2563,7 +2724,8 @@ export class GameAuditShard extends DurableObject<Env> {
   ): ReferenceGameAssetLineageHeadRow | undefined {
     return this.ctx.storage.sql.exec<ReferenceGameAssetLineageHeadRow>(
       `SELECT asset_id, ancestor_id, ancestor_kind, revision, status,
-              last_decision_id, reason, updated_at
+              last_decision_id, reason, lifecycle, appeal_deadline_at,
+              finalized_at, updated_at
        FROM reference_game_asset_lineage_heads
        WHERE asset_id = ? AND ancestor_id = ?`,
       assetId,
@@ -2576,7 +2738,9 @@ export class GameAuditShard extends DurableObject<Env> {
   ): ReferenceGameAssetLineageDecisionRow | undefined {
     return this.ctx.storage.sql.exec<ReferenceGameAssetLineageDecisionRow>(
       `SELECT decision_id, asset_id, ancestor_id, ancestor_kind, revision,
-              outcome, reason, decided_at
+              outcome, reason, arbiter_id, authentication_scheme, signature,
+              issued_at, expires_at, appeal_deadline_at,
+              appeal_of_decision_id, finalized_at, lifecycle, decided_at
        FROM reference_game_asset_lineage_decisions
        WHERE decision_id = ?`,
       decisionId,
@@ -3463,21 +3627,40 @@ export class GameAuditShard extends DurableObject<Env> {
     if (mode !== "pve") return jsonError("not_found", 404);
     const body = await readJsonBody(request);
     if (!body.ok) return body.response;
-    const assetId = stringField(body.value, "asset_id");
-    const ancestorId = stringField(body.value, "ancestor_id");
-    const expectedRevision = numberField(body.value, "expected_revision");
-    const outcome = stringField(body.value, "outcome");
-    const reason = stringField(body.value, "reason");
-    if (
-      !assetId || assetId.length > 1_024 ||
-      !ancestorId || !/^[0-9a-f]{64}$/.test(ancestorId) ||
-      expectedRevision === undefined || expectedRevision < 0 ||
-      !isMoonBitInt(expectedRevision) ||
-      (outcome !== "eligible" && outcome !== "revoked") ||
-      !reason || reason.length > 4_096
-    ) {
+    const certificate = decodeLineageDecisionCertificate(body.value);
+    if (!certificate) {
       return jsonError("invalid_reference_game_lineage_decision", 400);
     }
+    const roster = parseLineageDecisionArbiterRoster(
+      this.auditEnv.LINEAGE_ARBITER_ROSTER,
+    );
+    const maxClockSkewMs = lineageDecisionMaxClockSkewMs(this.auditEnv);
+    if (!roster || maxClockSkewMs === undefined) {
+      return jsonError("lineage_arbiter_roster_not_configured", 503);
+    }
+    const decidedAt = Date.now();
+    const verifiedCertificate = verifyLineageDecisionCertificate(certificate, {
+      expectedScope: "reference-game",
+      expectedUnit: unit,
+      nowMs: decidedAt,
+      maxClockSkewMs,
+      roster,
+      verifiers: referenceGameLineageDecisionVerifiers,
+      digest: referenceGameDigest,
+    });
+    if (!verifiedCertificate.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: verifiedCertificate.reason,
+      }, 403);
+    }
+    const statement = certificate.statement;
+    const assetId = statement.assetId;
+    const ancestorId = statement.ancestorId;
+    const expectedRevision = statement.expectedRevision;
+    const revision = statement.revision;
+    const outcome = statement.outcome;
+    const reason = statement.reasonCode;
     const creation = this.referenceGameItemReceiptAt(assetId);
     if (!creation) {
       return jsonResponse({
@@ -3495,21 +3678,15 @@ export class GameAuditShard extends DurableObject<Env> {
         ancestor_id: ancestorId,
       }, 409);
     }
-    const revision = expectedRevision + 1;
-    if (!isMoonBitInt(revision)) {
-      return jsonError("reference_game_lineage_revision_exhausted", 409);
+    if (statement.ancestorKind !== ancestorKind) {
+      return jsonResponse({
+        ok: false,
+        decision: "certificate_lineage_binding_mismatch",
+        asset_id: assetId,
+        ancestor_id: ancestorId,
+      }, 409);
     }
-    const decisionId = referenceGameDigest.hashString(JSON.stringify([
-      "audit-survivors-asset-lineage-decision-v1",
-      unit,
-      assetId,
-      ancestorId,
-      ancestorKind,
-      expectedRevision,
-      revision,
-      outcome,
-      reason,
-    ]));
+    const decisionId = verifiedCertificate.decisionId;
     const existing = this.referenceGameAssetLineageDecisionAt(decisionId);
     if (existing) {
       const currentHead = this.referenceGameAssetLineageHeadAt(
@@ -3527,6 +3704,9 @@ export class GameAuditShard extends DurableObject<Env> {
         decision_outcome: existing.outcome,
         revision: currentHead?.revision ?? existing.revision,
         lineage_status: currentHead?.status ?? existing.outcome,
+        lifecycle: currentHead
+          ? lineageDecisionLifecycleAt(currentHead, decidedAt)
+          : existing.lifecycle,
         open_revocations: this.referenceGameOpenRevocationCount(assetId),
         quarantined_listings: 0,
       });
@@ -3534,6 +3714,51 @@ export class GameAuditShard extends DurableObject<Env> {
     const current = this.referenceGameAssetLineageHeadAt(assetId, ancestorId);
     const currentRevision = current?.revision ?? 0;
     const currentStatus = current?.status ?? "eligible";
+    if (currentRevision !== expectedRevision) {
+      return jsonResponse({
+        ok: true,
+        decision: "stale_lineage_revision",
+        asset_id: assetId,
+        ancestor_id: ancestorId,
+        current_revision: currentRevision,
+        current_status: currentStatus,
+      }, 409);
+    }
+    const isAppeal = outcome === "eligible";
+    const appealTargetMatches = !isAppeal ||
+      (current?.status === "revoked" && current.lifecycle === "appeal_open" &&
+        statement.appealOfDecisionId === current.last_decision_id);
+    const appealWindowOpen = !isAppeal ||
+      (current?.appeal_deadline_at !== null &&
+        current?.appeal_deadline_at !== undefined &&
+        decidedAt <= current.appeal_deadline_at + maxClockSkewMs);
+    const certificateAllowed = await assetLineageCertificateAllowed({
+      certificateAuthenticated: true,
+      arbiterKnown: true,
+      lineageBound: true,
+      certificateTimeValid: true,
+      lifecycleValid: true,
+      isAppeal,
+      appealTargetMatches,
+      appealWindowOpen,
+    });
+    if (!certificateAllowed && !appealTargetMatches) {
+      return jsonResponse({
+        ok: true,
+        decision: "appeal_target_mismatch",
+        asset_id: assetId,
+        ancestor_id: ancestorId,
+      }, 409);
+    }
+    if (!certificateAllowed) {
+      return jsonResponse({
+        ok: true,
+        decision: "appeal_window_expired",
+        asset_id: assetId,
+        ancestor_id: ancestorId,
+        appeal_deadline_at_ms: current?.appeal_deadline_at ?? null,
+      }, 409);
+    }
     const allowed = await assetLineageDecisionAllowed({
       assetExists: true,
       ancestorInLineage: true,
@@ -3553,7 +3778,6 @@ export class GameAuditShard extends DurableObject<Env> {
         current_status: currentStatus,
       }, 409);
     }
-    const decidedAt = Date.now();
     const committed = this.ctx.storage.transactionSync(() => {
       const latest = this.referenceGameAssetLineageHeadAt(assetId, ancestorId);
       if (
@@ -3563,8 +3787,10 @@ export class GameAuditShard extends DurableObject<Env> {
       this.ctx.storage.sql.exec(
         `INSERT INTO reference_game_asset_lineage_decisions
          (decision_id, asset_id, ancestor_id, ancestor_kind, revision,
-          outcome, reason, decided_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          outcome, reason, arbiter_id, authentication_scheme, signature,
+          issued_at, expires_at, appeal_deadline_at, appeal_of_decision_id,
+          finalized_at, lifecycle, decided_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         decisionId,
         assetId,
         ancestorId,
@@ -3572,12 +3798,22 @@ export class GameAuditShard extends DurableObject<Env> {
         revision,
         outcome,
         reason,
+        certificate.authentication.arbiterId,
+        certificate.authentication.scheme,
+        certificate.authentication.signature,
+        statement.issuedAtMs,
+        statement.expiresAtMs,
+        statement.appealDeadlineAtMs,
+        statement.appealOfDecisionId,
+        statement.finalizedAtMs,
+        verifiedCertificate.lifecycle,
         decidedAt,
       );
       if (latest) {
         this.ctx.storage.sql.exec(
           `UPDATE reference_game_asset_lineage_heads
            SET revision = ?, status = ?, last_decision_id = ?, reason = ?,
+               lifecycle = ?, appeal_deadline_at = ?, finalized_at = ?,
                updated_at = ?
            WHERE asset_id = ? AND ancestor_id = ? AND revision = ?
              AND status = ?`,
@@ -3585,6 +3821,9 @@ export class GameAuditShard extends DurableObject<Env> {
           outcome,
           decisionId,
           reason,
+          verifiedCertificate.lifecycle,
+          statement.appealDeadlineAtMs,
+          statement.finalizedAtMs,
           decidedAt,
           assetId,
           ancestorId,
@@ -3601,8 +3840,9 @@ export class GameAuditShard extends DurableObject<Env> {
         this.ctx.storage.sql.exec(
           `INSERT INTO reference_game_asset_lineage_heads
            (asset_id, ancestor_id, ancestor_kind, revision, status,
-            last_decision_id, reason, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            last_decision_id, reason, lifecycle, appeal_deadline_at,
+            finalized_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           assetId,
           ancestorId,
           ancestorKind,
@@ -3610,6 +3850,9 @@ export class GameAuditShard extends DurableObject<Env> {
           outcome,
           decisionId,
           reason,
+          verifiedCertificate.lifecycle,
+          statement.appealDeadlineAtMs,
+          statement.finalizedAtMs,
           decidedAt,
         );
       }
@@ -3648,6 +3891,9 @@ export class GameAuditShard extends DurableObject<Env> {
       ancestor_kind: ancestorKind,
       revision,
       lineage_status: outcome,
+      lifecycle: verifiedCertificate.lifecycle,
+      appeal_deadline_at_ms: statement.appealDeadlineAtMs,
+      finalized_at_ms: statement.finalizedAtMs,
       open_revocations: this.referenceGameOpenRevocationCount(assetId),
       quarantined_listings: committed.quarantined,
     }, 201);
@@ -4154,21 +4400,40 @@ export class GameAuditShard extends DurableObject<Env> {
     }
     const body = await readJsonBody(request);
     if (!body.ok) return body.response;
-    const assetId = stringField(body.value, "asset_id");
-    const ancestorId = stringField(body.value, "ancestor_id");
-    const expectedRevision = numberField(body.value, "expected_revision");
-    const outcome = stringField(body.value, "outcome");
-    const reason = stringField(body.value, "reason");
-    if (
-      !assetId || assetId.length > 4_096 ||
-      !ancestorId || ancestorId.length > 4_096 ||
-      expectedRevision === undefined || expectedRevision < 0 ||
-      !isMoonBitInt(expectedRevision) ||
-      (outcome !== "eligible" && outcome !== "revoked") ||
-      !reason || reason.length > 4_096
-    ) {
+    const certificate = decodeLineageDecisionCertificate(body.value);
+    if (!certificate) {
       return jsonError("invalid_asset_lineage_decision", 400);
     }
+    const roster = parseLineageDecisionArbiterRoster(
+      this.auditEnv.LINEAGE_ARBITER_ROSTER,
+    );
+    const maxClockSkewMs = lineageDecisionMaxClockSkewMs(this.auditEnv);
+    if (!roster || maxClockSkewMs === undefined) {
+      return jsonError("lineage_arbiter_roster_not_configured", 503);
+    }
+    const decidedAt = Date.now();
+    const verifiedCertificate = verifyLineageDecisionCertificate(certificate, {
+      expectedScope: "verified-asset",
+      expectedUnit: unit,
+      nowMs: decidedAt,
+      maxClockSkewMs,
+      roster,
+      verifiers: referenceGameLineageDecisionVerifiers,
+      digest: referenceGameDigest,
+    });
+    if (!verifiedCertificate.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: verifiedCertificate.reason,
+      }, 403);
+    }
+    const statement = certificate.statement;
+    const assetId = statement.assetId;
+    const ancestorId = statement.ancestorId;
+    const expectedRevision = statement.expectedRevision;
+    const revision = statement.revision;
+    const outcome = statement.outcome;
+    const reason = statement.reasonCode;
     const creation = this.verifiedItemCreationAt(assetId);
     if (!creation) {
       return jsonResponse({
@@ -4186,21 +4451,15 @@ export class GameAuditShard extends DurableObject<Env> {
         ancestor_id: ancestorId,
       }, 409);
     }
-    const revision = expectedRevision + 1;
-    if (!isMoonBitInt(revision)) {
-      return jsonError("asset_lineage_revision_exhausted", 409);
+    if (statement.ancestorKind !== ancestorKind) {
+      return jsonResponse({
+        ok: false,
+        decision: "certificate_lineage_binding_mismatch",
+        asset_id: assetId,
+        ancestor_id: ancestorId,
+      }, 409);
     }
-    const decisionId = referenceGameDigest.hashString(JSON.stringify([
-      "converge-audit-verified-asset-lineage-decision-v1",
-      unit,
-      assetId,
-      ancestorId,
-      ancestorKind,
-      expectedRevision,
-      revision,
-      outcome,
-      reason,
-    ]));
+    const decisionId = verifiedCertificate.decisionId;
     const existing = this.verifiedAssetLineageDecisionAt(decisionId);
     if (existing) {
       const currentHead = this.verifiedAssetLineageHeadAt(assetId, ancestorId);
@@ -4215,12 +4474,60 @@ export class GameAuditShard extends DurableObject<Env> {
         decision_outcome: existing.outcome,
         revision: currentHead?.revision ?? existing.revision,
         lineage_status: currentHead?.status ?? existing.outcome,
+        lifecycle: currentHead
+          ? lineageDecisionLifecycleAt(currentHead, decidedAt)
+          : existing.lifecycle,
         open_revocations: this.verifiedAssetOpenRevocationCount(assetId),
       });
     }
     const current = this.verifiedAssetLineageHeadAt(assetId, ancestorId);
     const currentRevision = current?.revision ?? 0;
     const currentStatus = current?.status ?? "eligible";
+    if (currentRevision !== expectedRevision) {
+      return jsonResponse({
+        ok: true,
+        decision: "stale_lineage_revision",
+        asset_id: assetId,
+        ancestor_id: ancestorId,
+        current_revision: currentRevision,
+        current_status: currentStatus,
+      }, 409);
+    }
+    const isAppeal = outcome === "eligible";
+    const appealTargetMatches = !isAppeal ||
+      (current?.status === "revoked" && current.lifecycle === "appeal_open" &&
+        statement.appealOfDecisionId === current.last_decision_id);
+    const appealWindowOpen = !isAppeal ||
+      (current?.appeal_deadline_at !== null &&
+        current?.appeal_deadline_at !== undefined &&
+        decidedAt <= current.appeal_deadline_at + maxClockSkewMs);
+    const certificateAllowed = await assetLineageCertificateAllowed({
+      certificateAuthenticated: true,
+      arbiterKnown: true,
+      lineageBound: true,
+      certificateTimeValid: true,
+      lifecycleValid: true,
+      isAppeal,
+      appealTargetMatches,
+      appealWindowOpen,
+    });
+    if (!certificateAllowed && !appealTargetMatches) {
+      return jsonResponse({
+        ok: true,
+        decision: "appeal_target_mismatch",
+        asset_id: assetId,
+        ancestor_id: ancestorId,
+      }, 409);
+    }
+    if (!certificateAllowed) {
+      return jsonResponse({
+        ok: true,
+        decision: "appeal_window_expired",
+        asset_id: assetId,
+        ancestor_id: ancestorId,
+        appeal_deadline_at_ms: current?.appeal_deadline_at ?? null,
+      }, 409);
+    }
     const allowed = await assetLineageDecisionAllowed({
       assetExists: true,
       ancestorInLineage: true,
@@ -4240,7 +4547,6 @@ export class GameAuditShard extends DurableObject<Env> {
         current_status: currentStatus,
       }, 409);
     }
-    const decidedAt = Date.now();
     const committed = this.ctx.storage.transactionSync(() => {
       const latestCreation = this.verifiedItemCreationAt(assetId);
       if (
@@ -4255,8 +4561,10 @@ export class GameAuditShard extends DurableObject<Env> {
       this.ctx.storage.sql.exec(
         `INSERT INTO verified_asset_lineage_decisions
          (decision_id, asset_id, ancestor_id, ancestor_kind, revision,
-          outcome, reason, decided_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          outcome, reason, arbiter_id, authentication_scheme, signature,
+          issued_at, expires_at, appeal_deadline_at, appeal_of_decision_id,
+          finalized_at, lifecycle, decided_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         decisionId,
         assetId,
         ancestorId,
@@ -4264,12 +4572,22 @@ export class GameAuditShard extends DurableObject<Env> {
         revision,
         outcome,
         reason,
+        certificate.authentication.arbiterId,
+        certificate.authentication.scheme,
+        certificate.authentication.signature,
+        statement.issuedAtMs,
+        statement.expiresAtMs,
+        statement.appealDeadlineAtMs,
+        statement.appealOfDecisionId,
+        statement.finalizedAtMs,
+        verifiedCertificate.lifecycle,
         decidedAt,
       );
       if (latest) {
         this.ctx.storage.sql.exec(
           `UPDATE verified_asset_lineage_heads
            SET revision = ?, status = ?, last_decision_id = ?, reason = ?,
+               lifecycle = ?, appeal_deadline_at = ?, finalized_at = ?,
                updated_at = ?
            WHERE asset_id = ? AND ancestor_id = ? AND revision = ?
              AND status = ?`,
@@ -4277,6 +4595,9 @@ export class GameAuditShard extends DurableObject<Env> {
           outcome,
           decisionId,
           reason,
+          verifiedCertificate.lifecycle,
+          statement.appealDeadlineAtMs,
+          statement.finalizedAtMs,
           decidedAt,
           assetId,
           ancestorId,
@@ -4293,8 +4614,9 @@ export class GameAuditShard extends DurableObject<Env> {
         this.ctx.storage.sql.exec(
           `INSERT INTO verified_asset_lineage_heads
            (asset_id, ancestor_id, ancestor_kind, revision, status,
-            last_decision_id, reason, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            last_decision_id, reason, lifecycle, appeal_deadline_at,
+            finalized_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           assetId,
           ancestorId,
           ancestorKind,
@@ -4302,6 +4624,9 @@ export class GameAuditShard extends DurableObject<Env> {
           outcome,
           decisionId,
           reason,
+          verifiedCertificate.lifecycle,
+          statement.appealDeadlineAtMs,
+          statement.finalizedAtMs,
           decidedAt,
         );
       }
@@ -4333,7 +4658,396 @@ export class GameAuditShard extends DurableObject<Env> {
       ancestor_kind: ancestorKind,
       revision,
       lineage_status: outcome,
+      lifecycle: verifiedCertificate.lifecycle,
+      appeal_deadline_at_ms: statement.appealDeadlineAtMs,
+      finalized_at_ms: statement.finalizedAtMs,
       open_revocations: committed.openRevocations,
+    }, 201);
+  }
+
+  private verifiedInventoryCheckpointBatchAt(
+    idempotencyKey: string,
+  ): VerifiedInventoryCheckpointBatchRow | undefined {
+    return this.ctx.storage.sql.exec<VerifiedInventoryCheckpointBatchRow>(
+      `SELECT idempotency_key, request_digest, write_set_digest,
+              checkpoint_digest, previous_checkpoint, epoch, asset_count,
+              bundle_bytes, committed_at
+       FROM verified_inventory_checkpoint_batches
+       WHERE idempotency_key = ?`,
+      idempotencyKey,
+    ).toArray()[0];
+  }
+
+  private async commitVerifiedInventoryCheckpoint(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "open") return jsonError("not_found", 404);
+    const config = this.config();
+    if (!config || config.mode !== mode || config.unit_key !== unit) {
+      return jsonError("shard_not_configured", 409);
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const idempotencyKey = stringField(body.value, "idempotency_key");
+    const bundleHex = stringField(body.value, "inventory_bundle_hex");
+    const checkpointDigest = stringField(
+      body.value,
+      "inventory_checkpoint_digest",
+    );
+    const gameManifestDigest = stringField(
+      body.value,
+      "inventory_game_manifest_digest",
+    );
+    const assets = inventoryCheckpointRequestAssetsField(body.value, "assets");
+    const faultAfterAssetUpdates = numberField(
+      body.value,
+      "fault_after_asset_updates",
+    );
+    if (
+      !idempotencyKey ||
+      !/^[A-Za-z0-9._:-]{1,256}$/.test(idempotencyKey) ||
+      !bundleHex ||
+      bundleHex.length > MAX_INVENTORY_CHECKPOINT_BUNDLE_HEX_CHARS ||
+      bundleHex.length % 2 !== 0 ||
+      !/^[0-9a-f]+$/.test(bundleHex) ||
+      !checkpointDigest ||
+      !/^[0-9a-f]{64}$/.test(checkpointDigest) ||
+      !gameManifestDigest ||
+      !/^[0-9a-f]{64}$/.test(gameManifestDigest) ||
+      !assets ||
+      (faultAfterAssetUpdates !== undefined &&
+        (!Number.isSafeInteger(faultAfterAssetUpdates) ||
+          faultAfterAssetUpdates <= 0 ||
+          faultAfterAssetUpdates > assets.length))
+    ) {
+      return jsonError("invalid_inventory_checkpoint", 400);
+    }
+    const requestDigest = inventoryCheckpointRequestDigest(
+      referenceGameDigest,
+      {
+        mode,
+        unit,
+        checkpointDigest,
+        gameManifestDigest,
+        bundleHex,
+        assets,
+      },
+    );
+    const existing = this.verifiedInventoryCheckpointBatchAt(idempotencyKey);
+    if (existing) {
+      if (existing.request_digest !== requestDigest) {
+        return jsonResponse({
+          ok: true,
+          decision: "inventory_checkpoint_idempotency_conflict",
+          idempotency_key: idempotencyKey,
+          stored_checkpoint_digest: existing.checkpoint_digest,
+        }, 409);
+      }
+      return jsonResponse({
+        ok: true,
+        decision: "duplicate",
+        idempotency_key: idempotencyKey,
+        checkpoint_digest: existing.checkpoint_digest,
+        previous_checkpoint: existing.previous_checkpoint,
+        epoch: existing.epoch,
+        asset_count: existing.asset_count,
+        write_set_digest: existing.write_set_digest,
+      });
+    }
+
+    const creations: VerifiedItemCreationRow[] = [];
+    const expectedAssets: ExpectedInventoryCheckpointAsset[] = [];
+    let inventorySessionId: string | undefined;
+    let sharedCurrentCheckpoint: string | undefined;
+    let sharedCurrentEpoch: number | undefined;
+    for (const requested of assets) {
+      const creation = this.verifiedItemCreationAt(requested.asset_id);
+      if (!creation) {
+        return jsonResponse({
+          ok: true,
+          decision: "inventory_checkpoint_asset_missing",
+          asset_id: requested.asset_id,
+        }, 404);
+      }
+      if (
+        creation.inventory_checkpoint_digest !==
+          requested.expected_checkpoint_digest ||
+        creation.current_version !== requested.expected_version
+      ) {
+        return jsonResponse({
+          ok: true,
+          decision: "inventory_checkpoint_stale",
+          asset_id: requested.asset_id,
+          current_checkpoint_digest: creation.inventory_checkpoint_digest,
+          current_version: creation.current_version,
+        }, 409);
+      }
+      inventorySessionId ??= creation.inventory_session_id;
+      sharedCurrentCheckpoint ??= creation.inventory_checkpoint_digest;
+      sharedCurrentEpoch ??= creation.inventory_epoch;
+      if (
+        creation.inventory_session_id !== inventorySessionId ||
+        creation.inventory_checkpoint_digest !== sharedCurrentCheckpoint ||
+        creation.inventory_epoch !== sharedCurrentEpoch
+      ) {
+        return jsonResponse({
+          ok: true,
+          decision: "inventory_checkpoint_heads_not_shared",
+          asset_id: requested.asset_id,
+        }, 409);
+      }
+      if (
+        creation.inventory_game_manifest_digest !== null &&
+        creation.inventory_game_manifest_digest !== gameManifestDigest
+      ) {
+        return jsonResponse({
+          ok: true,
+          decision: "inventory_checkpoint_manifest_mismatch",
+          asset_id: requested.asset_id,
+        }, 409);
+      }
+      const openRevocations = this.verifiedAssetOpenRevocationCount(
+        requested.asset_id,
+      );
+      if (
+        creation.status !== "eligible" ||
+        creation.lineage_status !== "eligible" ||
+        openRevocations !== 0
+      ) {
+        return jsonResponse({
+          ok: true,
+          decision: "inventory_checkpoint_asset_revoked",
+          asset_id: requested.asset_id,
+          open_revocations: openRevocations,
+        }, 403);
+      }
+      creations.push(creation);
+      expectedAssets.push({
+        asset_id: creation.asset_id,
+        initial_owner_id: creation.initial_owner_id,
+        item_type: creation.item_type,
+        quantity: creation.quantity,
+        source_event: creation.source_event,
+        output_index: creation.output_index,
+        current_owner_id: creation.current_owner_id,
+        current_version: creation.current_version,
+        current_checkpoint_digest: creation.inventory_checkpoint_digest,
+        current_epoch: creation.inventory_epoch,
+        creation_eligible: true,
+        lineage_clean: true,
+      });
+    }
+    if (!inventorySessionId) {
+      return jsonError("invalid_inventory_checkpoint", 400);
+    }
+    const verificationStarted = performance.now();
+    const verification = await verifyInventoryCheckpointProofBundle(
+      bundleHex,
+      inventorySessionId,
+      config.authority_key,
+      checkpointDigest,
+      gameManifestDigest,
+      expectedAssets,
+    );
+    const verificationMs = performance.now() - verificationStarted;
+    if (!verification.ok) {
+      return jsonResponse({
+        ok: true,
+        decision: "inventory_checkpoint_proof_refused",
+        proof_error: verification.error,
+      }, 403);
+    }
+    if (
+      verification.asset_count !== assets.length ||
+      verification.assets.length !== assets.length ||
+      verification.previous_checkpoint !== sharedCurrentCheckpoint ||
+      verification.epoch <= (sharedCurrentEpoch ?? -1)
+    ) {
+      return jsonResponse({
+        ok: true,
+        decision: "inventory_checkpoint_boundary_mismatch",
+      }, 409);
+    }
+    for (let index = 0; index < assets.length; index++) {
+      if (verification.assets[index]?.asset_id !== assets[index]?.asset_id) {
+        return jsonResponse({
+          ok: true,
+          decision: "inventory_checkpoint_asset_order_mismatch",
+          asset_id: assets[index]?.asset_id,
+        }, 409);
+      }
+    }
+
+    const committedAt = Date.now();
+    type CommitDecision =
+      | { decision: "committed" }
+      | { decision: "duplicate"; row: VerifiedInventoryCheckpointBatchRow }
+      | { decision: "conflict"; row: VerifiedInventoryCheckpointBatchRow }
+      | { decision: "raced"; assetId: string };
+    let committed: CommitDecision;
+    const sqliteStarted = performance.now();
+    try {
+      committed = this.ctx.storage.transactionSync((): CommitDecision => {
+        const concurrent = this.verifiedInventoryCheckpointBatchAt(
+          idempotencyKey,
+        );
+        if (concurrent) {
+          return concurrent.request_digest === requestDigest
+            ? { decision: "duplicate", row: concurrent }
+            : { decision: "conflict", row: concurrent };
+        }
+        const latestRows: VerifiedItemCreationRow[] = [];
+        for (let index = 0; index < assets.length; index++) {
+          const requested = assets[index];
+          const original = creations[index];
+          const latest = this.verifiedItemCreationAt(requested.asset_id);
+          if (
+            !latest ||
+            latest.inventory_session_id !== inventorySessionId ||
+            latest.inventory_checkpoint_digest !==
+              requested.expected_checkpoint_digest ||
+            latest.current_version !== requested.expected_version ||
+            latest.current_owner_id !== original.current_owner_id ||
+            latest.inventory_epoch !== original.inventory_epoch ||
+            latest.status !== "eligible" ||
+            latest.lineage_status !== "eligible" ||
+            this.verifiedAssetOpenRevocationCount(requested.asset_id) !== 0
+          ) {
+            return { decision: "raced", assetId: requested.asset_id };
+          }
+          latestRows.push(latest);
+        }
+        for (let index = 0; index < assets.length; index++) {
+          const requested = assets[index];
+          const latest = latestRows[index];
+          const next = verification.assets[index];
+          this.ctx.storage.sql.exec(
+            `UPDATE verified_item_creations
+             SET current_owner_id = ?, current_version = ?,
+                 inventory_checkpoint_digest = ?, inventory_epoch = ?,
+                 inventory_game_manifest_digest = ?,
+                 inventory_public_state_root = ?, inventory_last_event = ?,
+                 inventory_lineage_root = ?
+             WHERE asset_id = ? AND inventory_checkpoint_digest = ?
+               AND current_version = ? AND current_owner_id = ?
+               AND status = 'eligible' AND lineage_status = 'eligible'`,
+            next.current_owner_id,
+            next.version,
+            verification.checkpoint_digest,
+            verification.epoch,
+            gameManifestDigest,
+            verification.public_state_root,
+            next.last_event,
+            next.lineage_root,
+            requested.asset_id,
+            requested.expected_checkpoint_digest,
+            requested.expected_version,
+            latest.current_owner_id,
+          );
+          const changed = this.ctx.storage.sql.exec<{ changed: number }>(
+            "SELECT changes() AS changed",
+          ).toArray()[0]?.changed ?? 0;
+          if (changed !== 1) {
+            throw new Error("atomic inventory checkpoint head CAS failed");
+          }
+          this.ctx.storage.sql.exec(
+            `INSERT INTO verified_inventory_checkpoint_history
+             (asset_id, checkpoint_digest, idempotency_key,
+              previous_checkpoint, previous_owner_id, next_owner_id,
+              previous_version, next_version, epoch, public_state_root,
+              last_event, lineage_root, committed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            requested.asset_id,
+            verification.checkpoint_digest,
+            idempotencyKey,
+            requested.expected_checkpoint_digest,
+            latest.current_owner_id,
+            next.current_owner_id,
+            requested.expected_version,
+            next.version,
+            verification.epoch,
+            verification.public_state_root,
+            next.last_event,
+            next.lineage_root,
+            committedAt,
+          );
+          if (faultAfterAssetUpdates === index + 1) {
+            throw new InjectedInventoryCheckpointFault(index + 1);
+          }
+        }
+        this.ctx.storage.sql.exec(
+          `INSERT INTO verified_inventory_checkpoint_batches
+           (idempotency_key, request_digest, write_set_digest,
+            checkpoint_digest, previous_checkpoint, epoch, asset_count,
+            bundle_bytes, committed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          idempotencyKey,
+          requestDigest,
+          verification.write_set_digest,
+          verification.checkpoint_digest,
+          verification.previous_checkpoint,
+          verification.epoch,
+          verification.asset_count,
+          verification.bundle_bytes,
+          committedAt,
+        );
+        return { decision: "committed" };
+      });
+    } catch (error) {
+      if (error instanceof InjectedInventoryCheckpointFault) {
+        return jsonResponse({
+          ok: false,
+          decision: "injected_inventory_checkpoint_fault",
+          after_asset_updates: error.afterAssetUpdates,
+        }, 500);
+      }
+      throw error;
+    }
+    const sqliteMs = performance.now() - sqliteStarted;
+    if (committed.decision === "conflict") {
+      return jsonResponse({
+        ok: true,
+        decision: "inventory_checkpoint_idempotency_conflict",
+        idempotency_key: idempotencyKey,
+        stored_checkpoint_digest: committed.row.checkpoint_digest,
+      }, 409);
+    }
+    if (committed.decision === "raced") {
+      return jsonResponse({
+        ok: true,
+        decision: "inventory_checkpoint_raced",
+        asset_id: committed.assetId,
+      }, 409);
+    }
+    if (committed.decision === "duplicate") {
+      return jsonResponse({
+        ok: true,
+        decision: "duplicate",
+        idempotency_key: idempotencyKey,
+        checkpoint_digest: committed.row.checkpoint_digest,
+        previous_checkpoint: committed.row.previous_checkpoint,
+        epoch: committed.row.epoch,
+        asset_count: committed.row.asset_count,
+        write_set_digest: committed.row.write_set_digest,
+      });
+    }
+    await this.ctx.storage.sync();
+    return jsonResponse({
+      ok: true,
+      decision: "committed",
+      idempotency_key: idempotencyKey,
+      checkpoint_digest: verification.checkpoint_digest,
+      previous_checkpoint: verification.previous_checkpoint,
+      epoch: verification.epoch,
+      asset_count: verification.asset_count,
+      write_set_digest: verification.write_set_digest,
+      approval_count: verification.approval_count,
+      required_approvals: verification.required_approvals,
+      bundle_bytes: verification.bundle_bytes,
+      verification_ms: Math.round(verificationMs * 1_000) / 1_000,
+      sqlite_ms: Math.round(sqliteMs * 1_000) / 1_000,
     }, 201);
   }
 
@@ -5065,7 +5779,8 @@ export class GameAuditShard extends DurableObject<Env> {
   ): VerifiedAssetLineageHeadRow | undefined {
     return this.ctx.storage.sql.exec<VerifiedAssetLineageHeadRow>(
       `SELECT asset_id, ancestor_id, ancestor_kind, revision, status,
-              last_decision_id, reason, updated_at
+              last_decision_id, reason, lifecycle, appeal_deadline_at,
+              finalized_at, updated_at
        FROM verified_asset_lineage_heads
        WHERE asset_id = ? AND ancestor_id = ?`,
       assetId,
@@ -5078,7 +5793,9 @@ export class GameAuditShard extends DurableObject<Env> {
   ): VerifiedAssetLineageDecisionRow | undefined {
     return this.ctx.storage.sql.exec<VerifiedAssetLineageDecisionRow>(
       `SELECT decision_id, asset_id, ancestor_id, ancestor_kind, revision,
-              outcome, reason, decided_at
+              outcome, reason, arbiter_id, authentication_scheme, signature,
+              issued_at, expires_at, appeal_deadline_at,
+              appeal_of_decision_id, finalized_at, lifecycle, decided_at
        FROM verified_asset_lineage_decisions
        WHERE decision_id = ?`,
       decisionId,
@@ -5222,6 +5939,25 @@ export class GameAuditShard extends DurableObject<Env> {
       | "reference_game_item_receipts"
       | "reference_game_checkpoint_states"
       | "reference_game_market_listings",
+    name: string,
+    sqlType: string,
+  ): void {
+    const columns = this.ctx.storage.sql.exec<{ name: string }>(
+      `PRAGMA table_info(${table})`,
+    ).toArray();
+    if (!columns.some((column) => column.name === name)) {
+      this.ctx.storage.sql.exec(
+        `ALTER TABLE ${table} ADD COLUMN ${name} ${sqlType}`,
+      );
+    }
+  }
+
+  private addLineageColumnIfMissing(
+    table:
+      | "verified_asset_lineage_heads"
+      | "verified_asset_lineage_decisions"
+      | "reference_game_asset_lineage_heads"
+      | "reference_game_asset_lineage_decisions",
     name: string,
     sqlType: string,
   ): void {
@@ -5650,6 +6386,28 @@ function authorized(request: Request, token: string | undefined): boolean {
   return Boolean(token) && request.headers.get("authorization") === `Bearer ${token}`;
 }
 
+function lineageDecisionMaxClockSkewMs(env: Env): number | undefined {
+  if (env.LINEAGE_DECISION_MAX_CLOCK_SKEW_MS === undefined) return 5_000;
+  const value = Number(env.LINEAGE_DECISION_MAX_CLOCK_SKEW_MS);
+  return Number.isSafeInteger(value) && value >= 0 && value <= 300_000
+    ? value
+    : undefined;
+}
+
+function lineageDecisionLifecycleAt(
+  head: {
+    status: "eligible" | "revoked";
+    lifecycle: LineageDecisionLifecycle;
+    appeal_deadline_at: number | null;
+  },
+  nowMs: number,
+): LineageDecisionLifecycle | "expired" {
+  return head.status === "revoked" && head.lifecycle === "appeal_open" &&
+      head.appeal_deadline_at !== null && nowMs > head.appeal_deadline_at
+    ? "expired"
+    : head.lifecycle;
+}
+
 async function checkpointWitnessSourceBucket(
   request: Request,
   secret: string,
@@ -5931,6 +6689,76 @@ function isReplayReason(value: string): value is ReplayReason {
     value === "high_value" ||
     value === "dispute" ||
     value === "marketplace";
+}
+
+function inventoryCheckpointRequestAssetsField(
+  value: unknown,
+  name: string,
+): InventoryCheckpointRequestAsset[] | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = (value as Record<string, unknown>)[name];
+  if (
+    !Array.isArray(raw) ||
+    raw.length === 0 ||
+    raw.length > MAX_INVENTORY_CHECKPOINT_ASSETS
+  ) {
+    return undefined;
+  }
+  const assets: InventoryCheckpointRequestAsset[] = [];
+  let previousAssetId = "";
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") return undefined;
+    const record = entry as Record<string, unknown>;
+    const assetId = record.asset_id;
+    const expectedCheckpointDigest = record.expected_checkpoint_digest;
+    const expectedVersion = record.expected_version;
+    if (
+      typeof assetId !== "string" ||
+      assetId.length === 0 ||
+      assetId.length > 4_096 ||
+      assetId <= previousAssetId ||
+      typeof expectedCheckpointDigest !== "string" ||
+      !/^[0-9a-f]{64}$/.test(expectedCheckpointDigest) ||
+      typeof expectedVersion !== "number" ||
+      !Number.isSafeInteger(expectedVersion) ||
+      expectedVersion < 0
+    ) {
+      return undefined;
+    }
+    previousAssetId = assetId;
+    assets.push({
+      asset_id: assetId,
+      expected_checkpoint_digest: expectedCheckpointDigest,
+      expected_version: expectedVersion,
+    });
+  }
+  return assets;
+}
+
+function inventoryCheckpointRequestDigest(
+  digest: Pick<AuditDigestAdapter, "hashString">,
+  input: {
+    mode: AuditMode;
+    unit: string;
+    checkpointDigest: string;
+    gameManifestDigest: string;
+    bundleHex: string;
+    assets: InventoryCheckpointRequestAsset[];
+  },
+): string {
+  return digest.hashString(JSON.stringify([
+    "converge-audit-inventory-checkpoint-request-v1",
+    input.mode,
+    input.unit,
+    input.checkpointDigest,
+    input.gameManifestDigest,
+    input.bundleHex,
+    input.assets.map((asset) => [
+      asset.asset_id,
+      asset.expected_checkpoint_digest,
+      asset.expected_version,
+    ]),
+  ]));
 }
 
 function normalizeVerifiedItemCreations(

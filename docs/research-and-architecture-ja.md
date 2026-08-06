@@ -173,9 +173,11 @@ CRDT本体へgame ruleを持ち込まない。
   byte/canonical/version/shape/text/proof/item、central replay artifact、公開PvP gate、open-world中央検証の
   trusted boundary/transparency publication/plan/seal/registration/inclusion/replayとmarketplace永続化の
   fail-closed条件、inventory headのeligible/proof/manifest/parent/epoch/owner-version条件。game audit
-  161 proof goals。加えて汎用audit policy/head/event-time/closure/ACK/atomic seal/
+  multi-asset checkpointのcanonical/shared-head/全member fail-closed条件を含む172 proof goals。加えて
+  汎用audit policy/head/event-time/closure/ACK/atomic seal/
   delivery authenticationとvote semilatticeの包含・精度・exact-next・late-event・
-  fail-closed/収束条件が39 goals、計200 goals。
+  evidence inbox hash-chain/bounded page、poll claim/deadline/backoff step・fail-closed/収束条件が
+  50 goals、quorum vote 8 goalsを含め計230 goals。
 - 限界: verifier は数学整数を使うため machine integer overflow を証明しない。暗号の
   collision resistance、signature unforgeability、game kernel 全体の determinism も
   現在の proof 外である。
@@ -363,9 +365,14 @@ result は表示上 provisional にできるが、資産や永続進行には接
 
 この方式は中央署名をなくすものではなく、高価な game simulation replay の件数を
 減らす方式である。indexed truncation/substitution、範囲内 non-inclusion、固定 roster の
-observer registration certificate、signing-store boundary、anchor checkpoint publication は実装したが、zone/epoch
-key の委任、動的 observer assignment、production durable store、checkpoint-head transport、local-first
-DB の pruning は未実装である。詳細は
+observer registration certificate、signing-store boundary、anchor checkpoint publication は実装した。
+local-first Node SQLite/IndexedDBにはACK済みprefix pruning、durable anchor、認証済み
+active/resolved evidence hold registry、署名済みhash-chain envelope、source別durable cursorのatomic apply、
+bounded single-page polling、source別durable poll job/lease/attempt fencing/指数backoff/restart回復、
+`expired`/`escalated`停止を追加した。外部arbiter署名付きlineage caseと時間制appealはWorkerへ
+接続済みだが、zone/epoch key の委任、動的 observer assignment、production durable store、checkpoint-head transport、
+evidence holdからcaseを自動起票する接続、
+階層Merkle pruningは未実装である。詳細は
 [不規則 encounter の選択的アンチチート](./open-world-audit-ja.md)を参照する。
 
 ## 面白さを損ねにくい制約
@@ -502,6 +509,8 @@ single-leaf SHA-256/Ed25519 envelopeは1,064 bytesで、pure MoonBit経路は署
 | wire gap page は全 envelope の authority/membership 再検証後にだけ commit する | transport/capability contract | authority/signature/membership tamper、件数上限、pagination、atomic rollback tests | in-memory transport は Tested、production network は Unmet |
 | wire payload は全syntax/budget条件を満たす場合だけadmitする | MoonBit + codec contract | 9 proof goals、round-trip/noncanonical/version/truncation/oversize/path/item/declared-length tests | Proven + Tested |
 | experimental SHA-256/Ed25519 adapterは標準vectorと一致する | adapter contract | SHA-256 `abc`、RFC 8032 empty-message、real-envelope round trip | Tested、audit/constant-timeはUnmet |
+| multi-asset inventory checkpointは全memberが同じparent/epochに属し、全origin/proof/head/version/lineage条件を通った場合だけ能力を発行する | aggregate admission + central verifier contract | 10条件exhaustive test、stale/revoked member test | Proven + Tested locally |
+| multi-asset inventory write-setは途中失敗や一件のCAS競合で部分commitしない | Cloudflare SQLite transaction contract | fault injection、stale/revoked member、idempotency test | Tested locally |
 | Queue配送だけではgame replay成功にならない | central replay artifact contract | anchor-onlyはawaiting、verifiedは5条件すべてを要求 | Proven + Tested |
 | PvE bundleは全署名eventとcheckpoint三root一致後だけverifiedになる | central replay/wire contract | canonical budget tests、real-crypto bridge、workerd Queue integration | Tested locally + remote benchmark |
 | PvP bundleは全署名event・checkpoint三root・`n-f` witness後だけverifiedになる | central replay/wire contract | canonical budget tests、real-crypto bridge、workerd Queue integration | Tested locally + remote benchmark |
@@ -544,8 +553,8 @@ discharge したことを意味する。暗号仮定、I/O、overflow、モデ�
    実装する。
 4. player-local論理DBに加え、storage-neutral seal write-setとNode 24 SQLite参照adapterを実装した。
    event/equivocation/checkpoint/head/closure/outbox/ACK履歴、atomic seal、revision CAS、restart、
-   ACK footprint検証を持つ。次はIndexedDB/mobile SQLite、proof/inventory node保存、複数assetを
-   同じcheckpointでatomicに進めるlocal-first transactionへ接続する。
+   ACK footprint検証を持つ。Cloudflare adapterでは複数assetを同じcheckpointでatomicに進める。
+   次はこのwrite-set contractをIndexedDB/mobile SQLiteとproof/inventory node保存へ接続する。
 5. checkpoint より古い log の pruning と disputed epoch の recovery 規則を定義する。
 6. 実測用experimental SHA-256/Ed25519 adapterは実装済み。監査済みproduction backend、
    key rotation、session manifestへのsuite bindingを実装する。

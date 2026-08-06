@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
+import { runPlayerLocalStorageConformance } from "../../player-local-runtime/conformance.node.ts";
+
 import {
   InjectedPlayerLocalSealFault,
   PlayerLocalSqliteStore,
@@ -289,3 +291,20 @@ test("detects an acknowledged outbox row whose ACK footprint was lost", async (t
     PlayerLocalStoreCorruptError,
   );
 });
+
+runPlayerLocalStorageConformance(
+  "Node SQLite",
+  async (t, outboxCapacity) => {
+    const directory = await mkdtemp(join(tmpdir(), "converge-player-local-suite-"));
+    t.after(async () => rm(directory, { recursive: true, force: true }));
+    const path = join(directory, "audit.sqlite");
+    const suiteConfiguration = {
+      ...configuration,
+      outbox_capacity: outboxCapacity,
+    };
+    return {
+      configuration: suiteConfiguration,
+      open: async () => PlayerLocalSqliteStore.open(path, suiteConfiguration),
+    };
+  },
+);

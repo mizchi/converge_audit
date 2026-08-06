@@ -41,6 +41,8 @@
   - 1:N、N:N、open-worldのSQLite-backed Durable Object実装とlocal workerd実測
 - [Node player-local SQLite adapter](../examples/node-audit-runtime/README.md)
   - event/equivocation、atomic seal、outbox/ACK、peer route lease、bounded HTTP fanout、fork隔離の端末参照実装
+- [Player-local host contract](../examples/player-local-runtime/README.md)
+  - Node/mobile SQLiteとIndexedDBで共有するDTO、validator、MoonBit write-set wrapper、conformance suite
 
 ## Source of truth
 
@@ -82,7 +84,7 @@ just check-node-audit-runtime
 2026-08-05 時点で、汎用checkpoint policy/head/event-time/closure/ACK/atomic seal/delivery
 authenticationとvote semilattice、およびcentral replay artifact、公開PvP gate、
 open-world transparency/中央検証、marketplace生成記録の永続化gateとcurrent-owner inventory
-head gate、cooldown/objective、raid clearを含む全proof obligationが成功している。
+head gate、multi-asset checkpoint gate、cooldown/objective、raid clearを含む全proof obligationが成功している。
 FNV/mockに加えて
 experimental SHA-256/Ed25519 adapterを実測するが、未監査なのでproduction securityの
 根拠にはしない。test総数は実行時の`moon test`出力をsource of truthとする。

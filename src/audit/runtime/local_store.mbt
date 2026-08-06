@@ -31,6 +31,80 @@ pub(all) struct PlayerLocalCheckpointOutboxRecord {
 } derive(Eq, Debug)
 
 ///|
+/// Durable checkpoint-chain boundary after detailed prefix evidence is pruned.
+pub(all) struct PlayerLocalRetentionAnchor {
+  boundary : AuditBoundary
+  epoch : Int
+  checkpoint_digest : @commitment.AuditDigest
+} derive(Eq, Debug)
+
+///|
+pub(all) enum PlayerLocalEvidenceHoldKind {
+  EvidenceHoldFork
+  EvidenceHoldChallenge
+  EvidenceHoldAppeal
+} derive(Eq, Debug)
+
+///|
+pub(all) enum PlayerLocalEvidenceHoldResolutionDecision {
+  EvidenceHoldUpheld
+  EvidenceHoldDismissed
+} derive(Eq, Debug)
+
+///|
+pub(all) enum PlayerLocalEvidenceHoldState {
+  EvidenceHoldActive
+  EvidenceHoldResolved(
+    PlayerLocalEvidenceHoldResolutionDecision,
+    @commitment.AuditDigest
+  )
+} derive(Eq, Debug)
+
+///|
+/// Durable authenticated reference that prevents evidence prefix pruning.
+pub(all) struct PlayerLocalEvidenceHold {
+  boundary : AuditBoundary
+  hold_id : String
+  epoch : Int
+  checkpoint_digest : @commitment.AuditDigest
+  kind : PlayerLocalEvidenceHoldKind
+  reference_digest : @commitment.AuditDigest
+  state : PlayerLocalEvidenceHoldState
+} derive(Eq, Debug)
+
+///|
+/// Last atomically applied message from one authenticated evidence source.
+pub(all) struct PlayerLocalEvidenceInboxCursor {
+  boundary : AuditBoundary
+  source_id : String
+  sequence : Int
+  message_digest : @commitment.AuditDigest
+} derive(Eq, Debug)
+
+///|
+pub(all) enum PlayerLocalEvidencePollJobState {
+  EvidencePollScheduled
+  EvidencePollInFlight(Int)
+  EvidencePollExpired(Int)
+  EvidencePollEscalated(Int, @commitment.AuditDigest)
+} derive(Eq, Debug)
+
+///|
+/// Logical durable scheduler row. `attempt_count` is the fencing token used
+/// by physical adapters when completing a claimed HTTP poll.
+pub(all) struct PlayerLocalEvidencePollJob {
+  boundary : AuditBoundary
+  source_id : String
+  endpoint : String
+  initial_message_digest : @commitment.AuditDigest
+  deadline_at_ms : Int
+  next_poll_at_ms : Int
+  failures : Int
+  attempt_count : Int
+  state : PlayerLocalEvidencePollJobState
+} derive(Eq, Debug)
+
+///|
 pub(all) enum PlayerLocalEventRefusal {
   LocalEventInvalidBoundary
   LocalEventBoundaryMismatch
@@ -40,6 +114,7 @@ pub(all) enum PlayerLocalEventRefusal {
   LocalEventMissingDigest
   LocalEventMissingCanonicalBytes
   LocalEventDigestCollision
+  LocalEventPrunedEpoch
 } derive(Eq, Debug)
 
 ///|
@@ -70,6 +145,10 @@ pub(all) struct PlayerLocalAuditImage {
   equivocations : Array[PlayerLocalEventEquivocation]
   checkpoints : Array[CheckpointSealDraft]
   head : CheckpointSealHead
+  retention_anchor : PlayerLocalRetentionAnchor
+  evidence_holds : Array[PlayerLocalEvidenceHold]
+  evidence_inbox_cursors : Array[PlayerLocalEvidenceInboxCursor]
+  evidence_poll_jobs : Array[PlayerLocalEvidencePollJob]
   consumed_closure_epochs : Array[Int]
   outbox : Array[PlayerLocalCheckpointOutboxRecord]
   ack_history : Array[CheckpointAckEvidence]
@@ -88,6 +167,10 @@ pub struct PlayerLocalAuditStore {
   equivocations_value : Array[PlayerLocalEventEquivocation]
   checkpoints_value : Array[CheckpointSealDraft]
   mut head_value : CheckpointSealHead
+  retention_anchor_value : PlayerLocalRetentionAnchor
+  evidence_holds_value : Array[PlayerLocalEvidenceHold]
+  evidence_inbox_cursors_value : Array[PlayerLocalEvidenceInboxCursor]
+  evidence_poll_jobs_value : Array[PlayerLocalEvidencePollJob]
   consumed_closure_epochs_value : Array[Int]
   outbox_value : Array[CheckpointOutboxEntry]
   ack_history_value : Array[CheckpointAckEvidence]
@@ -198,6 +281,14 @@ pub fn open_player_local_audit_store(
     equivocations_value: [],
     checkpoints_value: [],
     head_value: { boundary, epoch: -1, checkpoint_digest: genesis_digest },
+    retention_anchor_value: {
+      boundary,
+      epoch: -1,
+      checkpoint_digest: genesis_digest,
+    },
+    evidence_holds_value: [],
+    evidence_inbox_cursors_value: [],
+    evidence_poll_jobs_value: [],
     consumed_closure_epochs_value: [],
     outbox_value: [],
     ack_history_value: [],
@@ -214,6 +305,9 @@ pub fn PlayerLocalAuditStore::admit_event(
   match player_local_event_refusal(self.boundary_value, event) {
     Some(reason) => return LocalEventRefused(reason)
     None => ()
+  }
+  if event.epoch <= self.retention_anchor_value.epoch {
+    return LocalEventRefused(LocalEventPrunedEpoch)
   }
   let key = local_event_key(event.author_id, event.counter)
   for accepted in self.events_value {
@@ -483,6 +577,10 @@ pub fn PlayerLocalAuditStore::durable_image(
     equivocations: self.equivocations_value.copy(),
     checkpoints: self.checkpoints_value.copy(),
     head: self.head_value,
+    retention_anchor: self.retention_anchor_value,
+    evidence_holds: self.evidence_holds_value.copy(),
+    evidence_inbox_cursors: self.evidence_inbox_cursors_value.copy(),
+    evidence_poll_jobs: self.evidence_poll_jobs_value.copy(),
     consumed_closure_epochs: self.consumed_closure_epochs_value.copy(),
     outbox: self.outbox_value.map(fn(entry) { local_outbox_record(entry) }),
     ack_history: self.ack_history_value.copy(),
@@ -495,7 +593,8 @@ pub fn PlayerLocalAuditStore::durable_image(
 fn local_image_events_valid(image : PlayerLocalAuditImage) -> Bool {
   let accepted_by_key : Map[String, PlayerLocalAuditEvent] = Map([])
   for event in image.events {
-    if player_local_event_refusal(image.boundary, event) is Some(_) {
+    if player_local_event_refusal(image.boundary, event) is Some(_) ||
+      event.epoch <= image.retention_anchor.epoch {
       return false
     }
     let key = local_event_key(event.author_id, event.counter)
@@ -517,6 +616,7 @@ fn local_image_events_valid(image : PlayerLocalAuditImage) -> Bool {
           evidence.conflicting.author_id != accepted.author_id ||
           evidence.conflicting.counter != accepted.counter ||
           evidence.conflicting.event_digest == accepted.event_digest ||
+          evidence.conflicting.epoch <= image.retention_anchor.epoch ||
           player_local_event_refusal(image.boundary, evidence.conflicting)
           is Some(_) {
           return false
@@ -534,8 +634,8 @@ fn local_image_events_valid(image : PlayerLocalAuditImage) -> Bool {
 
 ///|
 fn local_image_checkpoint_chain_valid(image : PlayerLocalAuditImage) -> Bool {
-  let mut expected_epoch = 0
-  let mut expected_parent = image.genesis_digest
+  let mut expected_epoch = image.retention_anchor.epoch + 1
+  let mut expected_parent = image.retention_anchor.checkpoint_digest
   for checkpoint in image.checkpoints {
     if checkpoint.boundary != image.boundary ||
       checkpoint.epoch != expected_epoch ||
@@ -551,9 +651,9 @@ fn local_image_checkpoint_chain_valid(image : PlayerLocalAuditImage) -> Bool {
   if image.checkpoints.length() == 0 {
     image.head ==
     {
-      boundary: image.boundary,
-      epoch: -1,
-      checkpoint_digest: image.genesis_digest,
+      boundary: image.retention_anchor.boundary,
+      epoch: image.retention_anchor.epoch,
+      checkpoint_digest: image.retention_anchor.checkpoint_digest,
     }
   } else {
     let latest = image.checkpoints[image.checkpoints.length() - 1]
@@ -673,6 +773,96 @@ fn local_image_ack_history_valid(image : PlayerLocalAuditImage) -> Bool {
 }
 
 ///|
+fn local_image_evidence_holds_valid(image : PlayerLocalAuditImage) -> Bool {
+  let seen : Map[String, Bool] = Map([])
+  for hold in image.evidence_holds {
+    if !boundary_valid(hold.boundary) ||
+      hold.boundary != image.boundary ||
+      hold.hold_id == "" ||
+      hold.epoch < 0 ||
+      hold.checkpoint_digest.0 == "" ||
+      hold.reference_digest.0 == "" ||
+      seen.contains(hold.hold_id) {
+      return false
+    }
+    match checkpoint_for_epoch(image.checkpoints, hold.epoch) {
+      Some(checkpoint) =>
+        if checkpoint.checkpoint_digest != hold.checkpoint_digest {
+          return false
+        }
+      None => return false
+    }
+    match hold.state {
+      EvidenceHoldActive => ()
+      EvidenceHoldResolved(_, resolution_digest) =>
+        if resolution_digest.0 == "" {
+          return false
+        }
+    }
+    seen[hold.hold_id] = true
+  }
+  true
+}
+
+///|
+fn local_image_evidence_inbox_cursors_valid(
+  image : PlayerLocalAuditImage,
+) -> Bool {
+  let seen : Map[String, Bool] = Map([])
+  for cursor in image.evidence_inbox_cursors {
+    if !boundary_valid(cursor.boundary) ||
+      cursor.boundary != image.boundary ||
+      cursor.source_id == "" ||
+      cursor.sequence < 0 ||
+      cursor.message_digest.0 == "" ||
+      seen.contains(cursor.source_id) {
+      return false
+    }
+    seen[cursor.source_id] = true
+  }
+  true
+}
+
+///|
+fn local_image_evidence_poll_jobs_valid(image : PlayerLocalAuditImage) -> Bool {
+  let seen : Map[String, Bool] = Map([])
+  for job in image.evidence_poll_jobs {
+    if !boundary_valid(job.boundary) ||
+      job.boundary != image.boundary ||
+      job.source_id == "" ||
+      job.endpoint == "" ||
+      job.initial_message_digest.0 == "" ||
+      job.deadline_at_ms < 0 ||
+      job.next_poll_at_ms < 0 ||
+      job.next_poll_at_ms > job.deadline_at_ms ||
+      job.failures < 0 ||
+      job.attempt_count < 0 ||
+      seen.contains(job.source_id) {
+      return false
+    }
+    match job.state {
+      EvidencePollScheduled => ()
+      EvidencePollInFlight(lease_expires_at_ms) =>
+        if job.attempt_count == 0 ||
+          lease_expires_at_ms < 0 ||
+          lease_expires_at_ms > job.deadline_at_ms {
+          return false
+        }
+      EvidencePollExpired(expired_at_ms) =>
+        if expired_at_ms < job.deadline_at_ms {
+          return false
+        }
+      EvidencePollEscalated(escalated_at_ms, reason_digest) =>
+        if escalated_at_ms < 0 || reason_digest.0 == "" {
+          return false
+        }
+    }
+    seen[job.source_id] = true
+  }
+  true
+}
+
+///|
 pub fn restore_player_local_audit_store(
   image : PlayerLocalAuditImage,
 ) -> PlayerLocalAuditStoreOpenResult {
@@ -686,8 +876,19 @@ pub fn restore_player_local_audit_store(
     return PlayerLocalAuditStoreRefused(LocalStoreInvalidOutboxCapacity)
   }
   if image.storage_revision < 0 ||
+    image.retention_anchor.boundary != image.boundary ||
+    image.retention_anchor.epoch < -1 ||
+    image.retention_anchor.epoch > image.head.epoch ||
+    image.retention_anchor.checkpoint_digest.0 == "" ||
+    (
+      image.retention_anchor.epoch == -1 &&
+      image.retention_anchor.checkpoint_digest != image.genesis_digest
+    ) ||
     !local_image_events_valid(image) ||
     !local_image_checkpoint_chain_valid(image) ||
+    !local_image_evidence_holds_valid(image) ||
+    !local_image_evidence_inbox_cursors_valid(image) ||
+    !local_image_evidence_poll_jobs_valid(image) ||
     !local_image_outbox_valid(image) ||
     !local_image_ack_history_valid(image) {
     return PlayerLocalAuditStoreRefused(LocalStoreInvalidImage)
@@ -707,6 +908,10 @@ pub fn restore_player_local_audit_store(
     equivocations_value: image.equivocations.copy(),
     checkpoints_value: image.checkpoints.copy(),
     head_value: image.head,
+    retention_anchor_value: image.retention_anchor,
+    evidence_holds_value: image.evidence_holds.copy(),
+    evidence_inbox_cursors_value: image.evidence_inbox_cursors.copy(),
+    evidence_poll_jobs_value: image.evidence_poll_jobs.copy(),
     consumed_closure_epochs_value: image.consumed_closure_epochs.copy(),
     outbox_value: restored_outbox,
     ack_history_value: image.ack_history.copy(),

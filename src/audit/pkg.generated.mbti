@@ -8,6 +8,18 @@ import {
 // Values
 pub fn accepted_audit_event_time_is_not_late(Int, Int, Int) -> Unit
 
+pub fn accepted_evidence_hold_requires_authenticated_exact_binding(Bool, Bool, Bool) -> Unit
+
+pub fn accepted_evidence_hold_resolution_requires_every_guard(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn accepted_evidence_inbox_advance_requires_every_guard(Int, Int, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn accepted_evidence_inbox_page_requires_every_guard(Int, Int, Int, Int, Int, Int, Bool, Bool) -> Unit
+
+pub fn accepted_evidence_poll_claim_requires_due_available_lease(Int, Int, Int, Bool) -> Unit
+
+pub fn accepted_player_local_prune_requires_every_guard(Int, Int, Int, Bool, Bool) -> Unit
+
 pub fn advanced_checkpoint_head_requires_exact_extension(Bool, Bool, Bool, Int, Int, Bool) -> Unit
 
 pub fn authenticated_checkpoint_delivery_requires_every_trust_fact(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
@@ -34,11 +46,23 @@ pub fn event_leaves_per_macro_checkpoint(VerifiedCheckpointPolicy) -> Int
 
 pub fn event_leaves_per_micro_checkpoint(VerifiedCheckpointPolicy) -> Int
 
+pub fn evidence_inbox_sequence_gap_never_advances(Int, Int, Bool, Bool, Bool, Bool) -> Unit
+
 pub fn evidence_level_at_age(VerifiedCheckpointPolicy, Int) -> RetainedEvidenceLevel
+
+pub fn evidence_poll_backoff_step_never_decreases(Int, Int, Int) -> Unit
+
+pub fn evidence_poll_backoff_step_never_exceeds_cap(Int, Int, Int) -> Unit
+
+pub fn evidence_poll_claim_at_or_after_deadline_is_never_admitted(Int, Int, Int, Bool) -> Unit
 
 pub fn expired_evidence_has_no_localization_precision(Int, Int, Int, Int, Int, Int, Int) -> Unit
 
+pub fn expired_evidence_inbox_page_is_never_admitted(Int, Int, Int, Int, Int, Int, Bool, Bool) -> Unit
+
 pub fn finality_upper_bound_includes_full_macro_window(Int, Int, Int) -> Unit
+
+pub fn inactive_evidence_hold_is_never_resolved_again(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn invalid_audit_watermark_refuses_event_time(Int, Int, Int) -> Unit
 
@@ -56,7 +80,31 @@ pub fn non_success_ack_never_completes_outbox(Bool, Bool, Bool, Bool) -> Unit
 
 pub fn open_checkpoint_policy(CheckpointPolicy) -> CheckpointPolicyOpenResult
 
+pub fn oversized_evidence_inbox_byte_page_is_never_admitted(Int, Int, Int, Int, Int, Int, Bool, Bool) -> Unit
+
+pub fn oversized_evidence_inbox_message_page_is_never_admitted(Int, Int, Int, Int, Int, Int, Bool, Bool) -> Unit
+
+pub fn player_local_checkpoint_prunable(Int, Int, Int, Bool, Bool) -> Bool
+
+pub fn player_local_evidence_hold_admission_allowed(Bool, Bool, Bool) -> Bool
+
+pub fn player_local_evidence_hold_resolution_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn player_local_evidence_inbox_advance_allowed(Int, Int, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn player_local_evidence_inbox_page_allowed(Int, Int, Int, Int, Int, Int, Bool, Bool) -> Bool
+
+pub fn player_local_evidence_poll_backoff_delay(Int, Int, Int) -> Int
+
+pub fn player_local_evidence_poll_claim_allowed(Int, Int, Int, Bool) -> Bool
+
+pub fn player_local_evidence_poll_lease_expiry(Int, Int, Int) -> Int
+
+pub fn player_local_evidence_poll_next_retry_at(Int, Int, Int, Int, Int) -> Int
+
 pub fn prepared_atomic_seal_requires_every_binding(Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn protected_player_local_checkpoint_is_never_prunable(Int, Int, Int, Bool) -> Unit
 
 pub fn ready_epoch_closure_requires_all_trust_facts(Bool, Bool, Bool) -> Unit
 
@@ -69,6 +117,14 @@ pub fn runtime_checkpoint_ack_completion_allowed(Bool, Bool, Bool, Bool, Bool, B
 pub fn runtime_checkpoint_delivery_authentication_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
 
 pub fn runtime_epoch_closure_facts_valid(Bool, Bool, Bool) -> Bool
+
+pub fn unacknowledged_player_local_checkpoint_is_never_prunable(Int, Int, Int, Bool) -> Unit
+
+pub fn unauthenticated_evidence_hold_is_never_admitted(Bool, Bool) -> Unit
+
+pub fn unauthenticated_evidence_hold_resolution_is_never_allowed(Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn unauthenticated_evidence_inbox_message_never_advances(Int, Int, Bool, Bool, Bool) -> Unit
 
 pub fn unavailable_capacity_never_prepares_atomic_seal(Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 

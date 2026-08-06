@@ -241,6 +241,17 @@ appeal window までは witness が transcript を再提供できる必要があ
 ではなく、checkpoint、certificate、必要な Merkle path、現在資産から辿れる ancestry に
 縮約する。
 
+現在のplayer-local Node SQLite/IndexedDBは、認証済みfork/challenge/appeal参照を
+`active`/`resolved`のdurable evidence holdとしてcheckpointへ束縛する。active holdは
+prune requestの指定漏れに関係なく連続prefixを停止し、認証済みのexact-match resolution後も
+対応checkpointを削除するまでは解決証跡を残す。署名済みcanonical envelopeからregistryへ接続する
+交換可能なauthenticator、source別sequence/previous digestのhash chain、hold mutationとdurable cursorの
+atomic apply、件数/byte/timeout/受信deadline付きsingle-page pollingも実装済みである。さらに
+source別durable poll job、期限付きlease、attempt fencing、指数backoff、restart回復、
+`expired`/`escalated`停止をNode SQLite/IndexedDB共通contractへ追加した。取得jobの終端状態はactive holdを
+解決しない。open-world lineageは外部arbiter署名、時間制appeal、ancestor別revision/historyをWorkerへ
+接続済みである。active holdからの自動case起票、device credentialを配布sourceへ接続する部分は未実装である。
+
 ## 先行研究との対応
 
 - [PeerReview](https://haeberlen.cis.upenn.edu/papers/peerreview-tr.pdf) の

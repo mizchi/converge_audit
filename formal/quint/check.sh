@@ -7,6 +7,8 @@ quint typecheck formal/quint/WitnessQuorum.qnt
 quint typecheck formal/quint/WitnessQuorumModels.qnt
 quint typecheck formal/quint/AssetOwnership.qnt
 quint typecheck formal/quint/AssetOwnershipModels.qnt
+quint typecheck formal/quint/LineageAppeal.qnt
+quint typecheck formal/quint/LineageAppealModels.qnt
 
 quint verify formal/quint/CheckpointDeliveryModels.qnt \
   --backend=tlc \
@@ -77,4 +79,18 @@ quint verify formal/quint/AssetOwnershipModels.qnt \
     activeListingRequiresCleanLineage \
     verifiedAncestorsRespectRetentionBoundary \
     registeredSliceRequiresExactBoundary \
+  --verbosity=1
+
+quint verify formal/quint/LineageAppealModels.qnt \
+  --backend=tlc \
+  --main=lineageAppealSafety \
+  --invariants \
+    typeOk \
+    lineageFlagMatchesIndependentHeads \
+    lifecycleMatchesStatus \
+    acceptedDecisionsAreAuthenticated \
+    acceptedCertificatesWereTimely \
+    decisionRevisionMatchesHistory \
+    finalizedAppealHasExactTarget \
+    finalizedAppealHadOpenWindow \
   --verbosity=1

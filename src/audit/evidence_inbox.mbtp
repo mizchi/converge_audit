@@ -1,0 +1,105 @@
+///|
+predicate evidence_inbox_advance_post(
+  current_sequence : Int,
+  next_sequence : Int,
+  previous_digest_matches : Bool,
+  message_digest_advances : Bool,
+  authentication_succeeded : Bool,
+  operation_allowed : Bool,
+  result : Bool,
+) {
+  if current_sequence >= -1 {
+    if next_sequence == current_sequence + 1 {
+      if previous_digest_matches {
+        if message_digest_advances {
+          if authentication_succeeded {
+            if operation_allowed {
+              result == true
+            } else {
+              result == false
+            }
+          } else {
+            result == false
+          }
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_inbox_advance_requires_every_guard(
+  current_sequence : Int,
+  next_sequence : Int,
+  previous_digest_matches : Bool,
+  message_digest_advances : Bool,
+  authentication_succeeded : Bool,
+  operation_allowed : Bool,
+) where {
+  proof_require: evidence_inbox_advance_post(
+    current_sequence,
+    next_sequence,
+    previous_digest_matches,
+    message_digest_advances,
+    authentication_succeeded,
+    operation_allowed,
+    true,
+  ),
+  proof_ensure: current_sequence >= -1,
+  proof_ensure: next_sequence == current_sequence + 1,
+  proof_ensure: previous_digest_matches == true,
+  proof_ensure: message_digest_advances == true,
+  proof_ensure: authentication_succeeded == true,
+  proof_ensure: operation_allowed == true,
+} {
+}
+
+///|
+pub lemma evidence_inbox_sequence_gap_never_advances(
+  current_sequence : Int,
+  next_sequence : Int,
+  previous_digest_matches : Bool,
+  message_digest_advances : Bool,
+  authentication_succeeded : Bool,
+  operation_allowed : Bool,
+) where {
+  proof_require: next_sequence != current_sequence + 1,
+  proof_ensure: evidence_inbox_advance_post(
+    current_sequence,
+    next_sequence,
+    previous_digest_matches,
+    message_digest_advances,
+    authentication_succeeded,
+    operation_allowed,
+    false,
+  ),
+} {
+}
+
+///|
+pub lemma unauthenticated_evidence_inbox_message_never_advances(
+  current_sequence : Int,
+  next_sequence : Int,
+  previous_digest_matches : Bool,
+  message_digest_advances : Bool,
+  operation_allowed : Bool,
+) where {
+  proof_ensure: evidence_inbox_advance_post(
+    current_sequence,
+    next_sequence,
+    previous_digest_matches,
+    message_digest_advances,
+    false,
+    operation_allowed,
+    false,
+  ),
+} {
+}

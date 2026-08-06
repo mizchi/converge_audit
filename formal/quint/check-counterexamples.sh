@@ -12,7 +12,7 @@ check_expected_failure() {
     --backend=tlc \
     --main="$main" \
     "--$property_kind=$property" \
-    --verbosity=1 >"$log_file" 2>&1; then
+    --verbosity=2 >"$log_file" 2>&1; then
     echo "expected Quint/TLC to reject $main::$property" >&2
     return 1
   fi
@@ -33,6 +33,8 @@ quint typecheck formal/quint/WitnessQuorum.qnt
 quint typecheck formal/quint/WitnessQuorumModels.qnt
 quint typecheck formal/quint/AssetOwnership.qnt
 quint typecheck formal/quint/AssetOwnershipModels.qnt
+quint typecheck formal/quint/LineageAppeal.qnt
+quint typecheck formal/quint/LineageAppealModels.qnt
 
 audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
@@ -115,3 +117,33 @@ check_expected_failure \
   invariant \
   registeredSliceRequiresExactBoundary \
   "$audit_quint_tmp/asset-lineage-parent.log"
+check_expected_failure \
+  formal/quint/LineageAppealModels.qnt \
+  lineageAppealBrokenAuthentication \
+  invariant \
+  acceptedDecisionsAreAuthenticated \
+  "$audit_quint_tmp/lineage-appeal-authentication.log"
+check_expected_failure \
+  formal/quint/LineageAppealModels.qnt \
+  lineageAppealBrokenCertificateTime \
+  invariant \
+  acceptedCertificatesWereTimely \
+  "$audit_quint_tmp/lineage-appeal-certificate-time.log"
+check_expected_failure \
+  formal/quint/LineageAppealModels.qnt \
+  lineageAppealBrokenRevision \
+  invariant \
+  decisionRevisionMatchesHistory \
+  "$audit_quint_tmp/lineage-appeal-revision.log"
+check_expected_failure \
+  formal/quint/LineageAppealModels.qnt \
+  lineageAppealBrokenTarget \
+  invariant \
+  finalizedAppealHasExactTarget \
+  "$audit_quint_tmp/lineage-appeal-target.log"
+check_expected_failure \
+  formal/quint/LineageAppealModels.qnt \
+  lineageAppealBrokenDeadline \
+  invariant \
+  finalizedAppealHadOpenWindow \
+  "$audit_quint_tmp/lineage-appeal-deadline.log"

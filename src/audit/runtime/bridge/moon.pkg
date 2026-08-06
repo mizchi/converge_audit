@@ -12,6 +12,14 @@ options(
     "js": {
       "exports": [
         "audit_classify_checkpoint_head",
+        "audit_player_local_checkpoint_prunable",
+        "audit_player_local_evidence_hold_admission_allowed",
+        "audit_player_local_evidence_hold_resolution_allowed",
+        "audit_player_local_evidence_inbox_advance_allowed",
+        "audit_player_local_evidence_inbox_page_allowed",
+        "audit_player_local_evidence_poll_claim_allowed",
+        "audit_player_local_evidence_poll_lease_expiry",
+        "audit_player_local_evidence_poll_next_retry_at",
         "audit_open_checkpoint_closure",
         "audit_prepare_atomic_checkpoint_seal",
         "audit_acknowledge_checkpoint_outbox",
@@ -24,6 +32,14 @@ options(
     "wasm-gc": {
       "exports": [
         "audit_classify_checkpoint_head",
+        "audit_player_local_checkpoint_prunable",
+        "audit_player_local_evidence_hold_admission_allowed",
+        "audit_player_local_evidence_hold_resolution_allowed",
+        "audit_player_local_evidence_inbox_advance_allowed",
+        "audit_player_local_evidence_inbox_page_allowed",
+        "audit_player_local_evidence_poll_claim_allowed",
+        "audit_player_local_evidence_poll_lease_expiry",
+        "audit_player_local_evidence_poll_next_retry_at",
         "audit_open_checkpoint_closure",
         "audit_prepare_atomic_checkpoint_seal",
         "audit_acknowledge_checkpoint_outbox",

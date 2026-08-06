@@ -27,6 +27,9 @@
     "bench:local": "tsx scripts/bench.ts",
     "bench:witness": "tsx scripts/bench-witness.ts",
     "bench:lineage": "tsx scripts/bench-lineage.ts",
+    "bench:inventory-checkpoint": "vitest run --config vitest.bench.config.ts --disableConsoleIntercept",
+    "bench:player-local-indexeddb": "node scripts/bench-player-local-indexeddb.ts",
+    "bench:player-local-indexeddb:browser": "playwright test --config playwright.bench.config.ts",
     "witness": "tsx scripts/witness-client.ts"
   },
   "devDependencies": {
@@ -37,6 +40,7 @@
     "@mizchi/vlmkit-plan": "0.9.1",
     "@playwright/test": "1.62.1",
     "@types/node": "24.13.3",
+    "fake-indexeddb": "6.2.4",
     "playwright": "1.62.1",
     "tsx": "4.20.6",
     "typescript": "5.9.3",

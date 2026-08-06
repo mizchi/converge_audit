@@ -18,6 +18,9 @@
 | `AssetOwnership.qnt` | asset owner head、二重署名transfer、listing/cancel、revocation/appealの状態機械とproperty |
 | `AssetOwnershipModels.qnt` | 正常構成とrecipient/version/listing/revocation gateを外したRed構成 |
 | `AssetOwnershipTests.qnt` | transfer、listing、cancel、祖先revoke、appeal、fresh nonce再出品の実行可能scenario |
+| `LineageAppeal.qnt` | 外部arbiter decision、revision、時間制appeal、finalized/expiredの状態機械とproperty |
+| `LineageAppealModels.qnt` | 正常構成と認証/time/revision/target/deadlineを外したRed構成 |
+| `LineageAppealTests.qnt` | provisional revoke、期限切れ、exact target、独立revoke、duplicateのscenario |
 | `src/x/game_audit/quint_asset_driver` | `quint_connect`でAssetOwnershipのrandom ITF traceをMoonBit pure policyへ射影するadapter |
 | `ConfigContracts.qnt` | 許可しない定数構成 |
 | `check*.sh` | scenario、正常検証、Red反例、設定契約をCIへ接続するscript |
@@ -40,6 +43,9 @@ asset ownershipを読む場合は、`ownerVersion`をassetごとの単調なhead
 正当なtransfer後に新ownerが行う出品はどちらも許可する。
 `revokedAncestors`はoriginをversion 0、transfer結果をversion 1以降として抽象化した未解決集合である。
 `Quarantined`は後発revokeによるsystem側の停止であり、appealで`lineageClean`へ戻っても旧nonceは再利用しない。
+`LineageAppeal.qnt`ではcertificateの`expires`を署名付き命令の受理可否、`appealDeadline`を保存済み
+revokeの上書き可否として分離する。`Expired`はassetの自動restoreではなく、`Revoked`のまま期限が
+終わったcaseである。
 
 ## Quintの定義種別
 

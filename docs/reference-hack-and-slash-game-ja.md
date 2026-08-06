@@ -29,7 +29,9 @@ Vampire Survivors風の移動と自動攻撃、FF14風の予兆回避、Diablo�
 
 verification receiptはデバッグUIで偽装せず、browserからWorkerへsealed segmentを送り、authorityが
 同じkernelをreplayした結果だけを適用する。現在は30 eventごとのmicro checkpoint、sealed leaf retention、
-IndexedDBへのcheckpoint単位の永続化、authority item replay、receiptのSQLite永続化まで実装済みである。
+IndexedDBへのcheckpoint単位snapshotに加え、MoonBitが生成したstorage-neutral write-setを
+checkpoint/head/closure/outbox/ACK relationへatomicに保存し、reload時に全imageを検査する経路、
+authority item replay、receiptのSQLite永続化まで実装済みである。
 run固有owner keyのgenesis束縛、二者署名transfer、current-owner署名済みreference market listing POST、
 owner署名済みlisting cancelも接続済みである。実際のpeer witnessと売買UI、価格精算は次段階である。
 
@@ -83,6 +85,46 @@ provisionalであり、監査不成立なら最後のACK地点までinventory li
 
 IndexedDBは端末故障や改造clientに対する信頼根拠ではない。ここで保証するのはローカルcrash時の一貫した
 復帰点であり、正当性は後続のpeer witnessまたはauthority replayで判定する。
+
+### player-local IndexedDB baseline（2026-08-06）
+
+Chromium上で128 epochを順にsealしてACKし、120 epochのappeal windowを残してprefixをpruneした後、
+DBを閉じて再openした。各sealはcheckpoint、head、closure、
+outbox、storage revisionを一つのstrict-durability transactionへ保存し、ACKは証跡を残して配送容量だけを
+解放する。結果は次のとおりだった。
+
+| 計測 | Chromium実測 |
+| --- | ---: |
+| 初回open | 4.4 ms |
+| seal mean / p95 / p99 / max | 1.85 / 3.3 / 7.9 / 8.4 ms |
+| ACK mean / p95 / p99 / max | 1.28 / 2.3 / 2.5 / 13.5 ms |
+| 8 epochのatomic prune | 10.4 ms |
+| prune後のreload + 全image検証 | 2.2 ms |
+| 16-message evidence page / 1 message | 85.3 / 5.33 ms |
+| evidence page JSON size | 13,648 bytes（約853 bytes/message） |
+| 復元結果 | checkpoint 120 / ACK 120 / tombstone 120 / anchor 7 / head 127 |
+| logical JSON image size | 161,528 → 151,571 bytes |
+
+`pnpm bench:player-local-indexeddb:browser`で再現する。これはローカルChromium、単一run、小さいcanonical
+envelopeによるbaselineであり、物理origin使用量、端末fsync、低速端末、長期retentionのSLAではない。
+evidence page値はnetwork RTTと署名生成を含まず、stream decode、16 Ed25519 verify、16 hold/cursor
+transactionsを含む。render loopではなくbackground監査用の値として扱う。
+Node上の`fake-indexeddb`でも同じ128 epochを実行し、seal mean 1.60 ms、p95 2.90 ms、
+prune 3.19 ms、reload 1.97 msを
+確認したが、これはengine-independentな回帰試験用の参考値として分離して扱う。
+
+game snapshot/journalと上記の汎用relationは現在別transactionである。汎用transaction内の
+checkpoint/head/closure/outbox/ACKはatomicだが、端末電源断を跨ぐgame snapshotとの一括commitはまだ
+保証しない。汎用relationはauthority ACKのたびにPvE presetの120秒を残してpruneするが、game固有snapshotは
+まだ全checkpointを保持する。汎用DBにはactive/resolved evidence hold registryと認証gateがあるため、
+active holdはprune requestの`protected_epochs`が空でも保持される。reference gameには外部challenge/
+appealの署名済みhash-chain envelopeを検証し、holdとsource別cursorをatomicに保存するruntime API、
+件数/byte/timeout/受信deadline付きsingle-page pollerに加え、source別durable schedule、lease、
+attempt fencing、指数backoff、restart回復、`expired`/`escalated`停止まである。取得jobが終端になっても
+active holdは維持する。外部arbiter署名付きlineage case、時間制appeal、restart可能なdecision
+history/finalityはWorkerへ接続済みだが、active holdからcaseを自動起票する経路はまだない。
+またauthority HTTP応答の真正性はsame-origin Worker境界に依存しており、productionでは署名済み
+ACKまたは認証済みchannel capabilityへ置き換える。
 
 ### 実装済みのauthority item replay
 
@@ -182,9 +224,11 @@ canonical化する。DOはactive listingと現在owner headの両方を完全一
 TLCで全到達状態検査する。暗号、HTTP decode、SQLite migrationは実装testの境界に残す。
 
 このreference endpointはorigin receiptから始まる単調増加owner headのcurrent ownerを扱う。initial ownerの
-version 0だけでなく、二者署名transfer後のownerも出品でき、旧ownerの署名は拒否される。売買成立、価格、
-複数itemのatomic exchangeはまだ扱わない。将来は既存open-world `market-listing`の署名済みinventory headへ
-接続する。reference checkpoint/item receiptはこのゲーム固有のauthority replay結果であり、汎用peer witness
+version 0だけでなく、二者署名transfer後のownerも出品でき、旧ownerの署名は拒否される。汎用open-world層には
+複数itemのinventory checkpointを1 transactionで進める機構がある。ただし、このreference gameの売買成立、
+価格、trade/craft APIはまだatomic exchangeへ接続していない。交換では両者の署名済みintentと両assetの旧headを
+同じcanonical write-setへ拘束してから、汎用multi-asset endpointへ渡す必要がある。reference checkpoint/item
+receiptはこのゲーム固有のauthority replay結果であり、汎用peer witness
 quorumの代用ではない。owner keyは自己主権run identityを証明するが、`seller_id`を課金accountや現実の人物へ
 結び付けるものではない。reference実装はexport可能seedをIndexedDBへ置き、未監査の`experimental_crypto`を使う。
 productionでは認証済みaccountへの鍵登録、OS keystoreのnon-exportable key、鍵回復・rotation・失効を別途実装する。

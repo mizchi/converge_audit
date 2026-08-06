@@ -80,6 +80,82 @@ test "lineage decisions require an exact monotonic ancestor head" {
 }
 
 ///|
+test "external lineage certificates require authentication time and appeal binding" {
+  assert_true(
+    asset_lineage_certificate_allowed(
+      certificate_authenticated=true,
+      arbiter_known=true,
+      lineage_bound=true,
+      certificate_time_valid=true,
+      lifecycle_valid=true,
+      is_appeal=false,
+      appeal_target_matches=false,
+      appeal_window_open=false,
+    ),
+  )
+  assert_false(
+    asset_lineage_certificate_allowed(
+      certificate_authenticated=false,
+      arbiter_known=true,
+      lineage_bound=true,
+      certificate_time_valid=true,
+      lifecycle_valid=true,
+      is_appeal=false,
+      appeal_target_matches=true,
+      appeal_window_open=true,
+    ),
+  )
+  assert_false(
+    asset_lineage_certificate_allowed(
+      certificate_authenticated=true,
+      arbiter_known=true,
+      lineage_bound=true,
+      certificate_time_valid=false,
+      lifecycle_valid=true,
+      is_appeal=false,
+      appeal_target_matches=true,
+      appeal_window_open=true,
+    ),
+  )
+  assert_true(
+    asset_lineage_certificate_allowed(
+      certificate_authenticated=true,
+      arbiter_known=true,
+      lineage_bound=true,
+      certificate_time_valid=true,
+      lifecycle_valid=true,
+      is_appeal=true,
+      appeal_target_matches=true,
+      appeal_window_open=true,
+    ),
+  )
+  assert_false(
+    asset_lineage_certificate_allowed(
+      certificate_authenticated=true,
+      arbiter_known=true,
+      lineage_bound=true,
+      certificate_time_valid=true,
+      lifecycle_valid=true,
+      is_appeal=true,
+      appeal_target_matches=false,
+      appeal_window_open=true,
+    ),
+  )
+  assert_false(
+    asset_lineage_certificate_allowed(
+      certificate_authenticated=true,
+      arbiter_known=true,
+      lineage_bound=true,
+      certificate_time_valid=true,
+      lifecycle_valid=true,
+      is_appeal=true,
+      appeal_target_matches=true,
+      appeal_window_open=false,
+    ),
+  )
+}
+
+///|
 test "bounded lineage admission requires every retention and authentication boundary" {
   for mask in 0..<128 {
     let has_transfers = (mask & 1) != 0

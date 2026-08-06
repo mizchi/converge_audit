@@ -1,0 +1,112 @@
+///|
+predicate evidence_poll_claim_post(
+  now_ms : Int,
+  deadline_at_ms : Int,
+  next_poll_at_ms : Int,
+  lease_available : Bool,
+  result : Bool,
+) {
+  if now_ms >= 0 {
+    if deadline_at_ms > now_ms {
+      if next_poll_at_ms <= now_ms {
+        if lease_available {
+          result == true
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_poll_claim_requires_due_available_lease(
+  now_ms : Int,
+  deadline_at_ms : Int,
+  next_poll_at_ms : Int,
+  lease_available : Bool,
+) where {
+  proof_require: evidence_poll_claim_post(
+    now_ms,
+    deadline_at_ms,
+    next_poll_at_ms,
+    lease_available,
+    true,
+  ),
+  proof_ensure: now_ms >= 0,
+  proof_ensure: deadline_at_ms > now_ms,
+  proof_ensure: next_poll_at_ms <= now_ms,
+  proof_ensure: lease_available == true,
+} {
+}
+
+///|
+pub lemma evidence_poll_claim_at_or_after_deadline_is_never_admitted(
+  now_ms : Int,
+  deadline_at_ms : Int,
+  next_poll_at_ms : Int,
+  lease_available : Bool,
+) where {
+  proof_require: now_ms >= deadline_at_ms,
+  proof_ensure: evidence_poll_claim_post(
+    now_ms,
+    deadline_at_ms,
+    next_poll_at_ms,
+    lease_available,
+    false,
+  ),
+} {
+}
+
+///|
+predicate evidence_poll_backoff_step_post(
+  current_delay_ms : Int,
+  max_backoff_ms : Int,
+  next_delay_ms : Int,
+) {
+  if current_delay_ms > max_backoff_ms / 2 {
+    next_delay_ms == max_backoff_ms
+  } else {
+    next_delay_ms == current_delay_ms * 2
+  }
+}
+
+///|
+pub lemma evidence_poll_backoff_step_never_decreases(
+  current_delay_ms : Int,
+  max_backoff_ms : Int,
+  next_delay_ms : Int,
+) where {
+  proof_require: current_delay_ms > 0,
+  proof_require: current_delay_ms <= max_backoff_ms,
+  proof_require: evidence_poll_backoff_step_post(
+    current_delay_ms,
+    max_backoff_ms,
+    next_delay_ms,
+  ),
+  proof_ensure: next_delay_ms >= current_delay_ms,
+} {
+}
+
+///|
+pub lemma evidence_poll_backoff_step_never_exceeds_cap(
+  current_delay_ms : Int,
+  max_backoff_ms : Int,
+  next_delay_ms : Int,
+) where {
+  proof_require: current_delay_ms > 0,
+  proof_require: current_delay_ms <= max_backoff_ms,
+  proof_require: evidence_poll_backoff_step_post(
+    current_delay_ms,
+    max_backoff_ms,
+    next_delay_ms,
+  ),
+  proof_ensure: next_delay_ms <= max_backoff_ms,
+} {
+}

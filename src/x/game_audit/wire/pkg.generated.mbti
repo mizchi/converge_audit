@@ -14,6 +14,8 @@ import {
 }
 
 // Values
+pub fn decode_inventory_checkpoint_proof_bundle(Bytes, limits~ : InventoryCheckpointWireLimits) -> Result[InventoryCheckpointProofBundle, InventoryCheckpointWireError]
+
 pub fn decode_inventory_lineage_proof_bundle(Bytes, limits~ : InventoryLineageWireLimits) -> Result[InventoryLineageProofBundle, InventoryLineageWireError]
 
 pub fn decode_inventory_listing_proof_bundle(Bytes, limits~ : InventoryListingWireLimits) -> Result[InventoryListingProofBundle, InventoryListingWireError]
@@ -29,6 +31,8 @@ pub fn decode_open_world_pve_replay_bundle(Bytes, limits~ : OpenWorldPveReplayWi
 pub fn decode_pve_replay_bundle(Bytes, limits~ : PveReplayWireLimits) -> Result[PveReplayBundle, PveReplayWireError]
 
 pub fn decode_pvp_replay_bundle(Bytes, limits~ : PvpReplayWireLimits) -> Result[PvpReplayBundle, PvpReplayWireError]
+
+pub fn encode_inventory_checkpoint_proof_bundle(InventoryCheckpointProofBundle) -> Bytes
 
 pub fn encode_inventory_lineage_proof_bundle(InventoryLineageProofBundle) -> Bytes
 
@@ -89,6 +93,38 @@ pub suberror PveReplayWireError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) struct InventoryCheckpointProofBundle {
+  signed_checkpoint : @checkpoint.SignedCheckpoint
+  game_manifest_digest : @converge_audit.Digest
+  witnesses : Array[@witness_manifest.ReplayWitnessIdentity]
+  max_faults : Int
+  attestations : Array[@attestation.SignedAttestation]
+  proofs : Array[@inventory.InventoryProof]
+} derive(Eq, @debug.Debug)
+
+pub(all) enum InventoryCheckpointWireError {
+  InventoryCheckpointWireInputTooLarge(Int, Int)
+  InventoryCheckpointWireWitnessesTooMany(Int, Int)
+  InventoryCheckpointWireAttestationsTooMany(Int, Int)
+  InventoryCheckpointWireMissingProofs
+  InventoryCheckpointWireProofsTooMany(Int, Int)
+  InventoryCheckpointWireNonCanonicalAssets(Int)
+  InventoryCheckpointWireUnsupportedVersion(Int)
+  InventoryCheckpointWireNonCanonicalEncoding
+  InventoryCheckpointWireMalformedCbor
+  InventoryCheckpointWireCodecRefused(OpenWorldAuditWireError)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct InventoryCheckpointWireLimits {
+  max_bundle_bytes : Int
+  max_text_bytes : Int
+  max_witnesses : Int
+  max_attestations : Int
+  max_proofs : Int
+  max_proof_steps : Int
+} derive(Eq, @debug.Debug)
+pub fn InventoryCheckpointWireLimits::default() -> Self
+
 pub(all) struct InventoryLineageProofBundle {
   listing : InventoryListingProofBundle
   lineage : @inventory.AssetLineageSlice

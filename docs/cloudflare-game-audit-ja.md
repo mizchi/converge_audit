@@ -117,8 +117,10 @@ Queue jobが持つsigning-anchor head/fork digestだけでは、この条件を�
 central replay成功、summary正規化、checkpoint一致、DB衝突なしの5条件を要求する。
 inventory head更新はeligible creation、proof成功、manifest一致、exact parent、epoch前進、
 owner/version整合の6条件を要求し、wrong-parentとversion rollbackを拒否する。
-game-audit packageで161 proof goals、汎用audit policy/head/event-time/closure/ACK/atomic seal/
-delivery authenticationとvote semilatticeで39 goals、計200 goalsが成功している。Workerは汎用headを含むMoonBit分類器を直接呼ぶため、Queue配送成功を
+multi-asset checkpointはさらにasset非空・件数上限・canonical順・共有parent/epoch・全creation/lineage/
+proof/head条件の10条件を要求する。game-audit packageで172 proof goals、汎用audit
+policy/head/event-time/closure/ACK/atomic seal/delivery authentication/evidence inbox/poll scheduleで50 goals、
+vote semilatticeで8 goals、計230 goalsが成功している。Workerは汎用headを含むMoonBit分類器を直接呼ぶため、Queue配送成功を
 ゲーム結果の検証成功へ昇格させない。
 
 三modeでversioned canonical CBOR bundleを`replay_artifacts`へ保存する経路を実装した。PvE bundleは
@@ -145,10 +147,21 @@ survivorだけに決定論的loot kernelを適用し、`ItemReceipt`のMerkle ro
 exact childだけをtransactionで受理する。wrong parent、epoch/version rollback、古いowner、revoked状態は
 fail-closedになる。proof省略時も、最後に保存したcurrent ownerだけを許可する。
 
-reference PvEの`POST /v1/pve/:unit/game-asset-lineage-decisions`は管理tokenを要求し、origin receiptまたは
-受理済みtransfer IDへrevision付きの`revoked` / `eligible` decisionを適用する。decision historyと
+複数assetは`POST /v1/open/:unit/inventory-checkpoints`へ、asset IDで昇順にした1〜64件の
+`(asset_id, expected_checkpoint_digest, expected_version)`と、共有checkpoint/witness certificateを持つ
+canonical bundleを送る。MoonBit verifierは全originとauthenticated-map proofを検証し、旧CAS前提と
+次recordをdomain-separated write-set digestへ拘束する。DOは検証後もtransaction内で全headと未解決
+revocationを再読込し、全asset head/historyとbatch idempotency rowを一括更新する。途中fault、一件の
+stale/revoked member、同じidempotency keyで異なるpayloadは部分更新を残さない。同じkey/payloadの再送は
+保存済み結果を`duplicate`として返す。
+
+reference PvEの`POST /v1/pve/:unit/game-asset-lineage-decisions`は管理tokenに加え、環境provisionした
+外部arbiter rosterの署名certificateを要求し、origin receiptまたは受理済みtransfer IDへrevision付きの
+`revoked` / `eligible` decisionを適用する。decision historyと
 ancestor headはSQLiteへ残り、未解決revocationは`(asset_id, status)` indexで判定する。revokeとactive
-listingの`quarantined`化は同じtransactionで行い、appeal後も旧nonceは復活させない。
+listingの`quarantined`化は同じtransactionで行い、appeal後も旧nonceは復活させない。provisional
+revokeは`appeal_open`とdeadlineを保存し、eligible appealは直前decision ID、次revision、期限内、
+finalized時刻の全一致を要求する。期限切れは自動restoreせず`expired`としてfail-closedを維持する。
 
 汎用側ではまず`POST /v1/open/:unit/asset-lineage-proofs`が、authority署名owner-key binding、
 sender/recipient二重署名、exact parent/version、累積`lineage_root`、current checkpoint membershipを
@@ -156,7 +169,8 @@ sender/recipient二重署名、exact parent/version、累積`lineage_root`、cur
 DOは検証済みtransferを資産ごと最大256件、最新retention anchorを1件、冪等proof digestを1件ずつ
 SQLite transactionで保存する。上限到達時は暗黙にpruneせずfail-closedにする。
 
-`POST /v1/open/:unit/asset-lineage-decisions`は管理tokenとancestor単位のrevision CASを使う。
+`POST /v1/open/:unit/asset-lineage-decisions`も同じ署名certificate、時間制appeal、ancestor単位の
+revision CASを使う。
 verified originは`ancestor_id = asset_id`、登録済み中間transferは`source_event`、現在owner headは
 `ancestor_id = inventory checkpoint digest`で
 指定する。未解決decisionは`verified_item_creations.lineage_status`へ集約し、1件でもあればproof省略の
@@ -180,6 +194,21 @@ local generated-JS実暗号benchmark（20反復、同一開発機）では次の
 
 `pnpm --dir examples/cf-game-audit bench:lineage`で再測定できる。binding table導入前の64件
 104,360 bytes / 1,139.736 msから、80,326 bytes / 773.854 msへ減少した（各1反復の比較）。
+
+local workerd上で、asset件数ごとに固定した実暗号fixtureを別々のDOへ投入し、multi-asset bundleのHTTP
+検証とSQLite atomic commitを各3反復した小標本は次のとおりである。fixture生成と初期replayは計測外で、
+`verify`はMoonBit decode・署名/quorum・全Merkle proof、`SQLite`はtransaction内のCAS/history/batch更新、
+`E2E`はendpoint往復を含む。workerdのms timerが粗いため、短いSQLite値の0 msは無処理ではなく分解能未満を表す。
+
+| assets | bundle bytes | verify mean / p95 | SQLite mean / p95 | E2E mean / p95 |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 3,266 | 20.667 / 23 ms | 0.000 / 0 ms | 24.000 / 27 ms |
+| 8 | 21,794 | 22.333 / 24 ms | 0.000 / 0 ms | 26.000 / 27 ms |
+| 32 | 123,980 | 33.667 / 36 ms | 0.667 / 1 ms | 39.333 / 42 ms |
+| 64 | 338,606 | 55.333 / 59 ms | 1.667 / 2 ms | 65.667 / 70 ms |
+
+`pnpm --dir examples/cf-game-audit bench:inventory-checkpoint`で1/8/32/64件を再測定できる。共有certificateを
+1回だけ検証するため、asset数増加の主な追加費用はproof decode/Merkle verificationとSQLite行更新になる。
 
 このprototypeの`checkpoint link`は、管理tokenで認証した要求が対象game checkpoint digestを
 指定した、という接続境界である。signing-anchor内にgame checkpoint inclusionを証明するものでは
@@ -352,8 +381,8 @@ pnpm bench:witness
 3. experimental Ed25519とWorkers WebCrypto Ed25519を比較し、監査済みbackend境界を決める。
 4. PvE bundle v2を拡張し、phase checkpoint、cooldown、player attack、boss HPを扱う。
 5. open-world plan/sealのexternal transparency headへ、remote実測済みcheckpoint witness collectionを接続する。
-6. open-world inventoryの256件retention上限をMerkle pruning boundaryへ置き換え、appeal windowと
-   checkpoint単位のmulti-asset head更新を追加する（bounded lineage proofは接続済み）。
+6. open-world inventoryの256件retention上限をMerkle pruning boundaryへ置き換え、appeal windowを
+   追加し、実装済みcheckpoint単位multi-asset更新をplayer-local DBへ接続する。
 7. witness sourceをIP以外のdevice/session credentialへ結び、NAT-aware global fair queueとhistory pruningを実装する。
 8. playtest telemetryを接続する。
 
@@ -391,6 +420,8 @@ pnpm bench:witness
 | TS側遷移がMoonBit proofと同じ | Worker bridgeがproved classifierを直接呼ぶ | Proven core + Tested bridge |
 | current-owner listingはauthority checkpoint、`n-f` replay witness、origin receipt、inventory root membershipを要求する | MoonBit central verifier + real-crypto workerd integration + apac-ne benchmark | Tested locally + remote |
 | per-asset inventory headはexact parent・epoch前進・owner/version整合なしに進まない | 6条件MoonBit predicate、64-case test、wrong-parent/version integration、apac-ne head advance | Proven + Tested locally + remote |
+| multi-asset inventory checkpointは全memberのorigin/proof/head/version/lineage条件を満たす場合だけ能力を発行する | 10条件MoonBit predicate、canonical wire、stale/revoked member tests | Proven + Tested locally |
+| multi-asset head/history/idempotencyは1 transactionで全件commitまたはrollbackする | SQLite transactionSync、途中fault、CAS競合、duplicate/conflict integration | Tested locally |
 | reference origin/transfer revokeはdescendant listingをquarantineし、汎用origin/証明済み中間transfer/current-head revokeは全未解決decisionのappealまでlisting/head更新を止める | bounded authenticated lineage slice、MoonBit clean-lineage predicate、Quint正常/破損model、revision CAS、workerd integration | Proven core + Model checked + Tested locally |
 | Cloudflare apac-ne hintでcheckpoint/Queue/inventoryのend-to-end値を得られる | 64-head×3 mode remote benchmark | Measured once |
 | remote peerからmode policyどおりquorumを収集する | 公開pull、端末ローカル署名submit、durable collection、deadline、collection-backed seal、HMAC-source fixed window、全mode apac-ne + PvP wnam/weur各20 run | 全mode remote E2E、outbound push・global fairnessはPending |

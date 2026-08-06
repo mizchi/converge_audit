@@ -120,7 +120,12 @@ baselineなので、全地域SLAや異なるsource間の公平性は未保証で
 - 汎用open-world inventoryはverified origin/current owner headと、challenge時にbounded sliceで登録した
   中間transferの後発rejectionをrevision付きで索引化し、未解決件数が0になるまでlistingとhead更新を
   拒否する。通常fast pathはtransfer列を送らず、slow pathは保持済みanchorから最大64件だけを送る。
-  時間制appeal windowと256件到達後のMerkle pruning proofは未実装である。
+  外部arbiter署名付きdecisionと時間制appeal windowは実装済みであり、期限切れrevokeは自動復活せず
+  fail-closedのまま`expired`として扱う。256件到達後のMerkle pruning proofは未実装である。
+- 同じparent/epochにある1〜64 assetは、共有checkpoint/witness certificateとcanonical proof列を使う
+  multi-asset checkpointで一括更新できる。Durable Objectは全CAS前提とrevocationをtransaction内で再確認し、
+  head/history/idempotencyをatomicにcommitする。途中fault、一件だけstale/revoked、異なるpayloadでのretryは
+  全件rollbackまたは拒否になる。
 - certificate不足: cheat確定ではなく、報酬保留と中央replayへの昇格。
 
 予兆AoE、projectile travel、charge/release、parry window、capture/hold、seed固定waveは監査と相性が
@@ -134,14 +139,20 @@ prototypeのprotocol骨格は通ったが、production完成ではない。優�
 1. 監査済み暗号backend、private-key custody、zone/epoch委任key、rotation。
 2. transparency headとwitness certificateのpersistent remote socket、端末credential、fork alert。
    pure bounded fanout/retry/multi-peer response選択と、SQLite lease + bounded HTTP loopbackは実装済み。
-3. observer signing storeとIndexedDB/mobile SQLiteへのproduction persistence、appeal window、pruning。
-   player-local論理DB、storage-neutral write-set、Node SQLiteのatomic seal/restart/ACK復元は実装済み。
-4. 汎用inventoryへMerkle lineage pruningとappeal windowを追加し、複数assetを同じinventory
-   checkpointへ一括反映するhead registryと、risk-adaptive sampling/Queue backpressureを追加する。
+3. observer signing storeとmobile SQLiteへのproduction persistence、暗号化at-rest、外部裁定システム接続。
+   player-local論理DB、共通host contract、Node SQLite/IndexedDBのatomic seal/restart/ACK復元と
+   ACK済みprefix pruning/durable anchor、active/resolved evidence hold registry、署名済みhash-chain
+   hold envelope、source別durable cursorとatomic apply、件数/byte/timeout/受信deadline付きsingle-page
+   polling、durable poll schedule/lease/attempt fencing/指数backoff/restart回復、operationalな
+   `expired`/`escalated`停止は実装済み。active holdは自動解決しない。署名付きlineage case裁定は
+   Workerへ接続済みだが、holdからcaseを自動起票する接続は未実装。
+4. 汎用inventoryへMerkle lineage pruningを追加し、実装済みmulti-asset checkpointを
+   player-local DBへ接続して、risk-adaptive sampling/Queue backpressureを追加する。
 5. PvE raidのwire/loot binding、PvPのprojectile/visibilityなど実ゲームkernel。
    phase分離boss HP/player attack/cooldownとPvP cooldown/capture objectiveのreferenceは実装済み。
 6. packet loss/partitionを含むnetwork impairment試験、tail latency、実プレイテスト。
-7. Quintモデルを複数authority shard、pruning/appealへ拡張。bounded outboxは実装・反例確認済み。
+7. Quintモデルを複数authority shard、pruningへ拡張。bounded outboxとlineage appeal lifecycleは
+   実装・broken model反例確認済み。
 
 head propagationの最小Quintモデルは追加した。durable outbox、最古未ACKのretry、exact-parentがあれば、
 networkが最終的に安定する公平な実行でauthorityがlatest epochへ到達することを有限状態で確認した。

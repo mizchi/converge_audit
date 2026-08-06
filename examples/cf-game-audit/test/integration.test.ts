@@ -19,6 +19,8 @@ import {
   audit_benchmark_make_checkpoint_delivery_authentication,
   audit_benchmark_make_inventory_lineage_proof_bundle,
   audit_benchmark_make_inventory_listing_proof_bundle,
+  audit_benchmark_make_inventory_checkpoint_proof_bundle,
+  audit_benchmark_make_open_world_multi_asset_pve_replay_bundle,
   audit_benchmark_make_open_world_pve_replay_bundle,
   audit_benchmark_make_pve_replay_bundle,
   audit_benchmark_make_pvp_replay_bundle,
@@ -31,6 +33,12 @@ import worker, {
   type ReplayJob,
 } from "../src/index";
 import { checkpointDeliveryIdempotencyKey } from "../src/checkpoint-runtime";
+import {
+  lineageDecisionStatementDigest,
+  type LineageAncestorKind,
+  type LineageDecisionScope,
+  type LineageDecisionStatement,
+} from "../src/lineage-decision-certificate";
 import {
   appendAuditTick,
   createGameAuditJournal,
@@ -54,6 +62,9 @@ const SEED =
 const PLAYER_SEED =
   "202122232425262728292a2b2c2d2e2f" +
   "303132333435363738393a3b3c3d3e3f";
+const LINEAGE_ARBITER_SEED =
+  "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf" +
+  "d0d1d2d3d4d5d6d7d8d9dadbdcdddedf";
 const CHECKPOINT_WITNESS_SEEDS = [
   "404142434445464748494a4b4c4d4e4f" +
     "505152535455565758595a5b5c5d5e5f",
@@ -376,6 +387,76 @@ const referenceGameOwnerSigner = {
   publicKey: referenceGameOwnerPublicKey,
   signDigest: (value: string) => audit_browser_ed25519_sign(SEED, value),
 };
+
+function signedLineageDecision(
+  scope: LineageDecisionScope,
+  unit: string,
+  input: {
+    asset_id: string;
+    ancestor_id: string;
+    ancestor_kind: LineageAncestorKind;
+    expected_revision: number;
+    outcome: "eligible" | "revoked";
+    reason: string;
+    appeal_of_decision_id?: string;
+    issued_at_ms?: number;
+    expires_at_ms?: number;
+    appeal_deadline_at_ms?: number;
+  },
+) {
+  const now = Date.now();
+  const issuedAt = input.issued_at_ms ?? now - 10;
+  const statement: LineageDecisionStatement = {
+    version: 1,
+    scope,
+    unit,
+    assetId: input.asset_id,
+    ancestorId: input.ancestor_id,
+    ancestorKind: input.ancestor_kind,
+    expectedRevision: input.expected_revision,
+    revision: input.expected_revision + 1,
+    outcome: input.outcome,
+    reasonCode: input.reason.toLowerCase().replace(/[^a-z0-9._:-]+/g, "_")
+      .slice(0, 128),
+    issuedAtMs: issuedAt,
+    expiresAtMs: input.expires_at_ms ?? now + 30_000,
+    appealDeadlineAtMs: input.outcome === "revoked"
+      ? input.appeal_deadline_at_ms ?? now + 60_000
+      : null,
+    appealOfDecisionId: input.outcome === "eligible"
+      ? input.appeal_of_decision_id ?? null
+      : null,
+    finalizedAtMs: input.outcome === "eligible" ? issuedAt - 1 : null,
+  };
+  const signature = audit_browser_ed25519_sign(
+    LINEAGE_ARBITER_SEED,
+    lineageDecisionStatementDigest(statement, referenceGameDigest),
+  );
+  return {
+    statement: {
+      version: statement.version,
+      scope: statement.scope,
+      unit: statement.unit,
+      asset_id: statement.assetId,
+      ancestor_id: statement.ancestorId,
+      ancestor_kind: statement.ancestorKind,
+      expected_revision: statement.expectedRevision,
+      revision: statement.revision,
+      outcome: statement.outcome,
+      reason_code: statement.reasonCode,
+      issued_at_ms: statement.issuedAtMs,
+      expires_at_ms: statement.expiresAtMs,
+      appeal_deadline_at_ms: statement.appealDeadlineAtMs,
+      appeal_of_decision_id: statement.appealOfDecisionId,
+      finalized_at_ms: statement.finalizedAtMs,
+    },
+    authentication: {
+      scheme: "moonbit-ed25519-v1",
+      arbiter_id: "external-arbiter-a",
+      signature,
+    },
+  };
+}
 
 function referenceGameRun(
   lastTick: number,
@@ -1016,7 +1097,9 @@ describe.sequential("Cloudflare game audit shard", () => {
         body: JSON.stringify(body),
       },
     );
-    expect((await list(listingRequest)).status).toBe(201);
+    const initialListing = await list(listingRequest);
+    expect(initialListing.status).toBe(201);
+    await initialListing.json();
 
     const decide = (body: unknown, authorized = true) => SELF.fetch(
       `https://example.test/v1/pve/${unit}/game-asset-lineage-decisions`,
@@ -1031,22 +1114,59 @@ describe.sequential("Cloudflare game audit shard", () => {
         body: JSON.stringify(body),
       },
     );
-    const revocation = {
+    const revocation = signedLineageDecision("reference-game", unit, {
+      asset_id: itemRequest.asset_id,
+      ancestor_id: transferBoundary.authorityReceiptId,
+      ancestor_kind: "origin",
+      expected_revision: 0,
+      outcome: "revoked",
+      reason: "origin checkpoint challenge upheld",
+    });
+    const unsigned = await decide({
       asset_id: itemRequest.asset_id,
       ancestor_id: transferBoundary.authorityReceiptId,
       expected_revision: 0,
       outcome: "revoked",
-      reason: "origin checkpoint challenge upheld",
-    };
+      reason: "legacy unsigned decision",
+    });
+    expect(unsigned.status).toBe(400);
+    await unsigned.json();
+    const unknownArbiter = structuredClone(revocation);
+    unknownArbiter.authentication.arbiter_id = "unknown-arbiter";
+    const unknown = await decide(unknownArbiter);
+    expect(unknown.status).toBe(403);
+    await expect(unknown.json()).resolves.toMatchObject({
+      decision: "unknown_arbiter",
+    });
+    const expiredCertificate = signedLineageDecision("reference-game", unit, {
+      asset_id: itemRequest.asset_id,
+      ancestor_id: transferBoundary.authorityReceiptId,
+      ancestor_kind: "origin",
+      expected_revision: 0,
+      outcome: "revoked",
+      reason: "expired external decision",
+      issued_at_ms: Date.now() - 20_000,
+      expires_at_ms: Date.now() - 10_000,
+      appeal_deadline_at_ms: Date.now() + 60_000,
+    });
+    const expired = await decide(expiredCertificate);
+    expect(expired.status).toBe(403);
+    await expect(expired.json()).resolves.toMatchObject({
+      decision: "certificate_expired",
+    });
     expect((await decide(revocation, false)).status).toBe(401);
     const revoked = await decide(revocation);
     expect(revoked.status).toBe(201);
-    await expect(revoked.json()).resolves.toMatchObject({
+    const revokedDecision = await revoked.json() as {
+      decision_id: string;
+    };
+    expect(revokedDecision).toMatchObject({
       ok: true,
       decision: "applied",
       ancestor_kind: "origin",
       revision: 1,
       lineage_status: "revoked",
+      lifecycle: "appeal_open",
       quarantined_listings: 1,
     });
     const denied = await list(listingRequest);
@@ -1070,16 +1190,20 @@ describe.sequential("Cloudflare game audit shard", () => {
       open_revocations: 1,
     });
 
-    const transferRevocation = {
+    const transferRevocation = signedLineageDecision("reference-game", unit, {
       asset_id: itemRequest.asset_id,
       ancestor_id: transferredBody.transfer.transfer_id,
+      ancestor_kind: "transfer",
       expected_revision: 0,
       outcome: "revoked",
       reason: "transfer signature challenge upheld",
-    };
+    });
     const transferRevoked = await decide(transferRevocation);
     expect(transferRevoked.status).toBe(201);
-    await expect(transferRevoked.json()).resolves.toMatchObject({
+    const transferRevokedDecision = await transferRevoked.json() as {
+      decision_id: string;
+    };
+    expect(transferRevokedDecision).toMatchObject({
       decision: "applied",
       ancestor_kind: "transfer",
       lineage_status: "revoked",
@@ -1087,12 +1211,17 @@ describe.sequential("Cloudflare game audit shard", () => {
       quarantined_listings: 0,
     });
 
-    const restored = await decide({
-      ...revocation,
+    await evictAuditShard("pve", unit);
+
+    const restored = await decide(signedLineageDecision("reference-game", unit, {
+      asset_id: itemRequest.asset_id,
+      ancestor_id: transferBoundary.authorityReceiptId,
+      ancestor_kind: "origin",
       expected_revision: 1,
       outcome: "eligible",
       reason: "appeal accepted after authoritative replay",
-    });
+      appeal_of_decision_id: revokedDecision.decision_id,
+    }));
     expect(restored.status).toBe(201);
     await expect(restored.json()).resolves.toMatchObject({
       decision: "applied",
@@ -1107,12 +1236,19 @@ describe.sequential("Cloudflare game audit shard", () => {
       decision: "asset_lineage_revoked",
       open_revocations: 1,
     });
-    const transferRestored = await decide({
-      ...transferRevocation,
+    const transferRestored = await decide(signedLineageDecision(
+      "reference-game",
+      unit,
+      {
+        asset_id: itemRequest.asset_id,
+        ancestor_id: transferredBody.transfer.transfer_id,
+        ancestor_kind: "transfer",
       expected_revision: 1,
       outcome: "eligible",
       reason: "transfer appeal accepted after signature audit",
-    });
+        appeal_of_decision_id: transferRevokedDecision.decision_id,
+      },
+    ));
     expect(transferRestored.status).toBe(201);
     await expect(transferRestored.json()).resolves.toMatchObject({
       decision: "applied",
@@ -1159,16 +1295,61 @@ describe.sequential("Cloudflare game audit shard", () => {
       lineage_status: "eligible",
       open_revocations: 0,
     });
-    const staleAppeal = await decide({
-      ...transferRevocation,
+    const staleAppeal = await decide(signedLineageDecision(
+      "reference-game",
+      unit,
+      {
+      asset_id: itemRequest.asset_id,
+      ancestor_id: transferredBody.transfer.transfer_id,
+      ancestor_kind: "transfer",
+      expected_revision: 0,
       outcome: "eligible",
       reason: "stale appeal",
-    });
+      appeal_of_decision_id: transferRevokedDecision.decision_id,
+      },
+    ));
     expect(staleAppeal.status).toBe(409);
     await expect(staleAppeal.json()).resolves.toMatchObject({
       decision: "stale_lineage_revision",
       current_revision: 2,
       current_status: "eligible",
+    });
+
+    const shortWindowRevocation = signedLineageDecision(
+      "reference-game",
+      unit,
+      {
+        asset_id: itemRequest.asset_id,
+        ancestor_id: transferredBody.transfer.transfer_id,
+        ancestor_kind: "transfer",
+        expected_revision: 2,
+        outcome: "revoked",
+        reason: "short appeal window",
+        appeal_deadline_at_ms: Date.now() + 100,
+      },
+    );
+    const shortWindowRevoked = await decide(shortWindowRevocation);
+    expect(shortWindowRevoked.status).toBe(201);
+    const shortWindowDecision = await shortWindowRevoked.json() as {
+      decision_id: string;
+    };
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const lateAppeal = await decide(signedLineageDecision(
+      "reference-game",
+      unit,
+      {
+        asset_id: itemRequest.asset_id,
+        ancestor_id: transferredBody.transfer.transfer_id,
+        ancestor_kind: "transfer",
+        expected_revision: 3,
+        outcome: "eligible",
+        reason: "late appeal",
+        appeal_of_decision_id: shortWindowDecision.decision_id,
+      },
+    ));
+    expect(lateAppeal.status).toBe(409);
+    await expect(lateAppeal.json()).resolves.toMatchObject({
+      decision: "appeal_window_expired",
     });
   });
 
@@ -2891,6 +3072,239 @@ describe.sequential("Cloudflare game audit shard", () => {
     });
   });
 
+  it("commits a multi-asset inventory checkpoint atomically", async () => {
+    const unit = crypto.randomUUID();
+    const worldId = `cf:open:${unit}`;
+    const encounterSessionId = `${worldId}:multi-asset-encounter`;
+    const anchor = fixture(worldId, "observer-open", 1, "genesis");
+    const replay = JSON.parse(
+      audit_benchmark_make_open_world_multi_asset_pve_replay_bundle(
+        SEED,
+        PLAYER_SEED,
+        worldId,
+        encounterSessionId,
+        2,
+      ),
+    ) as {
+      ok: true;
+      bundle_hex: string;
+      checkpoint_digest: string;
+      audit_checkpoint_digest: string;
+      seal_checkpoint_digest: string;
+      transparency_log_session_id: string;
+      transparency_publisher_key: string;
+      transparency_checkpoint_digest: string;
+      authority_key: string;
+      assets: Array<{
+        asset_id: string;
+        initial_owner_id: string;
+        item_type: string;
+        quantity: number;
+        output_index: number;
+        source_event: string;
+      }>;
+    };
+    expect(replay.assets).toHaveLength(2);
+    await configure(
+      "open",
+      unit,
+      worldId,
+      anchor.authority_key,
+      anchor.epoch,
+      anchor.previous_digest,
+    );
+    expect((await submit("open", unit, anchor)).status).toBe(202);
+    const queued = await requestReplay("open", unit, "sample", {
+      bundle_hex: replay.bundle_hex,
+      checkpoint_digest: replay.checkpoint_digest,
+      target_session_id: encounterSessionId,
+      audit_checkpoint_digest: replay.audit_checkpoint_digest,
+      seal_checkpoint_digest: replay.seal_checkpoint_digest,
+      transparency_log_session_id: replay.transparency_log_session_id,
+      transparency_publisher_key: replay.transparency_publisher_key,
+      transparency_checkpoint_digest: replay.transparency_checkpoint_digest,
+    });
+    expect(queued.status).toBe(202);
+    const queuedBody = await queued.json() as { idempotency_key: string };
+    const job: ReplayJob = {
+      version: 1,
+      idempotency_key: queuedBody.idempotency_key,
+      mode: "open",
+      unit,
+      reason: "sample",
+      epoch: anchor.epoch,
+      digest: anchor.digest,
+      checkpoint_digest: replay.checkpoint_digest,
+      created_at: 1,
+    };
+    const batch = createMessageBatch<ReplayJob>(
+      "converge-game-audit-replay",
+      [{ id: "open-multi-replay", timestamp: new Date(), body: job, attempts: 1 }],
+    );
+    const ctx = createExecutionContext();
+    await worker.queue!(batch, env as unknown as AuditEnv, ctx);
+    expect((await getQueueResult(batch, ctx)).explicitAcks).toStrictEqual([
+      "open-multi-replay",
+    ]);
+
+    const assets = [...replay.assets].sort((left, right) =>
+      left.asset_id.localeCompare(right.asset_id)
+    );
+    const checkpoint = JSON.parse(
+      audit_benchmark_make_inventory_checkpoint_proof_bundle(
+        SEED,
+        PLAYER_SEED,
+        encounterSessionId,
+        replay.checkpoint_digest,
+        1,
+        assets.map((asset) => asset.asset_id),
+        assets.map((asset) => asset.quantity),
+        assets.map((asset) => asset.source_event),
+        assets.map((asset) => asset.output_index),
+        assets.map((asset) => asset.initial_owner_id),
+        assets.map(() => "bob"),
+        assets[0].item_type,
+      ),
+    ) as {
+      ok: true;
+      bundle_hex: string;
+      checkpoint_digest: string;
+      game_manifest_digest: string;
+    };
+    const expectedAssets = assets.map((asset) => ({
+      asset_id: asset.asset_id,
+      expected_checkpoint_digest: replay.checkpoint_digest,
+      expected_version: 0,
+    }));
+    const commit = (
+      idempotencyKey: string,
+      requestAssets = expectedAssets,
+      faultAfterAssetUpdates?: number,
+    ) =>
+      SELF.fetch(
+        `https://example.test/v1/open/${unit}/inventory-checkpoints`,
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer test-admin-token",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            idempotency_key: idempotencyKey,
+            inventory_bundle_hex: checkpoint.bundle_hex,
+            inventory_checkpoint_digest: checkpoint.checkpoint_digest,
+            inventory_game_manifest_digest: checkpoint.game_manifest_digest,
+            assets: requestAssets,
+            fault_after_asset_updates: faultAfterAssetUpdates,
+          }),
+        },
+      );
+    const list = (assetId: string, sellerId: string) =>
+      SELF.fetch(
+        `https://example.test/v1/open/${unit}/market-listing`,
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer test-admin-token",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ asset_id: assetId, seller_id: sellerId }),
+        },
+      );
+
+    const injected = await commit("multi-fault", expectedAssets, 1);
+    expect(injected.status).toBe(500);
+    await expect(injected.json()).resolves.toMatchObject({
+      decision: "injected_inventory_checkpoint_fault",
+    });
+    for (const asset of assets) {
+      expect((await list(asset.asset_id, asset.initial_owner_id)).status).toBe(200);
+    }
+
+    const staleAssets = expectedAssets.map((asset, index) => ({
+      ...asset,
+      expected_version: index === 1 ? 1 : asset.expected_version,
+    }));
+    const stale = await commit("multi-stale", staleAssets);
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      decision: "inventory_checkpoint_stale",
+      asset_id: assets[1].asset_id,
+    });
+
+    const decide = (body: Record<string, unknown>) =>
+      SELF.fetch(
+        `https://example.test/v1/open/${unit}/asset-lineage-decisions`,
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer test-admin-token",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        },
+      );
+    const atomicRevocation = signedLineageDecision("verified-asset", unit, {
+      asset_id: assets[1].asset_id,
+      ancestor_id: assets[1].asset_id,
+      ancestor_kind: "origin",
+      expected_revision: 0,
+      outcome: "revoked",
+      reason: "atomic batch regression",
+    });
+    const atomicRevoked = await decide(atomicRevocation);
+    expect(atomicRevoked.status).toBe(201);
+    const atomicRevokedDecision = await atomicRevoked.json() as {
+      decision_id: string;
+    };
+    const revoked = await commit("multi-revoked");
+    expect(revoked.status).toBe(403);
+    await expect(revoked.json()).resolves.toMatchObject({
+      decision: "inventory_checkpoint_asset_revoked",
+      asset_id: assets[1].asset_id,
+    });
+    expect((await list(assets[0].asset_id, assets[0].initial_owner_id)).status)
+      .toBe(200);
+    expect((await decide(signedLineageDecision("verified-asset", unit, {
+      asset_id: assets[1].asset_id,
+      ancestor_id: assets[1].asset_id,
+      ancestor_kind: "origin",
+      expected_revision: 1,
+      outcome: "eligible",
+      reason: "atomic batch appeal",
+      appeal_of_decision_id: atomicRevokedDecision.decision_id,
+    }))).status).toBe(201);
+
+    const contenders = await Promise.all([
+      commit("multi-commit-a"),
+      commit("multi-commit-b"),
+    ]);
+    expect(contenders.map((response) => response.status).sort()).toStrictEqual([
+      201,
+      409,
+    ]);
+    const committedIndex = contenders.findIndex((response) =>
+      response.status === 201
+    );
+    const committedKey = committedIndex === 0
+      ? "multi-commit-a"
+      : "multi-commit-b";
+    await expect(contenders[committedIndex].json()).resolves.toMatchObject({
+      decision: "committed",
+      asset_count: 2,
+      checkpoint_digest: checkpoint.checkpoint_digest,
+    });
+    expect((await commit(committedKey)).status).toBe(200);
+    const conflict = await commit(committedKey, staleAssets);
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      decision: "inventory_checkpoint_idempotency_conflict",
+    });
+    for (const asset of assets) {
+      expect((await list(asset.asset_id, "bob")).status).toBe(200);
+    }
+  });
+
   it("stores an open-world sample and verifies plan seal observers eligibility and replay", async () => {
     const unit = crypto.randomUUID();
     const worldId = `cf:open:${unit}`;
@@ -3162,22 +3576,31 @@ describe.sequential("Cloudflare game audit shard", () => {
           body: JSON.stringify(decision),
         },
       );
-    const originRevocation = {
+    const originRevocation = signedLineageDecision("verified-asset", unit, {
       asset_id: replay.asset_id,
       ancestor_id: replay.asset_id,
+      ancestor_kind: "origin",
       expected_revision: 0,
       outcome: "revoked",
       reason: "sample replay appealed",
-    };
-    const transferRevocation = await decideLineage({
+    });
+    const transferRevocation = await decideLineage(signedLineageDecision(
+      "verified-asset",
+      unit,
+      {
       asset_id: replay.asset_id,
       ancestor_id: transferEvent,
+      ancestor_kind: "transfer",
       expected_revision: 0,
       outcome: "revoked",
       reason: "historical transfer disputed",
-    });
+      },
+    ));
     expect(transferRevocation.status).toBe(201);
-    await expect(transferRevocation.json()).resolves.toMatchObject({
+    const transferRevocationBody = await transferRevocation.json() as {
+      decision_id: string;
+    };
+    expect(transferRevocationBody).toMatchObject({
       ancestor_id: transferEvent,
       ancestor_kind: "transfer",
       lineage_status: "revoked",
@@ -3199,13 +3622,19 @@ describe.sequential("Cloudflare game audit shard", () => {
       decision: "asset_lineage_revoked",
       open_revocations: 1,
     });
-    const appealedTransfer = await decideLineage({
+    const appealedTransfer = await decideLineage(signedLineageDecision(
+      "verified-asset",
+      unit,
+      {
       asset_id: replay.asset_id,
       ancestor_id: transferEvent,
+      ancestor_kind: "transfer",
       expected_revision: 1,
       outcome: "eligible",
       reason: "historical transfer proof accepted",
-    });
+      appeal_of_decision_id: transferRevocationBody.decision_id,
+      },
+    ));
     expect(appealedTransfer.status).toBe(201);
     await expect(appealedTransfer.json()).resolves.toMatchObject({
       ancestor_kind: "transfer",
@@ -3213,11 +3642,18 @@ describe.sequential("Cloudflare game audit shard", () => {
       open_revocations: 0,
     });
     expect((await decideLineage(originRevocation, false)).status).toBe(401);
-    const oldHead = await decideLineage({
-      ...originRevocation,
+    const oldHead = await decideLineage(signedLineageDecision(
+      "verified-asset",
+      unit,
+      {
+      asset_id: replay.asset_id,
       ancestor_id: replay.checkpoint_digest,
+      ancestor_kind: "current_head",
+      expected_revision: 0,
+      outcome: "revoked",
       reason: "unproven historical head",
-    });
+      },
+    ));
     expect(oldHead.status).toBe(409);
     await expect(oldHead.json()).resolves.toMatchObject({
       decision: "ancestor_not_in_lineage",
@@ -3260,27 +3696,42 @@ describe.sequential("Cloudflare game audit shard", () => {
       open_revocations: 1,
     });
 
-    const revokedHead = await decideLineage({
+    const revokedHead = await decideLineage(signedLineageDecision(
+      "verified-asset",
+      unit,
+      {
       asset_id: replay.asset_id,
       ancestor_id: inventory.checkpoint_digest,
+      ancestor_kind: "current_head",
       expected_revision: 0,
       outcome: "revoked",
       reason: "current owner checkpoint disputed",
-    });
+      },
+    ));
     expect(revokedHead.status).toBe(201);
-    await expect(revokedHead.json()).resolves.toMatchObject({
+    const revokedHeadBody = await revokedHead.json() as {
+      decision_id: string;
+    };
+    expect(revokedHeadBody).toMatchObject({
       ancestor_kind: "current_head",
       revision: 1,
       lineage_status: "revoked",
       open_revocations: 2,
     });
 
-    const appealedOrigin = await decideLineage({
-      ...originRevocation,
+    const appealedOrigin = await decideLineage(signedLineageDecision(
+      "verified-asset",
+      unit,
+      {
+      asset_id: replay.asset_id,
+      ancestor_id: replay.asset_id,
+      ancestor_kind: "origin",
       expected_revision: 1,
       outcome: "eligible",
       reason: "origin appeal accepted",
-    });
+      appeal_of_decision_id: String(revokedOriginBody.decision_id),
+      },
+    ));
     expect(appealedOrigin.status).toBe(201);
     await expect(appealedOrigin.json()).resolves.toMatchObject({
       lineage_status: "eligible",
@@ -3303,13 +3754,19 @@ describe.sequential("Cloudflare game audit shard", () => {
       open_revocations: 1,
     });
 
-    const appealedHead = await decideLineage({
+    const appealedHead = await decideLineage(signedLineageDecision(
+      "verified-asset",
+      unit,
+      {
       asset_id: replay.asset_id,
       ancestor_id: inventory.checkpoint_digest,
+      ancestor_kind: "current_head",
       expected_revision: 1,
       outcome: "eligible",
       reason: "current head appeal accepted",
-    });
+      appeal_of_decision_id: revokedHeadBody.decision_id,
+      },
+    ));
     expect(appealedHead.status).toBe(201);
     await expect(appealedHead.json()).resolves.toMatchObject({
       lineage_status: "eligible",
@@ -3332,10 +3789,18 @@ describe.sequential("Cloudflare game audit shard", () => {
       decision: "eligible_current_owner",
       open_revocations: 0,
     });
-    const staleOriginDecision = await decideLineage({
-      ...originRevocation,
+    const staleOriginDecision = await decideLineage(signedLineageDecision(
+      "verified-asset",
+      unit,
+      {
+      asset_id: replay.asset_id,
+      ancestor_id: replay.asset_id,
+      ancestor_kind: "origin",
+      expected_revision: 0,
+      outcome: "revoked",
       reason: "stale revision replay",
-    });
+      },
+    ));
     expect(staleOriginDecision.status).toBe(409);
     await expect(staleOriginDecision.json()).resolves.toMatchObject({
       decision: "stale_lineage_revision",

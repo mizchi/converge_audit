@@ -32,6 +32,126 @@ predicate inventory_head_advance_post(
 }
 
 ///|
+predicate multi_asset_inventory_checkpoint_post(
+  has_assets : Bool,
+  within_limit : Bool,
+  assets_canonical : Bool,
+  checkpoint_verified : Bool,
+  manifest_matches : Bool,
+  common_parent_epoch : Bool,
+  every_creation_eligible : Bool,
+  every_lineage_clean : Bool,
+  every_proof_verified : Bool,
+  every_head_version_matches : Bool,
+  result : Bool,
+) {
+  if has_assets {
+    if within_limit {
+      if assets_canonical {
+        if checkpoint_verified {
+          if manifest_matches {
+            if common_parent_epoch {
+              if every_creation_eligible {
+                if every_lineage_clean {
+                  if every_proof_verified {
+                    result == every_head_version_matches
+                  } else {
+                    result == false
+                  }
+                } else {
+                  result == false
+                }
+              } else {
+                result == false
+              }
+            } else {
+              result == false
+            }
+          } else {
+            result == false
+          }
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_multi_asset_checkpoint_requires_every_binding(
+  has_assets : Bool,
+  within_limit : Bool,
+  assets_canonical : Bool,
+  checkpoint_verified : Bool,
+  manifest_matches : Bool,
+  common_parent_epoch : Bool,
+  every_creation_eligible : Bool,
+  every_lineage_clean : Bool,
+  every_proof_verified : Bool,
+  every_head_version_matches : Bool,
+) where {
+  proof_require: multi_asset_inventory_checkpoint_post(
+    has_assets,
+    within_limit,
+    assets_canonical,
+    checkpoint_verified,
+    manifest_matches,
+    common_parent_epoch,
+    every_creation_eligible,
+    every_lineage_clean,
+    every_proof_verified,
+    every_head_version_matches,
+    true,
+  ),
+  proof_ensure: has_assets == true,
+  proof_ensure: within_limit == true,
+  proof_ensure: assets_canonical == true,
+  proof_ensure: checkpoint_verified == true,
+  proof_ensure: manifest_matches == true,
+  proof_ensure: common_parent_epoch == true,
+  proof_ensure: every_creation_eligible == true,
+  proof_ensure: every_lineage_clean == true,
+  proof_ensure: every_proof_verified == true,
+  proof_ensure: every_head_version_matches == true,
+} {
+}
+
+///|
+pub lemma revoked_asset_rejects_atomic_inventory_checkpoint(
+  has_assets : Bool,
+  within_limit : Bool,
+  assets_canonical : Bool,
+  checkpoint_verified : Bool,
+  manifest_matches : Bool,
+  common_parent_epoch : Bool,
+  every_creation_eligible : Bool,
+  every_proof_verified : Bool,
+  every_head_version_matches : Bool,
+) where {
+  proof_ensure: multi_asset_inventory_checkpoint_post(
+    has_assets,
+    within_limit,
+    assets_canonical,
+    checkpoint_verified,
+    manifest_matches,
+    common_parent_epoch,
+    every_creation_eligible,
+    false,
+    every_proof_verified,
+    every_head_version_matches,
+    false,
+  ),
+} {
+}
+
+///|
 pub lemma advanced_inventory_head_requires_every_binding(
   creation_eligible : Bool,
   proof_verified : Bool,

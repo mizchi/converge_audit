@@ -446,3 +446,83 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     fail("expected historical inventory lineage verification")
   }
 }
+
+///|
+test "worker bridge verifies one real-crypto atomic multi-asset checkpoint" {
+  let authority_seed = "000102030405060708090a0b0c0d0e0f" +
+    "101112131415161718191a1b1c1d1e1f"
+  let participant_seed = "202122232425262728292a2b2c2d2e2f" +
+    "303132333435363738393a3b3c3d3e3f"
+  let fixture = audit_benchmark_make_inventory_checkpoint_proof_bundle(
+    authority_seed,
+    participant_seed,
+    "inventory-session",
+    "creation-checkpoint",
+    1,
+    ["asset-000", "asset-001"],
+    [1, 2],
+    ["loot-event-0", "loot-event-1"],
+    [0, 1],
+    ["alice", "alice"],
+    ["bob", "bob"],
+    "raid-token",
+  )
+  guard @json.parse(fixture) is Object(fields) &&
+    fields["ok"] is True &&
+    fields["bundle_hex"] is String(bundle_hex) &&
+    fields["authority_key"] is String(authority_key) &&
+    fields["checkpoint_digest"] is String(checkpoint_digest) &&
+    fields["game_manifest_digest"] is String(game_manifest_digest) else {
+    fail("expected real multi-asset inventory fixture")
+  }
+  let verified = audit_verify_inventory_checkpoint_proof_bundle(
+    bundle_hex,
+    "inventory-session",
+    authority_key,
+    checkpoint_digest,
+    game_manifest_digest,
+    ["asset-000", "asset-001"],
+    ["alice", "alice"],
+    ["raid-token", "raid-token"],
+    [1, 2],
+    ["loot-event-0", "loot-event-1"],
+    [0, 1],
+    ["alice", "alice"],
+    [0, 0],
+    ["creation-checkpoint", "creation-checkpoint"],
+    [0, 0],
+    [true, true],
+    [true, true],
+  )
+  guard @json.parse(verified) is Object(result) &&
+    result["ok"] is True &&
+    result["asset_count"] is Number(2.0, ..) &&
+    result["write_set_digest"] is String(write_set_digest) &&
+    write_set_digest != "" else {
+    fail("expected atomic multi-asset inventory verification")
+  }
+  let stale = audit_verify_inventory_checkpoint_proof_bundle(
+    bundle_hex,
+    "inventory-session",
+    authority_key,
+    checkpoint_digest,
+    game_manifest_digest,
+    ["asset-000", "asset-001"],
+    ["alice", "alice"],
+    ["raid-token", "raid-token"],
+    [1, 2],
+    ["loot-event-0", "loot-event-1"],
+    [0, 1],
+    ["alice", "alice"],
+    [0, 1],
+    ["creation-checkpoint", "creation-checkpoint"],
+    [0, 0],
+    [true, true],
+    [true, true],
+  )
+  guard @json.parse(stale) is Object(refusal) &&
+    refusal["ok"] is False &&
+    refusal["error"] is String("asset_head_version_mismatch") else {
+    fail("expected one stale asset to refuse the whole bundle")
+  }
+}

@@ -15,6 +15,8 @@ import {
 }
 
 // Values
+pub fn verify_inventory_checkpoint_proof_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_checkpoint_digest~ : @converge_audit.Digest, expected_game_manifest_digest~ : @converge_audit.Digest, expected_assets~ : Array[ExpectedInventoryCheckpointAsset], limits~ : @wire.InventoryCheckpointWireLimits) -> InventoryCheckpointCentralResult
+
 pub fn verify_inventory_lineage_proof_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_checkpoint_digest~ : @converge_audit.Digest, expected_game_manifest_digest~ : @converge_audit.Digest, expected_origin~ : @market.ItemReceipt, expected_seller_id~ : String, expected_anchor~ : @inventory.AssetLineageAnchor, limits~ : @wire.InventoryLineageWireLimits) -> InventoryLineageCentralResult
 
 pub fn verify_inventory_listing_proof_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_checkpoint_digest~ : @converge_audit.Digest, expected_game_manifest_digest~ : @converge_audit.Digest, expected_origin~ : @market.ItemReceipt, expected_seller_id~ : String, rejected_ancestor~ : Bool, limits~ : @wire.InventoryListingWireLimits) -> InventoryListingCentralResult
@@ -28,6 +30,47 @@ pub fn verify_pvp_replay_bundle(&@converge_audit.Hasher, &@converge_audit.Verifi
 // Errors
 
 // Types and methods
+pub(all) struct ExpectedInventoryCheckpointAsset {
+  origin : @market.ItemReceipt
+  current_owner_id : String
+  current_version : Int
+  current_checkpoint_digest : @converge_audit.Digest
+  current_epoch : Int
+  creation_eligible : Bool
+  lineage_clean : Bool
+} derive(Eq, @debug.Debug)
+
+pub(all) enum InventoryCheckpointCentralRefusal {
+  InventoryCheckpointWireRefused(@wire.InventoryCheckpointWireError)
+  InventoryCheckpointExpectedSessionMismatch
+  InventoryCheckpointExpectedAuthorityMismatch
+  InventoryCheckpointExpectedCheckpointMismatch
+  InventoryCheckpointExpectedGameManifestMismatch
+  InventoryCheckpointExpectedAssetCountMismatch(Int, Int)
+  InventoryCheckpointExpectedAssetMismatch(Int)
+  InventoryCheckpointExpectedHeadsNotShared(Int)
+  InventoryCheckpointAssetCreationRevoked(Int)
+  InventoryCheckpointAssetLineageRevoked(Int)
+  InventoryCheckpointAssetParentMismatch(Int)
+  InventoryCheckpointAssetEpochMismatch(Int)
+  InventoryCheckpointAssetOriginMismatch(Int)
+  InventoryCheckpointAssetProofRefused(Int)
+  InventoryCheckpointAssetHeadVersionMismatch(Int)
+  InventoryCheckpointAuthenticationRefused(@checkpoint.CheckpointVerification)
+  InventoryCheckpointWitnessSessionRefused(String)
+  InventoryCheckpointWitnessEvidenceRefused(@attestation.EvidenceAlertKind)
+  InventoryCheckpointWitnessCheckpointMismatch
+  InventoryCheckpointWitnessAuthorityMismatch
+  InventoryCheckpointWitnessQuorumPending(Int, Int)
+  InventoryCheckpointWitnessFinalizationMismatch
+  InventoryCheckpointAggregatePolicyRefused
+} derive(Eq, @debug.Debug)
+
+pub(all) enum InventoryCheckpointCentralResult {
+  InventoryCheckpointCentralVerified(VerifiedInventoryCheckpoint)
+  InventoryCheckpointCentralRefused(InventoryCheckpointCentralRefusal)
+} derive(Eq, @debug.Debug)
+
 pub(all) enum InventoryLineageCentralRefusal {
   InventoryLineageWireRefused(@wire.InventoryLineageWireError)
   InventoryLineageListingRefused(InventoryListingCentralRefusal)
@@ -251,6 +294,32 @@ pub fn PvpCentralReplayVerified::referee_key(Self) -> @converge_audit.PublicKey
 pub fn PvpCentralReplayVerified::required_approvals(Self) -> Int
 pub fn PvpCentralReplayVerified::session_id(Self) -> String
 pub fn PvpCentralReplayVerified::team_states(Self) -> Array[@replay.PvpTeamState]
+
+pub struct VerifiedInventoryCheckpoint {
+  session_id : String
+  authority_key : @converge_audit.PublicKey
+  checkpoint_digest : @converge_audit.Digest
+  previous_checkpoint : @converge_audit.Digest
+  epoch : Int
+  game_manifest_digest : @converge_audit.Digest
+  public_state_root : @converge_audit.Digest
+  records : Array[@inventory.AssetRecord]
+  write_set_digest : @converge_audit.Digest
+  approval_count : Int
+  required_approvals : Int
+} derive(Eq, @debug.Debug)
+pub fn VerifiedInventoryCheckpoint::approval_count(Self) -> Int
+pub fn VerifiedInventoryCheckpoint::asset_count(Self) -> Int
+pub fn VerifiedInventoryCheckpoint::authority_key(Self) -> @converge_audit.PublicKey
+pub fn VerifiedInventoryCheckpoint::checkpoint_digest(Self) -> @converge_audit.Digest
+pub fn VerifiedInventoryCheckpoint::epoch(Self) -> Int
+pub fn VerifiedInventoryCheckpoint::game_manifest_digest(Self) -> @converge_audit.Digest
+pub fn VerifiedInventoryCheckpoint::previous_checkpoint(Self) -> @converge_audit.Digest
+pub fn VerifiedInventoryCheckpoint::public_state_root(Self) -> @converge_audit.Digest
+pub fn VerifiedInventoryCheckpoint::records(Self) -> Array[@inventory.AssetRecord]
+pub fn VerifiedInventoryCheckpoint::required_approvals(Self) -> Int
+pub fn VerifiedInventoryCheckpoint::session_id(Self) -> String
+pub fn VerifiedInventoryCheckpoint::write_set_digest(Self) -> @converge_audit.Digest
 
 pub(all) struct VerifiedItemCreation {
   asset_id : String

@@ -1166,6 +1166,29 @@ pub fn audit_asset_lineage_decision_allowed(
 }
 
 ///|
+pub fn audit_asset_lineage_certificate_allowed(
+  certificate_authenticated : Bool,
+  arbiter_known : Bool,
+  lineage_bound : Bool,
+  certificate_time_valid : Bool,
+  lifecycle_valid : Bool,
+  is_appeal : Bool,
+  appeal_target_matches : Bool,
+  appeal_window_open : Bool,
+) -> Bool {
+  @audit.asset_lineage_certificate_allowed(
+    certificate_authenticated~,
+    arbiter_known~,
+    lineage_bound~,
+    certificate_time_valid~,
+    lifecycle_valid~,
+    is_appeal~,
+    appeal_target_matches~,
+    appeal_window_open~,
+  )
+}
+
+///|
 fn worker_accept_pve_event(
   adapter : @bft.AuditAdapter,
   signed : @bft.SignedEvent,
@@ -1798,11 +1821,12 @@ pub fn audit_verify_pvp_replay_bundle(
 /// Generate a real-crypto open-world sample with a delayed audit seed, a
 /// closed one-leaf eligible set, three observations from a four-observer
 /// roster, and a complete deterministic PvE encounter replay.
-pub fn audit_benchmark_make_open_world_pve_replay_bundle(
+fn worker_benchmark_make_open_world_pve_replay_bundle(
   authority_seed_hex : String,
   participant_seed_hex : String,
   world_id : String,
   encounter_session_id : String,
+  asset_count : Int,
 ) -> String {
   let authority_seed = match worker_bytes_from_hex(authority_seed_hex) {
     Some(value) => value
@@ -1812,7 +1836,10 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
     Some(value) => value
     None => return worker_error("invalid_participant_seed_hex")
   }
-  if world_id == "" || encounter_session_id == "" {
+  if world_id == "" ||
+    encounter_session_id == "" ||
+    asset_count <= 0 ||
+    asset_count > 64 {
     return worker_error("invalid_open_world_session")
   }
   let hasher = @crypto.ExperimentalSha256Hasher::new()
@@ -1874,7 +1901,6 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
     ),
   })
   let authority_peer_id = "authority"
-  let player_id = "alice"
   let adapter = @bft.AuditAdapter::new(
     hasher,
     verifier,
@@ -1883,8 +1909,7 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
   if !adapter.register_peer(
       @types.PeerId(authority_peer_id),
       authority.public_key(),
-    ) ||
-    !adapter.register_peer(@types.PeerId(player_id), player.public_key()) {
+    ) {
     return worker_error("fixture_open_world_roster_refused")
   }
   let config = @replay.DungeonEncounterConfig::{
@@ -1899,13 +1924,31 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
       loot_item_type: "benchmark-open-world-token",
     },
   }
-  let players = [
-    @replay.DungeonPlayer::{
-      player_id,
-      public_key: player.public_key(),
-      initial_x: 0,
-    },
-  ]
+  let players : Array[@replay.DungeonPlayer] = []
+  for index in 0..<asset_count {
+    let player_id = if index == 0 {
+      "alice"
+    } else {
+      "alice-" + index.to_string()
+    }
+    let player_key = if index == 0 {
+      player.public_key()
+    } else {
+      match
+        worker_derived_ed25519_signer(
+          hasher,
+          participant_seed_hex,
+          "open-world-player-" + index.to_string(),
+        ) {
+        Some(value) => value.public_key()
+        None => return worker_error("fixture_open_world_player_key_failed")
+      }
+    }
+    if !adapter.register_peer(@types.PeerId(player_id), player_key) {
+      return worker_error("fixture_open_world_roster_refused")
+    }
+    players.push({ player_id, public_key: player_key, initial_x: 0 })
+  }
   let attack = @replay.DungeonEncounterAttack::{
     attack: {
       attack_id: "benchmark-open-world-cleave",
@@ -1943,40 +1986,43 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
     CandidateReady(value) => value
     _ => return worker_error("fixture_open_world_replay_refused")
   }
-  let loot_effect = @replay.AssetEffect::Create(
-    asset_id=@replay.dungeon_encounter_loot_asset_id(
-      encounter_session_id,
-      config.encounter_id,
-      player_id,
-    ),
-    recipient_id=player_id,
-    item_type=config.attack_rules.loot_item_type,
-    quantity=1,
-    output_index=0,
-  )
-  let loot_event = @replay.make_asset_effect_event(
-    peer=@types.PeerId(authority_peer_id),
-    counter=1,
-    lamport=2,
-    deps=[telegraph_event.id],
-    effect=loot_effect,
-  )
-  let signed_loot = adapter.sign(authority, loot_event, [telegraph.digest()])
-  let loot_batch = match
-    @market.build_receipt_batch(hasher, [
-      {
-        asset_id: @replay.dungeon_encounter_loot_asset_id(
-          encounter_session_id,
-          config.encounter_id,
-          player_id,
-        ),
-        recipient_id: player_id,
-        item_type: config.attack_rules.loot_item_type,
-        quantity: 1,
-        source_event: signed_loot.digest,
-        output_index: 0,
-      },
-    ]) {
+  let asset_effects : Array[@wire.PveReplayAssetEffectEvidence] = []
+  let loot_receipts : Array[@market.ItemReceipt] = []
+  for index, encounter_player in players {
+    let loot_effect = @replay.AssetEffect::Create(
+      asset_id=@replay.dungeon_encounter_loot_asset_id(
+        encounter_session_id,
+        config.encounter_id,
+        encounter_player.player_id,
+      ),
+      recipient_id=encounter_player.player_id,
+      item_type=config.attack_rules.loot_item_type,
+      quantity=1,
+      output_index=0,
+    )
+    let loot_event = @replay.make_asset_effect_event(
+      peer=@types.PeerId(authority_peer_id),
+      counter=index + 1,
+      lamport=index + 2,
+      deps=[telegraph_event.id],
+      effect=loot_effect,
+    )
+    let signed_loot = adapter.sign(authority, loot_event, [telegraph.digest()])
+    asset_effects.push({ source: signed_loot, effect: loot_effect })
+    loot_receipts.push({
+      asset_id: @replay.dungeon_encounter_loot_asset_id(
+        encounter_session_id,
+        config.encounter_id,
+        encounter_player.player_id,
+      ),
+      recipient_id: encounter_player.player_id,
+      item_type: config.attack_rules.loot_item_type,
+      quantity: 1,
+      source_event: signed_loot.digest,
+      output_index: 0,
+    })
+  }
+  let loot_batch = match @market.build_receipt_batch(hasher, loot_receipts) {
     Built(value) => value
     _ => return worker_error("fixture_open_world_asset_batch_refused")
   }
@@ -2126,9 +2172,23 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
           dodge_evidence: [],
         },
       ],
-      asset_effects: [{ source: signed_loot, effect: loot_effect }],
+      asset_effects,
     },
   })
+  let fixture_assets : Array[Json] = []
+  for receipt in loot_receipts {
+    fixture_assets.push(
+      Json::object({
+        "asset_id": Json::string(receipt.asset_id),
+        "initial_owner_id": Json::string(receipt.recipient_id),
+        "item_type": Json::string(receipt.item_type),
+        "quantity": Json::number(receipt.quantity.to_double()),
+        "output_index": Json::number(receipt.output_index.to_double()),
+        "source_event": Json::string(receipt.source_event.0),
+      }),
+    )
+  }
+  let first_receipt = loot_receipts[0]
   Json::object({
     "ok": Json::boolean(true),
     "bundle_hex": Json::string(worker_bytes_to_hex(encoded)),
@@ -2148,19 +2208,39 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
       signed_anchor_seal_checkpoint.digest.0,
     ),
     "checkpoint_digest": Json::string(signed_encounter_checkpoint.digest.0),
-    "asset_id": Json::string(
-      @replay.dungeon_encounter_loot_asset_id(
-        encounter_session_id,
-        config.encounter_id,
-        player_id,
-      ),
-    ),
-    "item_type": Json::string(config.attack_rules.loot_item_type),
-    "quantity": Json::number(1.0),
-    "output_index": Json::number(0.0),
-    "source_event": Json::string(signed_loot.digest.0),
+    "asset_id": Json::string(first_receipt.asset_id),
+    "item_type": Json::string(first_receipt.item_type),
+    "quantity": Json::number(first_receipt.quantity.to_double()),
+    "output_index": Json::number(first_receipt.output_index.to_double()),
+    "source_event": Json::string(first_receipt.source_event.0),
+    "assets": Json::array(fixture_assets),
     "observer_approvals": Json::number(observations.length().to_double()),
   }).stringify()
+}
+
+///|
+pub fn audit_benchmark_make_open_world_pve_replay_bundle(
+  authority_seed_hex : String,
+  participant_seed_hex : String,
+  world_id : String,
+  encounter_session_id : String,
+) -> String {
+  worker_benchmark_make_open_world_pve_replay_bundle(
+    authority_seed_hex, participant_seed_hex, world_id, encounter_session_id, 1,
+  )
+}
+
+///|
+pub fn audit_benchmark_make_open_world_multi_asset_pve_replay_bundle(
+  authority_seed_hex : String,
+  participant_seed_hex : String,
+  world_id : String,
+  encounter_session_id : String,
+  asset_count : Int,
+) -> String {
+  worker_benchmark_make_open_world_pve_replay_bundle(
+    authority_seed_hex, participant_seed_hex, world_id, encounter_session_id, asset_count,
+  )
 }
 
 ///|
@@ -2895,6 +2975,343 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
         "ok": Json::boolean(false),
         "complete": Json::boolean(true),
         "error": Json::string(worker_inventory_lineage_refusal_code(reason)),
+      }).stringify()
+  }
+}
+
+///|
+/// Generate one real-crypto checkpoint authenticating a canonical set of
+/// inventory records. Hashing and signing remain behind the same injectable
+/// interfaces used by the production verifier.
+pub fn audit_benchmark_make_inventory_checkpoint_proof_bundle(
+  authority_seed_hex : String,
+  participant_seed_hex : String,
+  session_id : String,
+  previous_checkpoint_digest : String,
+  epoch : Int,
+  asset_ids : Array[String],
+  quantities : Array[Int],
+  source_event_digests : Array[String],
+  output_indices : Array[Int],
+  initial_owner_ids : Array[String],
+  current_owner_ids : Array[String],
+  item_type : String,
+) -> String {
+  let authority_seed = match worker_bytes_from_hex(authority_seed_hex) {
+    Some(value) => value
+    None => return worker_error("invalid_authority_seed_hex")
+  }
+  match worker_bytes_from_hex(participant_seed_hex) {
+    Some(_) => ()
+    None => return worker_error("invalid_participant_seed_hex")
+  }
+  let asset_count = asset_ids.length()
+  if session_id == "" ||
+    previous_checkpoint_digest == "" ||
+    epoch <= 0 ||
+    asset_count <= 0 ||
+    asset_count > 64 ||
+    quantities.length() != asset_count ||
+    source_event_digests.length() != asset_count ||
+    output_indices.length() != asset_count ||
+    initial_owner_ids.length() != asset_count ||
+    current_owner_ids.length() != asset_count ||
+    item_type == "" {
+    return worker_error("invalid_inventory_checkpoint_fixture")
+  }
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
+  let authority = @crypto.ExperimentalEd25519Signer::new(authority_seed) catch {
+    _ => return worker_error("invalid_authority_seed")
+  }
+  let state = @authmap.AuthenticatedMap::new(hasher)
+  let origins : Array[@market.ItemReceipt] = []
+  let records : Array[@inventory.AssetRecord] = []
+  let mut previous_asset_id = ""
+  for index in 0..<asset_count {
+    let asset_id = asset_ids[index]
+    if asset_id == "" ||
+      quantities[index] <= 0 ||
+      source_event_digests[index] == "" ||
+      output_indices[index] < 0 ||
+      initial_owner_ids[index] == "" ||
+      current_owner_ids[index] == "" ||
+      (index > 0 && asset_id <= previous_asset_id) {
+      return worker_error("invalid_inventory_checkpoint_assets")
+    }
+    previous_asset_id = asset_id
+    let origin : @market.ItemReceipt = {
+      asset_id,
+      recipient_id: initial_owner_ids[index],
+      item_type,
+      quantity: quantities[index],
+      source_event: @bft.Digest(source_event_digests[index]),
+      output_index: output_indices[index],
+    }
+    let semantic = match
+      worker_inventory_semantic_lineage(
+        hasher,
+        origin,
+        current_owner_ids[index],
+        1,
+      ) {
+      Some(value) => value
+      None => return worker_error("invalid_inventory_checkpoint_lineage")
+    }
+    origins.push(origin)
+    records.push(semantic.record)
+    ignore(
+      state.put(asset_id, @inventory.serialize_asset_record(semantic.record)),
+    )
+  }
+  let proofs : Array[@inventory.InventoryProof] = []
+  for record in records {
+    let map_proof = match state.proof(record.asset_id) {
+      Some(value) => value
+      None => return worker_error("fixture_inventory_checkpoint_proof_missing")
+    }
+    proofs.push({ record, map_proof })
+  }
+  let witnesses : Array[@witness_manifest.ReplayWitnessIdentity] = []
+  let participants : Array[@attestation.Participant] = []
+  let witness_signers : Array[@crypto.ExperimentalEd25519Signer] = []
+  for index in 0..<4 {
+    let id = "inventory-witness-" + index.to_string()
+    let signer = match
+      worker_derived_ed25519_signer(hasher, participant_seed_hex, id) {
+      Some(value) => value
+      None => return worker_error("fixture_inventory_witness_key_failed")
+    }
+    witness_signers.push(signer)
+    witnesses.push({ id, key: signer.public_key() })
+    participants.push({ id, key: signer.public_key() })
+  }
+  let game_manifest_digest = @replay.CanonicalAssetKernel::new(
+    hasher,
+    effect_author=authority.public_key(),
+  ).manifest_digest()
+  let prepared = @checkpoint.prepare_checkpoint(hasher, {
+    session_id,
+    epoch,
+    previous_checkpoint: @bft.Digest(previous_checkpoint_digest),
+    manifest_digest: @attestation.replay_witness_session_manifest(
+      hasher,
+      game_manifest_digest~,
+      referee_key=authority.public_key(),
+      witnesses=participants,
+      max_faults=1,
+    ),
+    event_root: hasher.hash_string(
+      "inventory-checkpoint-events-v1:" + asset_count.to_string(),
+    ),
+    public_state_root: state.root(),
+    asset_delta_root: hasher.hash_string("inventory-no-new-assets-v1"),
+    hidden_state_commitment: None,
+  })
+  let signed_checkpoint = @checkpoint.sign_prepared_checkpoint(
+    authority, prepared,
+  )
+  let attestations : Array[@attestation.SignedAttestation] = []
+  for index in 0..<3 {
+    attestations.push(
+      @attestation.sign_replay_witness_attestation(
+        hasher,
+        witness_signers[index],
+        prepared,
+        witnesses[index].id,
+        @attestation.AttestationChoice::Approve,
+      ),
+    )
+  }
+  let encoded = @wire.encode_inventory_checkpoint_proof_bundle({
+    signed_checkpoint,
+    game_manifest_digest,
+    witnesses,
+    max_faults: 1,
+    attestations,
+    proofs,
+  })
+  let expected_assets : Array[Json] = []
+  for origin in origins {
+    expected_assets.push(
+      Json::object({
+        "asset_id": Json::string(origin.asset_id),
+        "initial_owner_id": Json::string(origin.recipient_id),
+        "item_type": Json::string(origin.item_type),
+        "quantity": Json::number(origin.quantity.to_double()),
+        "source_event": Json::string(origin.source_event.0),
+        "output_index": Json::number(origin.output_index.to_double()),
+        "current_owner_id": Json::string(origin.recipient_id),
+        "current_version": Json::number(0.0),
+        "current_checkpoint_digest": Json::string(previous_checkpoint_digest),
+        "current_epoch": Json::number((epoch - 1).to_double()),
+      }),
+    )
+  }
+  Json::object({
+    "ok": Json::boolean(true),
+    "bundle_hex": Json::string(worker_bytes_to_hex(encoded)),
+    "bundle_bytes": Json::number(encoded.length().to_double()),
+    "session_id": Json::string(session_id),
+    "authority_key": Json::string(authority.public_key().0),
+    "checkpoint_digest": Json::string(signed_checkpoint.digest.0),
+    "previous_checkpoint": Json::string(previous_checkpoint_digest),
+    "epoch": Json::number(epoch.to_double()),
+    "game_manifest_digest": Json::string(game_manifest_digest.0),
+    "asset_count": Json::number(asset_count.to_double()),
+    "assets": Json::array(expected_assets),
+  }).stringify()
+}
+
+///|
+fn worker_inventory_checkpoint_refusal_code(
+  reason : @central_replay.InventoryCheckpointCentralRefusal,
+) -> String {
+  match reason {
+    InventoryCheckpointWireRefused(_) => "wire_refused"
+    InventoryCheckpointExpectedSessionMismatch => "expected_session_mismatch"
+    InventoryCheckpointExpectedAuthorityMismatch =>
+      "expected_authority_mismatch"
+    InventoryCheckpointExpectedCheckpointMismatch =>
+      "expected_checkpoint_mismatch"
+    InventoryCheckpointExpectedGameManifestMismatch =>
+      "expected_game_manifest_mismatch"
+    InventoryCheckpointExpectedAssetCountMismatch(_, _) =>
+      "expected_asset_count_mismatch"
+    InventoryCheckpointExpectedAssetMismatch(_) => "expected_asset_mismatch"
+    InventoryCheckpointExpectedHeadsNotShared(_) => "expected_heads_not_shared"
+    InventoryCheckpointAssetCreationRevoked(_) => "asset_creation_revoked"
+    InventoryCheckpointAssetLineageRevoked(_) => "asset_lineage_revoked"
+    InventoryCheckpointAssetParentMismatch(_) => "asset_parent_mismatch"
+    InventoryCheckpointAssetEpochMismatch(_) => "asset_epoch_mismatch"
+    InventoryCheckpointAssetOriginMismatch(_) => "asset_origin_mismatch"
+    InventoryCheckpointAssetProofRefused(_) => "asset_proof_refused"
+    InventoryCheckpointAssetHeadVersionMismatch(_) =>
+      "asset_head_version_mismatch"
+    InventoryCheckpointAuthenticationRefused(_) =>
+      "checkpoint_authentication_refused"
+    InventoryCheckpointWitnessSessionRefused(_) => "witness_session_refused"
+    InventoryCheckpointWitnessEvidenceRefused(_) => "witness_evidence_refused"
+    InventoryCheckpointWitnessCheckpointMismatch =>
+      "witness_checkpoint_mismatch"
+    InventoryCheckpointWitnessAuthorityMismatch => "witness_authority_mismatch"
+    InventoryCheckpointWitnessQuorumPending(_, _) => "witness_quorum_pending"
+    InventoryCheckpointWitnessFinalizationMismatch =>
+      "witness_finalization_mismatch"
+    InventoryCheckpointAggregatePolicyRefused => "aggregate_policy_refused"
+  }
+}
+
+///|
+pub fn audit_verify_inventory_checkpoint_proof_bundle(
+  bundle_hex : String,
+  expected_session_id : String,
+  expected_authority_key : String,
+  expected_checkpoint_digest : String,
+  expected_game_manifest_digest : String,
+  expected_asset_ids : Array[String],
+  expected_initial_owner_ids : Array[String],
+  expected_item_types : Array[String],
+  expected_quantities : Array[Int],
+  expected_source_events : Array[String],
+  expected_output_indices : Array[Int],
+  expected_current_owner_ids : Array[String],
+  expected_current_versions : Array[Int],
+  expected_current_checkpoint_digests : Array[String],
+  expected_current_epochs : Array[Int],
+  expected_creation_eligible : Array[Bool],
+  expected_lineage_clean : Array[Bool],
+) -> String {
+  let input = match worker_bytes_from_hex(bundle_hex) {
+    Some(value) => value
+    None => return worker_error("invalid_bundle_hex")
+  }
+  let count = expected_asset_ids.length()
+  if count == 0 ||
+    expected_initial_owner_ids.length() != count ||
+    expected_item_types.length() != count ||
+    expected_quantities.length() != count ||
+    expected_source_events.length() != count ||
+    expected_output_indices.length() != count ||
+    expected_current_owner_ids.length() != count ||
+    expected_current_versions.length() != count ||
+    expected_current_checkpoint_digests.length() != count ||
+    expected_current_epochs.length() != count ||
+    expected_creation_eligible.length() != count ||
+    expected_lineage_clean.length() != count {
+    return worker_error("invalid_expected_inventory_assets")
+  }
+  let expected_assets : Array[@central_replay.ExpectedInventoryCheckpointAsset] = []
+  for index in 0..<count {
+    expected_assets.push({
+      origin: {
+        asset_id: expected_asset_ids[index],
+        recipient_id: expected_initial_owner_ids[index],
+        item_type: expected_item_types[index],
+        quantity: expected_quantities[index],
+        source_event: @bft.Digest(expected_source_events[index]),
+        output_index: expected_output_indices[index],
+      },
+      current_owner_id: expected_current_owner_ids[index],
+      current_version: expected_current_versions[index],
+      current_checkpoint_digest: @bft.Digest(
+        expected_current_checkpoint_digests[index],
+      ),
+      current_epoch: expected_current_epochs[index],
+      creation_eligible: expected_creation_eligible[index],
+      lineage_clean: expected_lineage_clean[index],
+    })
+  }
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
+  let verifier = @crypto.ExperimentalEd25519Verifier::new()
+  match
+    @central_replay.verify_inventory_checkpoint_proof_bundle(
+      hasher,
+      verifier,
+      input,
+      expected_session_id~,
+      expected_authority_key=@bft.PublicKey(expected_authority_key),
+      expected_checkpoint_digest=@bft.Digest(expected_checkpoint_digest),
+      expected_game_manifest_digest=@bft.Digest(expected_game_manifest_digest),
+      expected_assets~,
+      limits=@wire.InventoryCheckpointWireLimits::default(),
+    ) {
+    InventoryCheckpointCentralVerified(verified) => {
+      let assets = verified
+        .records()
+        .map(fn(record) {
+          Json::object({
+            "asset_id": Json::string(record.asset_id),
+            "current_owner_id": Json::string(record.owner_id),
+            "version": Json::number(record.version.to_double()),
+            "last_event": Json::string(record.last_event.0),
+            "lineage_root": Json::string(record.lineage_root.0),
+          })
+        })
+      Json::object({
+        "ok": Json::boolean(true),
+        "complete": Json::boolean(true),
+        "session_id": Json::string(verified.session_id()),
+        "authority_key": Json::string(verified.authority_key().0),
+        "checkpoint_digest": Json::string(verified.checkpoint_digest().0),
+        "previous_checkpoint": Json::string(verified.previous_checkpoint().0),
+        "epoch": Json::number(verified.epoch().to_double()),
+        "game_manifest_digest": Json::string(verified.game_manifest_digest().0),
+        "public_state_root": Json::string(verified.public_state_root().0),
+        "asset_count": Json::number(verified.asset_count().to_double()),
+        "assets": Json::array(assets),
+        "write_set_digest": Json::string(verified.write_set_digest().0),
+        "approval_count": Json::number(verified.approval_count().to_double()),
+        "required_approvals": Json::number(
+          verified.required_approvals().to_double(),
+        ),
+        "bundle_bytes": Json::number(input.length().to_double()),
+      }).stringify()
+    }
+    InventoryCheckpointCentralRefused(reason) =>
+      Json::object({
+        "ok": Json::boolean(false),
+        "complete": Json::boolean(true),
+        "error": Json::string(worker_inventory_checkpoint_refusal_code(reason)),
       }).stringify()
   }
 }

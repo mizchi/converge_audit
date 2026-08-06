@@ -92,6 +92,11 @@ requires a replay-bound `n-f` witness certificate. Current-owner listing uses a
 separate bounded bundle containing an authority checkpoint, committed game
 manifest, witness roster/attestations, and one authenticated inventory proof.
 The central verifier binds that proof back to its verified creation receipt.
+For checkpoint-level settlement, a second canonical bundle shares one signed
+checkpoint and replay-witness certificate across 1--64 asset proofs. Its opaque
+verified capability binds every old owner/version/head/epoch and next record in
+a write-set digest; storage adapters must recheck those preconditions and open
+revocations inside the committing transaction.
 The Cloudflare adapter stores replay bundles separately from Queue messages and
 now tests a SQLite head/history transaction, restart recovery, all three Queue
 replay modes, and monotonic per-asset inventory heads. A head update requires
@@ -106,9 +111,12 @@ keys and dual-signed parent/version transitions, and must terminate at the
 current authenticated record's cumulative lineage root. Normal listing proofs
 still omit transfer history. The Worker retains at most 256 challenged
 transfers per asset and blocks listings and head advancement until all open
-revocations are appealed. Observer signing-store durability, transparency-head
-remote witness quorum, Merkle pruning beyond the hard retention cap,
-multi-asset atomic inventory heads, timed appeal windows, and production
+revocations are appealed. Both decision endpoints now require a
+domain-separated external-arbiter certificate, persist provisional/finalized
+decision metadata, and enforce an exact timed appeal target. Observer
+signing-store durability, transparency-head remote witness quorum, Merkle
+pruning beyond the hard retention cap, player-local persistence for the
+multi-asset write set, production arbiter key rotation, and production
 cryptography remain open.
 
 `quint_asset_driver` is a verification-only adapter built on

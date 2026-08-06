@@ -319,3 +319,198 @@ test "central inventory proof fails closed on stale boundary quorum and tamperin
     _ => fail("tampered inventory version was accepted")
   }
 }
+
+///|
+priv struct InventoryCheckpointCentralFixture {
+  session_id : String
+  authority_key : @bft.PublicKey
+  checkpoint_digest : @bft.Digest
+  game_manifest_digest : @bft.Digest
+  expected_assets : Array[ExpectedInventoryCheckpointAsset]
+  bundle : @wire.InventoryCheckpointProofBundle
+}
+
+///|
+fn inventory_checkpoint_central_fixture() -> InventoryCheckpointCentralFixture raise Error {
+  let hasher = @bft.FnvHasher::new()
+  let authority = @bft.MockSigner::new("inventory-authority")
+  let session_id = "inventory-session"
+  let previous_checkpoint = @bft.Digest("creation-checkpoint")
+  let origins : Array[@market.ItemReceipt] = []
+  let records : Array[@inventory.AssetRecord] = []
+  for index in 0..<2 {
+    let asset_id = "asset-" + (index + 1).to_string()
+    let origin : @market.ItemReceipt = {
+      asset_id,
+      recipient_id: "alice",
+      item_type: "raid-token",
+      quantity: index + 1,
+      source_event: @bft.Digest("loot-event-" + index.to_string()),
+      output_index: index,
+    }
+    let anchor = @inventory.origin_asset_lineage_anchor(hasher, origin)
+    let transition : @inventory.AssetLineageTransition = {
+      asset_id,
+      origin_receipt_digest: anchor.origin_receipt_digest,
+      from_owner: "alice",
+      to_owner: "bob",
+      expected_version: 0,
+      previous_event: anchor.last_event,
+      source_event: @bft.Digest("transfer-event-" + index.to_string()),
+      previous_lineage_root: anchor.lineage_root,
+    }
+    origins.push(origin)
+    records.push({
+      asset_id,
+      owner_id: "bob",
+      item_type: origin.item_type,
+      quantity: origin.quantity,
+      origin_source_event: origin.source_event,
+      origin_output_index: origin.output_index,
+      origin_receipt_digest: anchor.origin_receipt_digest,
+      version: 1,
+      last_event: transition.source_event,
+      lineage_root: @inventory.asset_lineage_transition_root(hasher, transition),
+    })
+  }
+  let state = @authmap.AuthenticatedMap::new(hasher)
+  for record in records {
+    ignore(
+      state.put(record.asset_id, @inventory.serialize_asset_record(record)),
+    )
+  }
+  let proofs : Array[@inventory.InventoryProof] = []
+  for record in records {
+    let map_proof = match state.proof(record.asset_id) {
+      Some(value) => value
+      None => fail("expected multi-asset inventory proof")
+    }
+    proofs.push({ record, map_proof })
+  }
+  let witness_signers : Array[@bft.MockSigner] = []
+  let witnesses : Array[@witness_manifest.ReplayWitnessIdentity] = []
+  let participants : Array[@attestation.Participant] = []
+  for index in 0..<4 {
+    let id = "inventory-witness-" + index.to_string()
+    let signer = @bft.MockSigner::new(id)
+    witness_signers.push(signer)
+    witnesses.push({ id, key: signer.public_key() })
+    participants.push({ id, key: signer.public_key() })
+  }
+  let game_manifest_digest = @bft.Digest("canonical-asset-kernel-v1")
+  let prepared = @checkpoint.prepare_checkpoint(hasher, {
+    session_id,
+    epoch: 1,
+    previous_checkpoint,
+    manifest_digest: @attestation.replay_witness_session_manifest(
+      hasher,
+      game_manifest_digest~,
+      referee_key=authority.public_key(),
+      witnesses=participants,
+      max_faults=1,
+    ),
+    event_root: @bft.Digest("inventory-events"),
+    public_state_root: state.root(),
+    asset_delta_root: @bft.Digest("no-new-assets"),
+    hidden_state_commitment: None,
+  })
+  let signed_checkpoint = @checkpoint.sign_prepared_checkpoint(
+    authority, prepared,
+  )
+  let attestations : Array[@attestation.SignedAttestation] = []
+  for index in 0..<3 {
+    attestations.push(
+      @attestation.sign_replay_witness_attestation(
+        hasher,
+        witness_signers[index],
+        prepared,
+        witnesses[index].id,
+        @attestation.AttestationChoice::Approve,
+      ),
+    )
+  }
+  let expected_assets : Array[ExpectedInventoryCheckpointAsset] = []
+  for origin in origins {
+    expected_assets.push({
+      origin,
+      current_owner_id: "alice",
+      current_version: 0,
+      current_checkpoint_digest: previous_checkpoint,
+      current_epoch: 0,
+      creation_eligible: true,
+      lineage_clean: true,
+    })
+  }
+  {
+    session_id,
+    authority_key: authority.public_key(),
+    checkpoint_digest: signed_checkpoint.digest,
+    game_manifest_digest,
+    expected_assets,
+    bundle: {
+      signed_checkpoint,
+      game_manifest_digest,
+      witnesses,
+      max_faults: 1,
+      attestations,
+      proofs,
+    },
+  }
+}
+
+///|
+fn verify_inventory_checkpoint_fixture(
+  fixture : InventoryCheckpointCentralFixture,
+  expected_assets? : Array[ExpectedInventoryCheckpointAsset] = fixture.expected_assets,
+) -> InventoryCheckpointCentralResult {
+  verify_inventory_checkpoint_proof_bundle(
+    @bft.FnvHasher::new(),
+    @bft.MockVerifier::new(),
+    @wire.encode_inventory_checkpoint_proof_bundle(fixture.bundle),
+    expected_session_id=fixture.session_id,
+    expected_authority_key=fixture.authority_key,
+    expected_checkpoint_digest=fixture.checkpoint_digest,
+    expected_game_manifest_digest=fixture.game_manifest_digest,
+    expected_assets~,
+    limits=@wire.InventoryCheckpointWireLimits::default(),
+  )
+}
+
+///|
+test "central multi-asset checkpoint verifies one shared certificate and every head" {
+  let fixture = inventory_checkpoint_central_fixture()
+  match verify_inventory_checkpoint_fixture(fixture) {
+    InventoryCheckpointCentralVerified(verified) => {
+      assert_eq(verified.asset_count(), 2)
+      assert_eq(verified.epoch(), 1)
+      assert_eq(
+        verified.previous_checkpoint(),
+        @bft.Digest("creation-checkpoint"),
+      )
+      assert_eq(verified.records()[0].asset_id, "asset-1")
+      assert_eq(verified.records()[1].asset_id, "asset-2")
+      assert_true(verified.write_set_digest().0 != "")
+    }
+    _ => fail("expected central multi-asset checkpoint verification")
+  }
+}
+
+///|
+test "central multi-asset checkpoint rejects one stale or revoked member" {
+  let fixture = inventory_checkpoint_central_fixture()
+  let stale = fixture.expected_assets.copy()
+  stale[1] = { ..stale[1], current_version: 1 }
+  match verify_inventory_checkpoint_fixture(fixture, expected_assets=stale) {
+    InventoryCheckpointCentralRefused(
+      InventoryCheckpointAssetHeadVersionMismatch(1)
+    ) => ()
+    _ => fail("expected one stale asset to reject the whole checkpoint")
+  }
+  let revoked = fixture.expected_assets.copy()
+  revoked[1] = { ..revoked[1], lineage_clean: false }
+  match verify_inventory_checkpoint_fixture(fixture, expected_assets=revoked) {
+    InventoryCheckpointCentralRefused(InventoryCheckpointAssetLineageRevoked(1)) =>
+      ()
+    _ => fail("expected one revoked asset to reject the whole checkpoint")
+  }
+}

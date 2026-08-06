@@ -28,8 +28,8 @@ run固有Ed25519公開鍵はgenesisへcommitされ、item精算と`game-market-l
 `game-item-transfers`は旧ownerのhandoffと新ownerのacceptanceを同じ直前headへ署名し、per-asset owner versionを
 SQLite transactionで1だけ進める。current ownerだけが出品でき、active listing中のtransferは拒否する。
 `game-market-listing-cancellations`は出品時headに対するcurrent-owner署名を要求し、取消後はtransferを再許可する。
-管理者限定`game-asset-lineage-decisions`はorigin receiptまたは受理済みtransferをrevision付きで
-revoke/restoreする。未解決revocationはそのassetの全descendant listing/transferをfail-closedにし、
+管理者限定`game-asset-lineage-decisions`は、外部arbiterの署名certificateでorigin receiptまたは
+受理済みtransferをrevision付きでrevoke/restoreする。未解決revocationはそのassetの全descendant listing/transferをfail-closedにし、
 active listingをtransaction内でquarantineする。appeal後もquarantine済みnonceは復活せず、fresh nonceを要求する。
 30Hz入力そのものは中央へ送らない。peer witnessとのowner head接続、価格精算は次段階である。詳細は
 [`docs/reference-hack-and-slash-game-ja.md`](../../docs/reference-hack-and-slash-game-ja.md)を参照する。
@@ -40,7 +40,9 @@ Playwrightで実ブラウザをgateする。LLM providerを設定した上で`pn
 
 lineage decisionの管理API contractは次のとおり。`expected_revision`はancestorごとのCASで、初回は0、
 成功ごとに1進む。同じcanonical requestは同じ`decision_id`となり`duplicate`、古いrevisionは
-`stale_lineage_revision`、既に同じstatusなら`lineage_status_unchanged`になる。
+`stale_lineage_revision`、既に同じstatusなら`lineage_status_unchanged`になる。署名対象はscope、unit、
+asset/ancestor/kind、revision、outcome、reason code、issued/expires、appeal deadline、appeal target、
+finalized時刻のdomain-separated配列である。
 
 ```http
 POST /v1/pve/:unit/game-asset-lineage-decisions
@@ -48,16 +50,37 @@ Authorization: Bearer <ADMIN_TOKEN>
 Content-Type: application/json
 
 {
-  "asset_id": "...",
-  "ancestor_id": "<authority receipt id or accepted transfer id>",
-  "expected_revision": 0,
-  "outcome": "revoked",
-  "reason": "origin checkpoint challenge upheld"
+  "statement": {
+    "version": 1,
+    "scope": "reference-game",
+    "unit": "<unit>",
+    "asset_id": "...",
+    "ancestor_id": "<authority receipt id or accepted transfer id>",
+    "ancestor_kind": "origin",
+    "expected_revision": 0,
+    "revision": 1,
+    "outcome": "revoked",
+    "reason_code": "checkpoint_challenge_upheld",
+    "issued_at_ms": 1786000000000,
+    "expires_at_ms": 1786000030000,
+    "appeal_deadline_at_ms": 1786003600000,
+    "appeal_of_decision_id": null,
+    "finalized_at_ms": null
+  },
+  "authentication": {
+    "scheme": "moonbit-ed25519-v1",
+    "arbiter_id": "external-arbiter-a",
+    "signature": "<128 hex>"
+  }
 }
 ```
 
-appealは同じendpointへ次revisionと`"outcome": "eligible"`を送る。API tokenは現状同一Cloudflare
-accountの管理境界であり、外部裁定者の署名certificateではない。
+appealは同じendpointへ次revision、`"outcome": "eligible"`、直前revokeの
+`appeal_of_decision_id`、`finalized_at_ms`を送る。期限切れappeal、別decisionを覆うappeal、unknown
+arbiter、無署名・不正署名・期限切れcertificateは拒否する。API tokenは同一Cloudflare accountの
+管理境界、certificateは裁定内容の外部認証という別の境界である。arbiter rosterは
+`LINEAGE_ARBITER_ROSTER`へ`{"id":{"scheme":"...","public_key":"..."}}`として設定し、
+clock skew許容は`LINEAGE_DECISION_MAX_CLOCK_SKEW_MS`（未指定時5000 ms）で設定する。
 
 open-worldの汎用inventoryは、同じCAS contractを次のendpointで使う。
 
@@ -67,11 +90,24 @@ Authorization: Bearer <ADMIN_TOKEN>
 Content-Type: application/json
 
 {
-  "asset_id": "<verified asset id>",
-  "ancestor_id": "<asset id for origin, or current inventory checkpoint digest>",
-  "expected_revision": 0,
-  "outcome": "revoked",
-  "reason": "sample replay appealed"
+  "statement": {
+    "version": 1,
+    "scope": "verified-asset",
+    "unit": "<unit>",
+    "asset_id": "<verified asset id>",
+    "ancestor_id": "<origin, registered transfer, or current head>",
+    "ancestor_kind": "origin",
+    "expected_revision": 0,
+    "revision": 1,
+    "outcome": "revoked",
+    "reason_code": "sample_replay_rejected",
+    "issued_at_ms": 1786000000000,
+    "expires_at_ms": 1786000030000,
+    "appeal_deadline_at_ms": 1786003600000,
+    "appeal_of_decision_id": null,
+    "finalized_at_ms": null
+  },
+  "authentication": { "scheme": "...", "arbiter_id": "...", "signature": "..." }
 }
 ```
 
@@ -544,8 +580,13 @@ artifact:
 - mode固有bundleの期待checkpointは現在、管理tokenで認証した要求に固定したdigestである。
   current-owner proof、per-asset monotonic head、reference PvEのorigin/transfer ancestry revocation、
   汎用open-world inventoryのorigin/current-head revocationは実装済み。汎用側の中間transfer lineage proof、
-  transparency log headのremote witness、private-key custody、multi-asset atomic head、時間制appeal window、
-  pruningは未実装。
+  transparency log headのremote witness、private-key custody、arbiter key rotation/revocation、
+  Merkle lineage pruningは未実装。署名付きlineage decision、時間制appeal window、restart可能な
+  decision history/finalityはreference PvEと汎用open-world endpointへ接続済み。player-local checkpoint relationのACK済みprefix pruningと
+  durable active/resolved evidence hold registry、署名済みhash-chain hold envelope、source別cursorと
+  hold/cursorのatomic apply、件数/byte/timeout/受信deadline付きsingle-page HTTP poller、source別の
+  durable poll job/lease/attempt fencing/指数backoff/restart回復/`expired`・`escalated`停止まで実装済み。
+  poll job終端時もactive holdは維持する。evidence holdからlineage caseを自動起票する接続は未実装。
 - checkpoint outboxの直接DO RPC、lease/alarm retry、authority history、ACK保存はremote E2Eまで接続済み。
   Queue checkpoint consumerは後方互換経路として残す。敵対的peerからのproducer/witness署名はreceiver前の
   認証adapterへ接続済みだが、internal DO RPC自体は同一Cloudflare accountの認証済みchannelとして扱う。

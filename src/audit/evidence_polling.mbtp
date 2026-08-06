@@ -1,0 +1,167 @@
+///|
+predicate evidence_inbox_page_post(
+  received_at_ms : Int,
+  deadline_at_ms : Int,
+  message_count : Int,
+  max_messages : Int,
+  response_bytes : Int,
+  max_response_bytes : Int,
+  source_matches : Bool,
+  cursor_matches : Bool,
+  result : Bool,
+) {
+  if received_at_ms >= 0 {
+    if deadline_at_ms > received_at_ms {
+      if message_count >= 0 {
+        if max_messages > 0 {
+          if message_count <= max_messages {
+            if response_bytes >= 0 {
+              if max_response_bytes > 0 {
+                if response_bytes <= max_response_bytes {
+                  if source_matches {
+                    if cursor_matches {
+                      result == true
+                    } else {
+                      result == false
+                    }
+                  } else {
+                    result == false
+                  }
+                } else {
+                  result == false
+                }
+              } else {
+                result == false
+              }
+            } else {
+              result == false
+            }
+          } else {
+            result == false
+          }
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_inbox_page_requires_every_guard(
+  received_at_ms : Int,
+  deadline_at_ms : Int,
+  message_count : Int,
+  max_messages : Int,
+  response_bytes : Int,
+  max_response_bytes : Int,
+  source_matches : Bool,
+  cursor_matches : Bool,
+) where {
+  proof_require: evidence_inbox_page_post(
+    received_at_ms,
+    deadline_at_ms,
+    message_count,
+    max_messages,
+    response_bytes,
+    max_response_bytes,
+    source_matches,
+    cursor_matches,
+    true,
+  ),
+  proof_ensure: received_at_ms >= 0,
+  proof_ensure: deadline_at_ms > received_at_ms,
+  proof_ensure: message_count >= 0,
+  proof_ensure: max_messages > 0,
+  proof_ensure: message_count <= max_messages,
+  proof_ensure: response_bytes >= 0,
+  proof_ensure: max_response_bytes > 0,
+  proof_ensure: response_bytes <= max_response_bytes,
+  proof_ensure: source_matches == true,
+  proof_ensure: cursor_matches == true,
+} {
+}
+
+///|
+pub lemma expired_evidence_inbox_page_is_never_admitted(
+  received_at_ms : Int,
+  deadline_at_ms : Int,
+  message_count : Int,
+  max_messages : Int,
+  response_bytes : Int,
+  max_response_bytes : Int,
+  source_matches : Bool,
+  cursor_matches : Bool,
+) where {
+  proof_require: received_at_ms >= deadline_at_ms,
+  proof_ensure: evidence_inbox_page_post(
+    received_at_ms,
+    deadline_at_ms,
+    message_count,
+    max_messages,
+    response_bytes,
+    max_response_bytes,
+    source_matches,
+    cursor_matches,
+    false,
+  ),
+} {
+}
+
+///|
+pub lemma oversized_evidence_inbox_message_page_is_never_admitted(
+  received_at_ms : Int,
+  deadline_at_ms : Int,
+  message_count : Int,
+  max_messages : Int,
+  response_bytes : Int,
+  max_response_bytes : Int,
+  source_matches : Bool,
+  cursor_matches : Bool,
+) where {
+  proof_require: message_count > max_messages,
+  proof_ensure: evidence_inbox_page_post(
+    received_at_ms,
+    deadline_at_ms,
+    message_count,
+    max_messages,
+    response_bytes,
+    max_response_bytes,
+    source_matches,
+    cursor_matches,
+    false,
+  ),
+} {
+}
+
+///|
+pub lemma oversized_evidence_inbox_byte_page_is_never_admitted(
+  received_at_ms : Int,
+  deadline_at_ms : Int,
+  message_count : Int,
+  max_messages : Int,
+  response_bytes : Int,
+  max_response_bytes : Int,
+  source_matches : Bool,
+  cursor_matches : Bool,
+) where {
+  proof_require: response_bytes > max_response_bytes,
+  proof_ensure: evidence_inbox_page_post(
+    received_at_ms,
+    deadline_at_ms,
+    message_count,
+    max_messages,
+    response_bytes,
+    max_response_bytes,
+    source_matches,
+    cursor_matches,
+    false,
+  ),
+} {
+}

@@ -109,7 +109,16 @@ otherwise             : evidence unavailable
 
 負のage、期限切れ、矛盾したlatency入力はfail-closedにする。
 
-状態: `Proven + Tested`。実際のpruning workerは`Pending`。
+状態: `Proven + Tested`。player-local Node SQLite/IndexedDBでは、appeal floorより古いACK済み連続prefixを
+durable anchorへ畳み込むpruningを`Implemented + Tested`。認証済みfork/challenge/appeal参照を
+active/resolvedのdurable holdとして保存し、active holdをprune対象から自動除外する経路も
+`Proven + Tested`。署名済みhash-chain envelopeの取り込み、差し替え可能なauthenticator、source別durable
+cursorとhold/cursorのatomic applyも`Proven + Tested`。
+外部裁定システムのsingle-page pollingは件数/byte/timeout/受信deadlineを含め`Proven + Tested`。
+poll jobのdurable schedule、期限付きlease、attempt fencing、指数backoff、restart回復、
+operationalな`expired`/`escalated`停止も`Proven predicate + Tested refinement`。これらの終端状態は
+active holdをdismissしない。階層event/micro/macroの自動worker、ゲーム固有のappeal/case裁定、
+authority側history pruningは`Pending`。
 
 ### AUD-CORE-006: compact proofの計算量を境界化する（SHOULD）
 
@@ -245,8 +254,26 @@ appeal後も旧nonceを自動復活させずfresh nonceを要求する経路ま�
 汎用open-world inventoryもverified origin/current headに加え、bounded authenticated sliceで登録した
 中間transferを同じrevision付きdecision APIへ接続し、
 複数の未解決revokeがすべてappealされるまでlisting/head更新を拒否する経路が`Tested locally`。
-lineage admission predicateは`Proven`、retention anchor/未証明transfer revoke拒否は`Model checked`。
-外部裁定者の認証とappeal deadlineは`Pending`。
+lineage admission predicateに加えて外部certificate admission predicateは`Proven`、retention
+anchor/未証明transfer revoke拒否と、`appeal_open -> finalized | expired`、exact appeal target、
+独立revocation、decision revisionは`Model checked`。reference PvEと汎用open-world endpointは
+scheme別verifier registry、環境provisionしたarbiter roster、domain-separated statement、
+issued/expires/clock-skew、appeal deadline、decision history/finalityのSQLite永続化へ接続し、
+無署名、unknown arbiter、不正署名、期限切れ、wrong lineage binding、stale revision、期限外appealを
+fail-closedにする。production arbiter rosterのrotation/revocationとcase起票システム接続は`Pending`。
+
+### AUD-ASSET-005: multi-asset checkpointを一括受理する（MUST）
+
+同じinventory session、parent checkpoint、旧epochに属する1〜64 assetを、1つの署名済みcheckpointと
+replay-witness certificateで認証する。asset ID順のcanonical write-setは各assetの旧head/versionと
+次recordを拘束し、全origin、Merkle membership、owner/version、lineage eligibilityが成立した場合だけ
+受理する。storage adapterは暗号検証後にtransaction内で全CAS前提とrevocationを再確認し、head、history、
+idempotency recordを一括commitする。一要素のstale/revoke、途中crash、同一keyで異なるpayloadでは
+一件も更新してはならず、同一key・同一payloadのretryはduplicate successにする。
+
+状態: 10条件admission predicateは`Proven`、MoonBit wire/central verifierとCloudflare SQLite Durable
+Objectのstale/revoke/fault rollback/idempotency integrationは`Tested locally`。player-local checkpoint
+storeはIndexedDBへ接続済みだが、multi-asset inventory record自体のlocal write-set拡張は`Pending`。
 
 ## 7. 永続化、配送、障害時動作
 
@@ -263,8 +290,8 @@ lineage admission predicateは`Proven`、retention anchor/未証明transfer revo
 状態: SQLite Durable Object、中央replay Queue/idempotent outbox、checkpoint sealとatomicなoutbox、
 direct authority RPC、lease/alarm retry/ACK、restart testは`Tested locally + remote E2E`。
 2 peer・2 epochのQuint/TLC有限モデルではcrash/drop/partitionとbounded outbox下の安全性、network安定後の
-authority finalityを`Model checked`。player-local論理DBとNode SQLite参照adapterの
-atomic seal/restart/ACK/破損検知は`Tested`。observer DB、IndexedDB/mobile SQLiteへのproduction接続、
+authority finalityを`Model checked`。player-local論理DB、Node SQLite、browser IndexedDB参照adapterの
+atomic seal/restart/ACK/破損検知は`Tested`。observer DB、mobile SQLiteへのproduction接続、
 witness quorum収集は公開pull/署名submit型referenceと有限Quint/TLCモデルまで`Tested locally / Model checked`。
 端末側のローカル署名clientとhashed sourceごとのfixed-window隔離は`Tested locally + 全mode remote E2E`。
 東京clientから全modeの`apac-ne`、PvPの`wnam`/`weur` hintを各20 run測り、単一egressのrate-limit
@@ -273,7 +300,8 @@ bounded HTTP outbound referenceは実装済みだが、persistent socket、NAT/b
 公平queueingのproduction分散livenessは`Pending`。
 
 注意: Cloudflareの`replay_outbox`は中央replay job用、`checkpoint_outbox`はplayer checkpointを
-sealと同じtransactionで保存するserver-side referenceである。端末側には別途Node SQLite参照adapterを追加した。
+sealと同じtransactionで保存するserver-side referenceである。端末側にはNode SQLiteとbrowser IndexedDBの
+参照adapterを追加した。
 checkpoint経路には実暗号producer/witness検証と
 公開pull/ローカル署名/submit収集とNode SQLite端末DB参照adapterも接続済みだが、
 production端末runtime・実credentialへの統合とpersistent socket fanoutは未実装である。
@@ -373,9 +401,9 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 優先順は次のとおり。
 
 1. 監査済みcrypto、key custody、rotation/revocation
-2. observer signing store、IndexedDB/mobile SQLite player DB、migration/fsync/暗号化at-rest
+2. observer signing store、mobile SQLite player DB、fsync/暗号化at-rest（IndexedDB referenceは実装済み）
 3. remote witness/transparency socket fanoutと端末credential（pure retry/fork選択は実装済み）
-4. 汎用inventoryのMerkle lineage pruning、appeal window、multi-asset atomic checkpointを実装
+4. 汎用inventoryのMerkle lineage pruning、appeal window、multi-asset checkpointのplayer-local DB接続
 5. projectile/visibility、raid lootを含む実ゲームkernel完全化とmanifest/wire migration
 6. packet loss、partition、crash、Queue重複を含むfault-injection
 7. Quintモデルを複数authority shard、pruning/appealへ拡張（bounded outboxは完了）

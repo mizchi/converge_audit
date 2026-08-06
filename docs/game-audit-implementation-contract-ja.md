@@ -344,6 +344,9 @@ receiverは全要素のsignature、boundary、epoch、parentを検査した後�
 
 - 未ACK checkpointとoutbox entryをpruneしない。
 - unresolved fork/challenge/appealが参照するevent、proof、checkpointをpruneしない。
+- 認証済み参照はdurable holdとして保存し、未解決の間は呼出側の指定がなくてもpruneを止める。
+- hold解決は元のboundary、epoch、checkpoint、referenceと完全一致する認証済みdecisionだけを受け入れ、
+  解決証跡は対応checkpointをpruneするまで保持する。
 - event leafを消した後に返せる精度をmicro/macro精度より細かく表示しない。
 - authority historyはhistorical duplicate判定とappeal windowを満たす期間保持する。
 - prune watermark自体をdurableにし、crash後に保持期限を巻き戻さない。
@@ -406,11 +409,13 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | 契約 | 現状 | 判定 |
 | --- | --- | --- |
 | policy、commitment、head pure classifier | `src/audit`、Why3、runtime test | Implemented / Proven scope |
-| closure/ACK/atomic seal/delivery authenticationとvote mergeのfail-closed gate | `src/audit`の39 proof goals + `src/audit/runtime` | Implemented / Proven scope |
+| closure/ACK/atomic seal/delivery authentication/evidence inbox/poll scheduleとvote mergeのfail-closed gate | `src/audit`の50 proof goals + quorum vote 8 goals + `src/audit/runtime` | Implemented / Proven scope |
 | opaque atomic seal plan/outbox、lease、release、最古retry選択 | `src/audit/runtime` | pure contractはImplemented + Tested |
 | watermark駆動micro/macro builder | `src/audit/layered` | in-memoryはImplemented、mode固有closure検証adapterはPending |
-| player-local authenticated event DB | 公開row DTO + Node 24 SQLite relation、event/equivocation/checkpoint/head/closure/outbox/ACK履歴、revision CAS、起動時全image検証 | Reference Implemented + Tested / IndexedDB・production端末統合はPending |
-| seal + local head + checkpoint outboxのatomic transaction | opaque planから公開write-setを導出し、player-local Node SQLiteとCloudflare SQLiteで一括適用、各4 fault rollback | Tested locally / production player DBはPending |
+| player-local authenticated event DB | 共通host contract + Node 24 SQLite / IndexedDB relation、event/equivocation/checkpoint/head/closure/outbox/ACK履歴、retention anchor、active/resolved evidence hold、source別evidence inbox cursor/poll job、lease/attempt fencing、revision CAS、起動時全image検証 | Node/IndexedDB Reference Implemented + Tested / mobile SQLiteはPending |
+| seal + local head + checkpoint outboxのatomic transaction | opaque planから公開write-setを導出し、player-local Node SQLite、browser IndexedDB、Cloudflare SQLiteで一括適用、player-local adapterは共通4 fault rollback | Tested locally / mobile SQLiteはPending |
+| player-local evidence prefix pruning/poll | MoonBit一段guard、appeal floor、protected/equivocation pin、durable active/resolved evidence hold、署名済みhash-chain hold envelope、source cursorとのatomic apply、bounded single-page polling、durable poll schedule/lease/attempt fencing/backoff/restart回復/operational terminal、ACK済みprefix、durable anchor、Node SQLite/IndexedDB rollback | Proven predicate/auth/hash-chain/page/schedule gate + Tested locally / holdからlineage caseの自動起票はPending |
+| lineage case裁定 | scheme別署名verifier、arbiter roster、canonical statement、revision CAS、provisional revoke、時間制appeal、finalized/expired、ancestor別decision history | Proven admission + Quint model checked + Worker SQLite Tested locally / production key rotationはPending |
 | authority boundary/initial headの事前provision | 管理API → destination DO、source側provision ledger、未設定receiver拒否 | Tested locally |
 | Queue jobのsource outbox認証 | receiver mutation前のsource DO exact-match | Tested locally |
 | producer署名 + provision済みwitness quorum | `src/audit/delivery_auth`のopaque capability、実Ed25519 Worker bridge、source/receiver二重gate | Proven gate + Tested locally |
@@ -421,6 +426,7 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | authenticated success ACK | internal DO channel + opaque MoonBit ACK gate + SQLite tombstone | Proven core + remote 20/20 |
 | atomic gap batch | in-memory transportとCloudflare gap API | Partial |
 | server-side central replay outbox | Cloudflare `replay_outbox` | Tested locally |
+| multi-asset inventory checkpoint | MoonBit opaque verified capability/write-set digest、canonical 1〜64 proof wire、Cloudflare全head/history/idempotency transaction | Proven gate + Tested locally / 汎用player-local checkpoint storeへのinventory write-set拡張はPending |
 | checkpoint transportの有限safety/liveness | Quint/TLC、bounded outbox込み11,340 distinct states | Model checked、capacity gate除去で反例 |
 | checkpoint traceの実装conformance | Quint ITFをMoonBit policy + Node SQLiteへstep replayし、event/head/未ACK outbox/authority射影を比較 | Deterministic MBT Tested |
 | witness collectionの有限safety/liveness | Quint/TLC、4 roster + 1 intruder、safety 30,720 / liveness 19,456 distinct states | Model checked |
@@ -486,7 +492,77 @@ source独立性や全地域SLAと同一視してはならない。
 | model question | 公開row DTOを改ざん・欠損させたimageからorphan headやACK履歴なしのacknowledged outboxを復元できるか |
 | machine result | MoonBit正常imageはevent/equivocation/head/outbox/ACKを復元し、orphan headとACK footprint欠損を拒否した。Node SQLiteでもrestart後の同値image、stale CAS、容量超過、ACK footprint欠損を検査し、history/head/outbox/closure各書込み直後の例外は全旧状態へrollbackした |
 | decision | `PlayerLocalAuditStore`を汎用reference transaction、`PlayerLocalSealPlan::write_set()`をstorage-neutral境界とし、物理adapterは公開DTOを同一transactionで保存・再構築する。未認証network payloadからwrite-set/ACKを直接構築してはならない |
-| lock | MoonBit local store 23 tests、Node SQLite 10 tests（Node package合計17）、`just test-node-audit-runtime`。Quintのatomic `sealNextCheckpoint`を実装へ対応付けるが、SQLite engine自体をmodel checkedしたとは主張しない |
+| lock | MoonBit local store 26 tests、Node SQLiteとIndexedDBへ同じ11 conformance tests、engine固有のrestart/collision/quota/migration tests、`just test-node-audit-runtime`と`pnpm test:assets`。Quintのatomic `sealNextCheckpoint`を実装へ対応付けるが、DB engine自体をmodel checkedしたとは主張しない |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | Issue #13はNode SQLiteとbrowser IndexedDBへ同じstorage contract、atomic seal、restart再送、ACK容量解放、quota/migration fail-closedを要求する |
+| implementation observation | browser game固有snapshotだけでは、汎用checkpoint outboxとACK証跡を同じ構造でmobile/Nodeへ移植できず、version upgradeとquota failureの境界も曖昧になる |
+| model question | 既存Quintのatomic `sealNextCheckpoint`射影を保ったまま、非同期DB adapterでもpartial write、stale revision、破損ACK footprint、未知schemaを受理せず再起動できるか |
+| machine result | Node SQLite/IndexedDB共通conformance 11件、Node全28件、IndexedDB/asset全35件が通過した。Chromium 128 epochではseal mean 1.85 ms / p95 3.3 ms、ACK mean 1.28 ms / p95 2.3 ms、reload + 全image検証2.2 msだった |
+| decision | DTO/validator/MoonBit write-set policyを`examples/player-local-runtime`へ分離し、IndexedDBはcheckpoint/head/closure/outbox/revisionを一transactionで適用する。quota、未知future schema、欠損ACK証跡はfail-closedにする |
+| lock | `pnpm test:assets` 35 tests、`bench:player-local-indexeddb:browser`、Node package 28 tests。game snapshotとのcross-store atomicity、mobile SQLite、暗号化at-restは未達として残す |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | `IMPL-PRUNE-001`は未ACK checkpoint、未解決fork/challenge/appealを削除せず、prune watermarkをcrash後も巻き戻さないことを要求する |
+| implementation observation | ACK tombstoneを無期限保持すると配送capacityとは独立に端末DBが単調増加する。一方、先頭以外を削除するとcheckpoint parent chainを復元できない。また未解決参照を呼出側の`protected_epochs`だけで渡すと、指定漏れにより必要証拠を削除できる |
+| model question | durable anchor直後の連続epochだけを対象に、appeal floor、全outbox ACK、未解決参照なしを同時に要求し、未解決参照を認証済みdurable holdから自動導出すれば、必要証拠を飛び越えずprefixを短縮できるか。未認証またはbinding不一致の解決でholdを解除できないか |
+| machine result | MoonBitのpruning/hold predicate 8 proof goalsが、prune受理時の全guard、未ACK/protected拒否、hold配置・解決の認証とexact bindingを証明した。Node SQLite/IndexedDB共通testはanchor restart、未ACK/protected/equivocation/active hold停止、hold解決、stale CAS、4 fault rollbackを通過。Chromiumで8 epoch pruneは10.4 ms、imageは161,528から151,571 bytesへ減少した |
+| decision | pruningは時間的interleavingを増やすworkerではなく、一段のpure eligibilityをMoonBitで証明し、CAS transactionをconformance testでrefineする。認証済み参照は永続的な`active -> resolved` relationにし、active holdをvalidator自身が保護対象へ加える。削除は連続prefixのみ、最後のdigestをdurable anchorにし、anchor以前を指す遅延appealはfail-closedにする |
+| lock | `pruning.mbtp`、`pruning_test.mbt`、MoonBit hold/pruned-image restore、Node 28 tests、IndexedDB/asset 35 tests、Chromium pruning benchmark。外部裁定システム接続と階層Merkle pruningは別要件として残す |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | `IMPL-PRUNE-001`のdurable holdは認証済み参照だけを受理し、暗号backendはstorage/pruning contractから交換可能でなければならない |
+| implementation observation | low-level runtimeへ呼出側が`authenticationSucceeded=true`を直接渡すだけでは、外部HTTP payloadとのtrust boundaryがコード上に現れず、署名対象fieldの追加漏れも検出できない |
+| model question | source/message ID、boundary、checkpoint/reference、resolution decision、source別sequence/previous digestを一つのdomain-separated statementへ束縛し、設定済みsourceの署名検証後だけ既存MoonBit gateへ渡せば、改ざん・未知source・再送・gapをfail-closedまたは冪等に扱えるか |
+| machine result | 実MoonBit Ed25519 adapterを使うbrowser runtime testで、改ざん署名とsource mismatchは無変更拒否、正しいplace/resolveは永続化、同じsequence/digest再送は`no_change`、署名済みでもwrong previous digestとsequence gapは無変更拒否になった。共通wireはcrypto固有型を持たずauthenticator interfaceだけに依存する |
+| decision | `evidence-hold-wire.ts`をcanonical wire contract、`evidence-hold-authenticator.ts`を交換可能な参照crypto adapter、browser runtimeを検証済みenvelopeからdurable hold/cursorへの接続点とする。poll transportはこのAPIだけを呼ぶ |
+| lock | `evidence_inbox.mbtp`の3 proof goals、`player-local-indexeddb.node-test.ts`のsigned hash-chain envelope test、TypeScript strict check、IndexedDB/asset 35 tests |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | 外部裁定sourceのcursorはcrash/restart後も巻き戻らず、hold更新と同じ受理単位で進む必要がある |
+| implementation observation | hold保存後に別transactionでcursorを進めると、その間のcrashで同じmessageを別状態へ再適用するか、逆順にすると未保存holdを処理済みとして飛ばせる |
+| model question | 現在sequenceが`-1`以上、次がexact `+1`、previous digest一致、message digest前進、認証成功、操作許可の全条件を満たすときだけcursorを進められるか |
+| machine result | MoonBit/Why3で3 obligationsを証明した。Node SQLite/IndexedDB共通conformanceはhold後・cursor後の障害注入で旧imageへのrollback、restart後のcursor復元、bad resolutionの無変更拒否を通過した |
+| domain wording | source chainのmessageを一件受理するか一件も受理しないかのどちらかであり、holdだけ・cursorだけが端末DBへ残る状態は作らない |
+| decision | hold mutation、source cursor、storage revisionを一つのDB transactionへ入れ、hash-chain guardはMoonBit bridge、CAS/refinementは共通host validatorと両adapterで再検査する |
+| lock | `evidence_inbox.mbt/.mbtp`、共通conformance 11件、Node 28 tests、IndexedDB/asset 35 tests。sourceからのdurable取得schedule/backoffは後続のpoll job契約へ分離する |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | 外部裁定sourceは敵対的または障害中でもあり得るため、resource上限と受信期限を越えたpageで端末DBを進めてはならない |
+| expected claim | deadline前に受信し、message件数/response bytesが上限内で、source/cursor anchorが一致するpageだけをmessage検証へ渡す。timeout/期限切れはactive holdを解除しない |
+| implementation observation | `response.json()`を直接使うとbodyを上限なしに確保し、pageを一括成功扱いすると後半の不正messageか前半の正当messageのどちらかを誤って扱う |
+| model question | 受信時刻、deadline、message count、response bytes、source/cursor bindingの全guardを満たす場合だけpageをadmitできるか |
+| machine result | MoonBit/Why3で4 obligationsを証明した。browser testは正しい2-message page、durable cursorからの再開、real HTTP POST、wrong anchor、response deadline、request timeout、byte/page超過、不正な後続messageを検査し、29 asset testsが通過した。Chromiumで13,648-byte/16-message pageは85.3 ms、5.33 ms/messageだった |
+| domain wording | remote responseが遅い・巨大・別cursorでもhold状態は変わらない。page途中に不正messageがある場合は、それ以前に個別認証された連続prefixだけが残る |
+| decision | `evidence-inbox-polling.ts`をpage DTO/decoder、browser `evidence-inbox-poller.ts`をbounded POST driverとする。deadlineはresponse受信期限であり、caseを自動dismissする時刻ではない |
+| lock | `evidence_polling.mbt/.mbtp`、`evidence-inbox-poller.node-test.ts` 4 tests、`pnpm typecheck`。durable schedule/backoffとoperationalなexpired/escalated遷移は後続のpoll job契約へ分離する |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | bounded pollerをtimerから直接呼ぶだけでは、process/tab再起動後のin-flight状態、二重実行、retry時刻、期限到達を復元できない |
+| expected claim | sourceごとに一つのjobを永続化し、dueかつdeadline前でleaseが空いたときだけclaimする。各claimは単調attempt tokenを発行し、completionはtokenとlease expiryの完全一致を要求する |
+| implementation observation | lease expiryだけをCAS tokenにすると同じexpiryで再claimされた古いworkerを識別できない。またpoll timeoutがleaseより長い構成では正常なworker同士が重複し得る |
+| model question | deadline到達後のclaimを常に拒否し、backoff stepを非減少かつcap以下に保ち、物理DBではrestart後のlease expiry回復とstale completion拒否を維持できるか |
+| machine result | MoonBit/Why3でclaim/deadline/backoffの4 goalsを追加しcoreは50 goals。共通conformance 11件をNode SQLite 28 testsとIndexedDBで通し、browser scheduler 5 testsがdue実行、100→200 ms指数backoff、restart reclaim、deadline expiry、別claim後のlost lease、absolute Unix msの相対duration正規化を確認した。asset全体は35 tests |
+| domain wording | `expired`は取得期限の終了、`escalated`は人手・上位系へ引き渡した運用状態であり、cheat判定でもchallenge/appealのdismissでもない。どちらもactive holdを維持する |
+| decision | logical imageへsource別job、deadline、next poll、failures、attempt count、scheduled/in-flight/expired/escalatedを含める。leaseはdeadlineでcapし、`requestTimeout <= leaseDuration`を実行前に要求する。成功はfailuresを0へresetし、失敗はMoonBit policyのdeadline-capped backoffで再scheduleする。JSのabsolute Unix msはMoonBit `Int`へ直接渡さず、hostで現在時刻を0とするbounded relative durationへ正規化する |
+| lock | `evidence_poll_schedule.mbt/.mbtp` 4 goals、共通storage conformance、SQLite table、IndexedDB schema v6、`evidence-inbox-scheduler.node-test.ts` 5 tests。poll terminalからlineage caseを自動起票する接続は別要件として残す |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | `AUD-ASSET-004`は、管理tokenだけでなく外部arbiterが認証したlineage decision、期限付きappeal、独立した祖先revocationを要求する |
+| expected claim | domain-separated statementへscope/unit/asset/ancestor/kind/revision/outcome/reason/timestampsを固定し、roster内arbiterの署名、certificate期限、exact CAS、exact appeal target、appeal deadlineがすべて成立する場合だけdecision head/historyを進める |
+| implementation observation | 旧APIは自由文reasonと管理tokenだけで`revoked`/`eligible`を切り替えられ、appealがどのrevokeを覆すか、いつまで有効か、誰が裁定したかを永続化していなかった |
+| model question | provisional revokeを期限後もeligibleへ自動復帰させず、別祖先のrevokeを残し、wrong target・期限外・stale revision・未認証certificateを拒否できるか |
+| machine result | MoonBit/Why3で外部certificate admissionの4 goalを含む176 goalを証明した。Quint/TLCは正常model 795 msで反例なし、authentication/certificate time/revision/appeal target/deadlineの5 broken modelで意図した反例を検出した。workerdは無署名、unknown arbiter、期限切れcertificate、wrong lineage、stale revision、期限外appeal、exact duplicate、複数revoke、DO eviction後のappealを検査した |
+| domain wording | certificate期限は署名付き命令の受理期限、appeal deadlineは既存revokeを覆せる期限である。期限切れrevokeはcheat確定でも自動restoreでもなく、asset利用を止めた`expired` caseになる |
+| decision | 暗号方式は`scheme -> verifier` registry、identityは環境provision rosterへ分離する。decision IDはcanonical statement digest、署名とarbiter metadataをhistoryへ保存する。eligible appealは直前decision IDを明示し、quarantine済みlisting nonceを復活させない |
+| lock | `lineage-decision-certificate.ts`、`asset_lineage_certificate_allowed`、`LineageAppeal*.qnt`、両lineage decision endpoint、SQLite head/history migration、Worker 98 tests |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -504,7 +580,7 @@ source独立性や全地域SLAと同一視してはならない。
 | model question | durable lease中のrestart、1成功+1未認証/失敗、1成功+1署名済みforkで、backpressure・fair retry・fork evidenceは期待どおり残るか |
 | machine result | Node loopback 7 testsでMoonBit JS選択、2並列上限、restart lease、期限後retry、success/failure永続化、oversize拒否、署名済みfork quarantineを確認した。`timeout > lease`は構築時拒否に固定し、fork evidenceとquarantineの不一致はrestart時に破損として拒否した |
 | decision | route/lease/evidenceをSQLite state、選択/遷移をMoonBit policy、HTTPを交換可能I/Oへ分離する。HTTP到達や未認証bytesだけでcheat判定しない |
-| lock | `peer-checkpoint-transport.node-test.ts` 7 tests、Node package合計17 tests、`just test-node-audit-runtime`。Quint抽象への実装refinement testでありHTTP stack自体のmodel checkではない |
+| lock | `peer-checkpoint-transport.node-test.ts` 7 tests、Node package合計21 tests、`just test-node-audit-runtime`。Quint抽象への実装refinement testでありHTTP stack自体のmodel checkではない |
 
 | 項目 | 内容 |
 | --- | --- |

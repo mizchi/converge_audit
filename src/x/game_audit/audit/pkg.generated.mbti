@@ -14,9 +14,15 @@ pub fn accepted_dodge_requires_every_condition(Bool, Bool, Bool, Bool, Bool, Boo
 
 pub fn accepted_encounter_clear_requires_completion_and_survivor(Bool, Int) -> Unit
 
+pub fn accepted_lineage_appeal_has_exact_open_window(Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn accepted_lineage_certificate_has_every_trust_boundary(Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
 pub fn accepted_lineage_decision_has_exact_ancestor_head(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn accepted_lineage_slice_has_every_boundary(Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn accepted_multi_asset_checkpoint_requires_every_binding(Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn accepted_open_world_observer_certificate_has_quorum(Int, Int, Int) -> Unit
 
@@ -45,6 +51,8 @@ pub fn advanced_signing_anchor_head_requires_exact_parent(Bool, Bool, Bool, Int,
 pub fn already_defeated_pvp_target_cannot_score_again(Int, Int, Bool, Int, Int) -> Unit
 
 pub fn anchor_only_central_job_awaits_transcript(Bool, Bool, Bool) -> Unit
+
+pub fn asset_lineage_certificate_allowed(certificate_authenticated~ : Bool, arbiter_known~ : Bool, lineage_bound~ : Bool, certificate_time_valid~ : Bool, lifecycle_valid~ : Bool, is_appeal~ : Bool, appeal_target_matches~ : Bool, appeal_window_open~ : Bool) -> Bool
 
 pub fn asset_lineage_decision_allowed(asset_exists~ : Bool, ancestor_in_lineage~ : Bool, expected_decision_matches~ : Bool, revision_advances~ : Bool, decision_changes_status~ : Bool) -> Bool
 
@@ -109,6 +117,8 @@ pub fn encounter_miss_preserves_valid_hp(Int, Int, Int) -> Unit
 pub fn excessive_backdate_is_rejected(Int, Int, Int, Bool) -> Unit
 
 pub fn existing_plan_slot_never_signs_a_second_observation(Bool, Bool, OpenWorldObserverSigningDecision) -> Unit
+
+pub fn expired_lineage_certificate_is_rejected(Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn finalized_requires_authority(FixedArray[Bool], Int, Bool, AuthorityVerdict, Bool) -> Unit
 
@@ -189,6 +199,8 @@ pub fn missing_seal_membership_never_publishes() -> Unit
 pub fn missing_signing_anchor_heads_create_gap_not_fork(Int, Int, Bool, Bool) -> Unit
 
 pub fn missing_source_rejects_transfer(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn multi_asset_inventory_checkpoint_allowed(has_assets~ : Bool, within_limit~ : Bool, assets_canonical~ : Bool, checkpoint_verified~ : Bool, manifest_matches~ : Bool, common_parent_epoch~ : Bool, every_creation_eligible~ : Bool, every_lineage_clean~ : Bool, every_proof_verified~ : Bool, every_head_version_matches~ : Bool) -> Bool
 
 pub fn new_observer_signature_requires_empty_plan_slot(Bool, Bool, Bool) -> Unit
 
@@ -297,6 +309,8 @@ pub fn replayed_effect_allowed(source_authenticated~ : Bool, session_matches~ : 
 pub fn replayed_effect_requires_every_condition(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn reused_observer_signature_requires_exact_digest(Bool, Bool, Bool) -> Unit
+
+pub fn revoked_asset_rejects_atomic_inventory_checkpoint(Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn route_open_world_audit(OpenWorldOutcomeClass, peer_certificate_matches~ : Bool, challenge_present~ : Bool, sample_selected~ : Bool, central_replay_present~ : Bool, central_replay_matches~ : Bool) -> OpenWorldAuditDecision
 

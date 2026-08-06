@@ -85,6 +85,22 @@ witness、origin `ItemReceipt`、`public_state_root` membership、seller=current
 bundleが自己申告するcheckpointをlatest headとしては信用しない。Durable Objectがassetごとに保持する
 headに対し、exact parent、epoch前進、owner変更時のversion前進を満たす場合だけCAS更新する。
 
+複数assetを同じcheckpointへ進めるinventory checkpoint bundleはversion 1である。authority
+checkpointとreplay-witness certificateをassetごとに複製せず、1つの共有証明と、asset IDで
+strict ascendingに並べた1〜64件のmembership proofを運ぶ。
+
+| 型 | CBOR array |
+| --- | --- |
+| inventory checkpoint bundle | `[1, signed_checkpoint, game_manifest_digest, witnesses, max_faults, attestations, inventory_proofs]` |
+| inventory proof | `[asset_record, authenticated_map_proof]` |
+
+既定上限はbundle 1 MiB、proof/witness/attestation各64件、proof path 64 stepsである。空集合、重複または
+非昇順asset、1件でも不正なorigin/Merkle proof/current head、共有していないparent/epoch、未解決
+revocationはbundle全体を拒否する。中央verifierが返すdomain-separated write-set digestはsession、
+新旧checkpoint、epoch、manifestに加え、全assetの旧owner/version/checkpoint/epochと次recordを拘束する。
+storage adapterは暗号検証後もtransaction内で全CAS前提とrevocationを再読込し、全head/historyと
+batch idempotency rowを1 transactionで反映する。
+
 historical inventory lineage bundleはversion 2で、listing bundleをそのまま包含し、保存済みretention
 anchorからcurrent recordの`lineage_root`までの最大64 transferだけを運ぶ。
 
@@ -188,10 +204,64 @@ inventory listing v1は262,144 bytes、text 4,096 bytes、64 witnesses、64 atte
 authenticated-map path 64 stepsを既定上限とする。今回のreal-crypto single-asset fixtureは
 3,141 bytesだった。
 
+inventory checkpoint v1は1,048,576 bytes、64 proofs、64 witnesses、64 attestations、各proof path
+64 stepsを既定上限とする。canonical性はbundle全体のCBOR再encode一致とasset IDのstrict ascendingで
+判定し、共有checkpoint/witnessを1回だけ認証する。
+
 総byte数はCBOR parserより先に確認する。ただし総byte上限だけでは、短い入力に巨大な宣言長を
 埋めた場合のinteger overflowや巨大allocationを防げない。protocol側preflight scannerが
 declared byte length、array/map count、nestingを実際のremaining bytesと照合してから外部CBOR
 decoderを呼ぶ。`0x7a 0x7fffffff`型の短い巨大text宣言をregression testに固定した。
+
+## Player-local evidence inbox HTTP page
+
+browser参照pollerは設定済みendpointへ次のJSONを`POST`する。
+
+```json
+{
+  "version": 1,
+  "source_id": "authority-a",
+  "after_sequence": 7,
+  "after_message_digest": "sha256:...",
+  "limit": 16
+}
+```
+
+応答はrequest cursorをexactに反復し、その直後からの署名済みhold envelopeを返す。
+
+```json
+{
+  "version": 1,
+  "source_id": "authority-a",
+  "after_sequence": 7,
+  "after_message_digest": "sha256:...",
+  "messages": []
+}
+```
+
+source、sequence、digest anchorの不一致はpage全体を拒否する。messageは各々が自身のsequence、
+previous digest、operation、message digest、authenticationを持ち、既存のhash-chain gateへ順に渡す。
+既定ではなく呼出側設定として、1〜128 messages、1〜1,048,576 response bytes、1〜60,000 ms timeoutを
+許可する。bodyはstreamingで上限を確認してからUTF-8/JSON decodeする。deadlineはresponse受信期限であり、
+期限切れやtimeoutでactive holdをdismissしない。page途中で後続messageが拒否された場合、先に個別認証・
+atomic commit済みの連続prefixは維持し、そのcursorから再取得する。
+
+poll job自体はwire messageではなくplayer-local transport metadataである。sourceごとにendpoint、
+initial digest、deadline、next poll、連続失敗数、単調attempt countと次の状態を永続化する。
+
+```text
+scheduled --claim(token, lease<=deadline)--> in_flight
+in_flight --success/failure + matching token--> scheduled
+scheduled|in_flight --deadline--> expired
+scheduled|in_flight|expired --operator handoff--> escalated
+```
+
+completionはattempt countとlease expiryの完全一致を要求する。別workerがlease expiry後に再claimすると
+attempt countが増えるため、古いHTTP応答はDBを上書きできない。`request timeout <= lease duration`を
+送信前に要求し、失敗時はdeadlineでcapした指数backoffを使う。`expired`/`escalated`はpoll停止状態であり、
+evidence holdの`active`/`resolved`とは別relationなので自動dismissしない。
+物理DBはabsolute Unix msを保存してよいが、MoonBit JS bridgeへは現在時刻を0とする相対durationへ変換して
+渡す。これにより32-bit `Int`へabsolute Unix msを渡すoverflowを避ける。
 
 ## Cryptography adapter
 
@@ -217,6 +287,7 @@ Apple M5、MoonBit `0.1.20260724`、wasm-gc benchmark:
 | experimental Ed25519 sign | 3.99 ms |
 | experimental Ed25519 verify | 2.36 ms |
 | real-crypto envelope decode + capability open | 2.29 ms |
+| 13,648-byte / 16-message evidence page decode + Ed25519 verify + IndexedDB commit | 85.3 ms（5.33 ms/message） |
 | 旧2,585-byte PvE-v1 bundle decode + 4 Ed25519 verify + replay + checkpoint match（workerd DO内） | 23 ms |
 | 3,546-byte PvP bundle decode + event/checkpoint/witness Ed25519 verify + replay + 3/4 quorum（workerd DO内） | 36 ms |
 | 7,045-byte open-world v2/PvE-v2 bundle + asset receiptを完全検証（workerd DO内、小規模再測定） | 52 ms |
@@ -243,5 +314,8 @@ Ed25519が支配的である。checkpoint頻度、duplicate verification cache�
 | open-world v2 bundleの4 checkpoint、2 publication proofs、遅延seed、`n-f` observer、eligible inclusion、PvE replay | Tested locally + remote benchmark |
 | inventory listing v1のcanonical round-trip、byte/witness/attestation/proof budgets | Tested |
 | current-owner verifierのauthority/checkpoint/manifest/witness/origin/root/owner binding | Tested locally + remote benchmark |
+| inventory checkpoint v1のcanonical round-trip、1〜64 asset budget、strict asset order | Tested |
+| multi-asset verifierは共有certificateと全origin/proof/head/version/revocation条件を要求する | Proven gate + Tested locally |
+| write-set全件を1 transactionで更新し、途中fault、stale member、exact retryを原子的に処理する | Tested locally |
 | dependencyがproduction secure/constant-timeである | Unmet |
 | socket、retry、multi-peer response selection | Unmet |

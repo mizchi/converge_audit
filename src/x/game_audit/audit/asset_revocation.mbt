@@ -52,6 +52,41 @@ pub fn asset_lineage_decision_allowed(
 }
 
 ///|
+/// Admission boundary for an externally signed lineage decision certificate.
+/// Absolute timestamps and cryptographic verification remain adapter concerns;
+/// the proof-visible facts ensure that an appeal cannot bypass its exact target
+/// decision or deadline.
+pub fn asset_lineage_certificate_allowed(
+  certificate_authenticated~ : Bool,
+  arbiter_known~ : Bool,
+  lineage_bound~ : Bool,
+  certificate_time_valid~ : Bool,
+  lifecycle_valid~ : Bool,
+  is_appeal~ : Bool,
+  appeal_target_matches~ : Bool,
+  appeal_window_open~ : Bool,
+) -> Bool where {
+  proof_ensure: result => {
+    asset_lineage_certificate_allowed_post(
+      certificate_authenticated, arbiter_known, lineage_bound, certificate_time_valid,
+      lifecycle_valid, is_appeal, appeal_target_matches, appeal_window_open, result,
+    )
+  },
+} {
+  let result = certificate_authenticated &&
+    arbiter_known &&
+    lineage_bound &&
+    certificate_time_valid &&
+    lifecycle_valid &&
+    (!is_appeal || (appeal_target_matches && appeal_window_open))
+  proof_assert asset_lineage_certificate_allowed_post(
+    certificate_authenticated, arbiter_known, lineage_bound, certificate_time_valid,
+    lifecycle_valid, is_appeal, appeal_target_matches, appeal_window_open, result,
+  )
+  result
+}
+
+///|
 /// Aggregate fail-closed contract for admitting one bounded historical slice.
 /// Cryptographic verification and hash recomputation happen in the inventory
 /// layer; this proof-visible predicate fixes the required trust boundaries.

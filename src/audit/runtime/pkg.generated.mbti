@@ -317,6 +317,10 @@ pub(all) struct PlayerLocalAuditImage {
   equivocations : Array[PlayerLocalEventEquivocation]
   checkpoints : Array[CheckpointSealDraft]
   head : CheckpointSealHead
+  retention_anchor : PlayerLocalRetentionAnchor
+  evidence_holds : Array[PlayerLocalEvidenceHold]
+  evidence_inbox_cursors : Array[PlayerLocalEvidenceInboxCursor]
+  evidence_poll_jobs : Array[PlayerLocalEvidencePollJob]
   consumed_closure_epochs : Array[Int]
   outbox : Array[PlayerLocalCheckpointOutboxRecord]
   ack_history : Array[CheckpointAckEvidence]
@@ -332,6 +336,10 @@ pub struct PlayerLocalAuditStore {
   equivocations_value : Array[PlayerLocalEventEquivocation]
   checkpoints_value : Array[CheckpointSealDraft]
   mut head_value : CheckpointSealHead
+  retention_anchor_value : PlayerLocalRetentionAnchor
+  evidence_holds_value : Array[PlayerLocalEvidenceHold]
+  evidence_inbox_cursors_value : Array[PlayerLocalEvidenceInboxCursor]
+  evidence_poll_jobs_value : Array[PlayerLocalEvidencePollJob]
   consumed_closure_epochs_value : Array[Int]
   outbox_value : Array[CheckpointOutboxEntry]
   ack_history_value : Array[CheckpointAckEvidence]
@@ -396,12 +404,71 @@ pub(all) enum PlayerLocalEventRefusal {
   LocalEventMissingDigest
   LocalEventMissingCanonicalBytes
   LocalEventDigestCollision
+  LocalEventPrunedEpoch
+} derive(Eq, @debug.Debug)
+
+pub(all) struct PlayerLocalEvidenceHold {
+  boundary : AuditBoundary
+  hold_id : String
+  epoch : Int
+  checkpoint_digest : @commitment.AuditDigest
+  kind : PlayerLocalEvidenceHoldKind
+  reference_digest : @commitment.AuditDigest
+  state : PlayerLocalEvidenceHoldState
+} derive(Eq, @debug.Debug)
+
+pub(all) enum PlayerLocalEvidenceHoldKind {
+  EvidenceHoldFork
+  EvidenceHoldChallenge
+  EvidenceHoldAppeal
+} derive(Eq, @debug.Debug)
+
+pub(all) enum PlayerLocalEvidenceHoldResolutionDecision {
+  EvidenceHoldUpheld
+  EvidenceHoldDismissed
+} derive(Eq, @debug.Debug)
+
+pub(all) enum PlayerLocalEvidenceHoldState {
+  EvidenceHoldActive
+  EvidenceHoldResolved(PlayerLocalEvidenceHoldResolutionDecision, @commitment.AuditDigest)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct PlayerLocalEvidenceInboxCursor {
+  boundary : AuditBoundary
+  source_id : String
+  sequence : Int
+  message_digest : @commitment.AuditDigest
+} derive(Eq, @debug.Debug)
+
+pub(all) struct PlayerLocalEvidencePollJob {
+  boundary : AuditBoundary
+  source_id : String
+  endpoint : String
+  initial_message_digest : @commitment.AuditDigest
+  deadline_at_ms : Int
+  next_poll_at_ms : Int
+  failures : Int
+  attempt_count : Int
+  state : PlayerLocalEvidencePollJobState
+} derive(Eq, @debug.Debug)
+
+pub(all) enum PlayerLocalEvidencePollJobState {
+  EvidencePollScheduled
+  EvidencePollInFlight(Int)
+  EvidencePollExpired(Int)
+  EvidencePollEscalated(Int, @commitment.AuditDigest)
 } derive(Eq, @debug.Debug)
 
 pub(all) enum PlayerLocalOutboxUpdateResult {
   PlayerLocalOutboxUpdated(CheckpointOutboxEntry)
   PlayerLocalOutboxNoChange
   PlayerLocalOutboxRefused
+} derive(Eq, @debug.Debug)
+
+pub(all) struct PlayerLocalRetentionAnchor {
+  boundary : AuditBoundary
+  epoch : Int
+  checkpoint_digest : @commitment.AuditDigest
 } derive(Eq, @debug.Debug)
 
 pub(all) enum PlayerLocalSealCommitResult {

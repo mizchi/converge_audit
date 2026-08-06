@@ -236,3 +236,60 @@ test "inventory lineage wire rejects unsupported versions and transfer excess" {
     _ => fail("expected inventory lineage transfer-budget refusal")
   }
 }
+
+///|
+fn inventory_checkpoint_wire_bundle() -> InventoryCheckpointProofBundle raise Error {
+  let listing = inventory_listing_wire_bundle()
+  {
+    signed_checkpoint: listing.signed_checkpoint,
+    game_manifest_digest: listing.game_manifest_digest,
+    witnesses: listing.witnesses,
+    max_faults: listing.max_faults,
+    attestations: listing.attestations,
+    proofs: [listing.proof],
+  }
+}
+
+///|
+test "multi-asset inventory checkpoint bundle has a canonical bounded round trip" {
+  let bundle = inventory_checkpoint_wire_bundle()
+  let encoded = encode_inventory_checkpoint_proof_bundle(bundle)
+  let decoded = match
+    decode_inventory_checkpoint_proof_bundle(
+      encoded,
+      limits=InventoryCheckpointWireLimits::default(),
+    ) {
+    Ok(value) => value
+    Err(_) => fail("expected inventory checkpoint proof bundle decode")
+  }
+  assert_eq(decoded, bundle)
+  assert_eq(encode_inventory_checkpoint_proof_bundle(decoded), encoded)
+}
+
+///|
+test "multi-asset inventory checkpoint wire rejects empty duplicate and excess proofs" {
+  let bundle = inventory_checkpoint_wire_bundle()
+  let defaults = InventoryCheckpointWireLimits::default()
+  let empty = encode_inventory_checkpoint_proof_bundle({ ..bundle, proofs: [] })
+  match decode_inventory_checkpoint_proof_bundle(empty, limits=defaults) {
+    Err(InventoryCheckpointWireMissingProofs) => ()
+    _ => fail("expected empty inventory checkpoint refusal")
+  }
+  let duplicate = encode_inventory_checkpoint_proof_bundle({
+    ..bundle,
+    proofs: [bundle.proofs[0], bundle.proofs[0]],
+  })
+  match decode_inventory_checkpoint_proof_bundle(duplicate, limits=defaults) {
+    Err(InventoryCheckpointWireNonCanonicalAssets(1)) => ()
+    _ => fail("expected duplicate inventory checkpoint asset refusal")
+  }
+  let encoded = encode_inventory_checkpoint_proof_bundle(bundle)
+  match
+    decode_inventory_checkpoint_proof_bundle(encoded, limits={
+      ..defaults,
+      max_proofs: 0,
+    }) {
+    Err(InventoryCheckpointWireProofsTooMany(1, 0)) => ()
+    _ => fail("expected inventory checkpoint proof-budget refusal")
+  }
+}

@@ -331,6 +331,57 @@ export type InventoryListingVerification =
   | VerifiedInventoryListing
   | RefusedInventoryListing;
 
+export interface ExpectedInventoryCheckpointAsset {
+  asset_id: string;
+  initial_owner_id: string;
+  item_type: string;
+  quantity: number;
+  source_event: string;
+  output_index: number;
+  current_owner_id: string;
+  current_version: number;
+  current_checkpoint_digest: string;
+  current_epoch: number;
+  creation_eligible: boolean;
+  lineage_clean: boolean;
+}
+
+export interface VerifiedInventoryCheckpointAsset {
+  asset_id: string;
+  current_owner_id: string;
+  version: number;
+  last_event: string;
+  lineage_root: string;
+}
+
+export interface VerifiedInventoryCheckpoint {
+  ok: true;
+  complete: true;
+  session_id: string;
+  authority_key: string;
+  checkpoint_digest: string;
+  previous_checkpoint: string;
+  epoch: number;
+  game_manifest_digest: string;
+  public_state_root: string;
+  asset_count: number;
+  assets: VerifiedInventoryCheckpointAsset[];
+  write_set_digest: string;
+  approval_count: number;
+  required_approvals: number;
+  bundle_bytes: number;
+}
+
+export interface RefusedInventoryCheckpoint {
+  ok: false;
+  complete: boolean;
+  error: string;
+}
+
+export type InventoryCheckpointVerification =
+  | VerifiedInventoryCheckpoint
+  | RefusedInventoryCheckpoint;
+
 export interface VerifiedInventoryLineageTransition {
   asset_id: string;
   from_owner: string;
@@ -675,6 +726,29 @@ export async function assetLineageDecisionAllowed(input: {
   );
 }
 
+export async function assetLineageCertificateAllowed(input: {
+  certificateAuthenticated: boolean;
+  arbiterKnown: boolean;
+  lineageBound: boolean;
+  certificateTimeValid: boolean;
+  lifecycleValid: boolean;
+  isAppeal: boolean;
+  appealTargetMatches: boolean;
+  appealWindowOpen: boolean;
+}): Promise<boolean> {
+  const audit = await loadAuditModule();
+  return audit.audit_asset_lineage_certificate_allowed(
+    input.certificateAuthenticated,
+    input.arbiterKnown,
+    input.lineageBound,
+    input.certificateTimeValid,
+    input.lifecycleValid,
+    input.isAppeal,
+    input.appealTargetMatches,
+    input.appealWindowOpen,
+  );
+}
+
 export async function verifyPveReplayBundle(
   bundleHex: string,
   expectedSessionId: string,
@@ -771,6 +845,38 @@ export async function verifyInventoryListingProofBundle(
       rejectedAncestor,
     ),
   ) as InventoryListingVerification;
+}
+
+export async function verifyInventoryCheckpointProofBundle(
+  bundleHex: string,
+  expectedSessionId: string,
+  expectedAuthorityKey: string,
+  expectedCheckpointDigest: string,
+  expectedGameManifestDigest: string,
+  expectedAssets: ExpectedInventoryCheckpointAsset[],
+): Promise<InventoryCheckpointVerification> {
+  const audit = await loadAuditModule();
+  return JSON.parse(
+    audit.audit_verify_inventory_checkpoint_proof_bundle(
+      bundleHex,
+      expectedSessionId,
+      expectedAuthorityKey,
+      expectedCheckpointDigest,
+      expectedGameManifestDigest,
+      expectedAssets.map((asset) => asset.asset_id),
+      expectedAssets.map((asset) => asset.initial_owner_id),
+      expectedAssets.map((asset) => asset.item_type),
+      expectedAssets.map((asset) => asset.quantity),
+      expectedAssets.map((asset) => asset.source_event),
+      expectedAssets.map((asset) => asset.output_index),
+      expectedAssets.map((asset) => asset.current_owner_id),
+      expectedAssets.map((asset) => asset.current_version),
+      expectedAssets.map((asset) => asset.current_checkpoint_digest),
+      expectedAssets.map((asset) => asset.current_epoch),
+      expectedAssets.map((asset) => asset.creation_eligible),
+      expectedAssets.map((asset) => asset.lineage_clean),
+    ),
+  ) as InventoryCheckpointVerification;
 }
 
 export async function verifyInventoryLineageProofBundle(

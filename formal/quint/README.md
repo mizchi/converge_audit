@@ -20,7 +20,7 @@ bounded/inductive safetyへ選択的に使い、TLCのliveness gateとは区別�
 
 ## Source構成
 
-- `CheckpointDelivery.qnt` / `WitnessQuorum.qnt` / `AssetOwnership.qnt`: protocol本体とproperty
+- `CheckpointDelivery.qnt` / `WitnessQuorum.qnt` / `AssetOwnership.qnt` / `LineageAppeal.qnt`: protocol本体とproperty
 - `*Models.qnt`: 正常構成とRed構成
 - `*Tests.qnt`: 代表的な正常・guard scenario
 - `CheckpointDeliveryMbt.qnt` / `WitnessQuorumMbt.qnt`: 実装へ再生する決定的なMBT trace
@@ -63,6 +63,11 @@ current headへ到達する認証済みsliceを`registerLineageSlice`で登録�
 未登録transferのrevoke、wrong-parent slice、終端不一致は拒否する。
 暗号primitive、HTTP decode、SQLite migrationはMoonBit/Workers testの責務に残す。
 
+`LineageAppeal.qnt`は2 ancestor、4 canonical decision ID、3 clock stepへ縮約し、外部certificateの
+認証・受理時刻をboolean factとして扱う。per-ancestor revision、decision IDの一意性、
+`Finalized -> AppealOpen -> Finalized | Expired`、exact appeal target、deadline、別ancestorのrevokeを
+appealで消さないことを検査する。署名bytes、Unix millisecond、arbiter roster parseはWorker/MoonBit側に残す。
+
 asset settlementのclaim ledgerは次のとおりである。
 
 | claim | source of truth | 検査artifact | status |
@@ -76,6 +81,9 @@ asset settlementのclaim ledgerは次のとおりである。
 | historical transferのrevoke前にexact authenticated sliceを要求する | `AssetOwnership.registerLineageSlice/revokeAncestor` | `registeredSliceRequiresExactBoundary` + broken-lineage-parent反例 + 3 scenario | verified（有限model） |
 | appeal後もquarantine済みnonceを自動復活させない | `AssetOwnership.restoreAncestor/list` | `appealRecomputesButDoesNotReactivateListing` / `appealDoesNotPermitQuarantinedNonceReplay` | scenario verified |
 | Ed25519、wire binding、永続化migrationが上記抽象に従う | Workers API/SQLite contract | owner-auth unit test + workerd integration test | regression tested（refinement proofではない） |
+| lineage decisionは認証済み・期限内・次revisionだけを受理する | `LineageAppeal.revoke/appeal` | 3 invariant + broken authentication/time/revision反例 | verified（有限model） |
+| appealはexact revoke targetかつdeadline内だけfinalizeする | `LineageAppeal.appeal/advanceTime` | 2 invariant + broken target/deadline反例 + 2 scenario | verified（有限model） |
+| 一つのappealは別ancestorのrevokeを消さず、期限切れは自動restoreしない | ancestor別map + `lineageClean` | independent-revocation/expired scenario | scenario verified |
 
 ## 検査する性質
 
@@ -96,6 +104,8 @@ asset settlementのclaim ledgerは次のとおりである。
 - `lineageClean`は未解決revocation集合が空であることと一致する。
 - active listingはclean lineageでのみ存在し、祖先revoke時はquarantineされる。
 - verified historical ancestorはretention anchorを越えず、登録sliceは認証・親・終端の全境界に一致する。
+- lineage decisionは認証済み・期限内・次revisionであり、appealはexact targetかつdeadline内である。
+- expired lineage caseはrevokedのまま残り、別ancestorのappealで解消されない。
 
 checkpoint配送のlivenessは次の条件付き性質である。
 
@@ -127,6 +137,8 @@ eventually always(unpartitioned and all nodes up)
 | active listing中のtransfer gate | 出品中にownerが変わりlisting headが陳腐化する |
 | ancestor revoke時のquarantine | 祖先が無効でもdescendant listingがactiveのまま残る |
 | revoked lineageのtransfer gate | 無効な祖先から新しいowner headを派生できる |
+| lineage certificate認証/time/revision gate | 未認証・期限外・stale decisionをheadへ反映できる |
+| appeal target/deadline gate | 別revokeまたは期限切れcaseをeligibleへ戻せる |
 
 ## 実行結果
 
@@ -145,6 +157,8 @@ eventually always(unpartitioned and all nodes up)
 
 加えて、正常到達性とguardを示す設定済みの全`run` scenarioが通過し、capacity 0、quorum 0、
 rosterを超えるquorumの3構成を設定契約違反として拒否する。
+lineage appeal正常modelは反例なし、authentication、certificate time、revision、appeal target、deadlineの
+5 Red構成はそれぞれ対応invariantの反例を出し、6 scenarioが通過した。
 
 ## Model-based testing
 

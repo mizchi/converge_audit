@@ -269,6 +269,131 @@ test "player-local seal exposes one storage-neutral atomic write set" {
 }
 
 ///|
+test "player-local restore keeps valid evidence holds and rejects orphan holds" {
+  let store = ready_local_store()
+  let plan = match
+    store.prepare_seal(local_draft(), local_closure(), ["authority"]) {
+    PlayerLocalSealPrepared(plan) => plan
+    _ => abort("expected a valid atomic seal plan")
+  }
+  debug_inspect(store.commit_seal(plan), content="PlayerLocalSealCommitted")
+  let image = store.durable_image()
+  let hold = PlayerLocalEvidenceHold::{
+    boundary: local_store_boundary(),
+    hold_id: "challenge-0",
+    epoch: 0,
+    checkpoint_digest: @commitment.AuditDigest("checkpoint-0"),
+    kind: EvidenceHoldChallenge,
+    reference_digest: @commitment.AuditDigest("challenge-reference-0"),
+    state: EvidenceHoldActive,
+  }
+  let cursor = PlayerLocalEvidenceInboxCursor::{
+    boundary: local_store_boundary(),
+    source_id: "authority-a",
+    sequence: 0,
+    message_digest: @commitment.AuditDigest("message-digest-0"),
+  }
+  match
+    restore_player_local_audit_store({
+      ..image,
+      evidence_holds: [hold],
+      evidence_inbox_cursors: [cursor],
+    }) {
+    PlayerLocalAuditStoreReady(restored) => {
+      inspect(restored.durable_image().evidence_holds.length(), content="1")
+      inspect(
+        restored.durable_image().evidence_inbox_cursors.length(),
+        content="1",
+      )
+    }
+    _ => abort("valid evidence hold did not survive restart")
+  }
+  match
+    restore_player_local_audit_store({
+      ..image,
+      evidence_holds: [
+        {
+          ..hold,
+          checkpoint_digest: @commitment.AuditDigest("wrong-checkpoint"),
+        },
+      ],
+    }) {
+    PlayerLocalAuditStoreRefused(reason) =>
+      debug_inspect(reason, content="LocalStoreInvalidImage")
+    _ => abort("orphan evidence hold must not restore")
+  }
+  match
+    restore_player_local_audit_store({
+      ..image,
+      evidence_inbox_cursors: [{ ..cursor, sequence: -1 }],
+    }) {
+    PlayerLocalAuditStoreRefused(reason) =>
+      debug_inspect(reason, content="LocalStoreInvalidImage")
+    _ => abort("an unpersistable inbox genesis cursor must not restore")
+  }
+}
+
+///|
+test "player-local restore validates durable evidence poll fencing state" {
+  let image = ready_local_store().durable_image()
+  let job = PlayerLocalEvidencePollJob::{
+    boundary: local_store_boundary(),
+    source_id: "authority-a",
+    endpoint: "https://authority.example/evidence/poll",
+    initial_message_digest: @commitment.AuditDigest("inbox-genesis"),
+    deadline_at_ms: 500,
+    next_poll_at_ms: 100,
+    failures: 0,
+    attempt_count: 1,
+    state: EvidencePollInFlight(200),
+  }
+  match
+    restore_player_local_audit_store({ ..image, evidence_poll_jobs: [job] }) {
+    PlayerLocalAuditStoreReady(restored) =>
+      debug_inspect(
+        restored.durable_image().evidence_poll_jobs,
+        content=(
+          #|[
+          #|  {
+          #|    boundary: {
+          #|      protocol_version: 1,
+          #|      purpose: "checkpoint-v1",
+          #|      manifest_digest: AuditDigest("manifest-local"),
+          #|      scope_id: "player-alice",
+          #|      unit_id: "match-1",
+          #|    },
+          #|    source_id: "authority-a",
+          #|    endpoint: "https://authority.example/evidence/poll",
+          #|    initial_message_digest: AuditDigest("inbox-genesis"),
+          #|    deadline_at_ms: 500,
+          #|    next_poll_at_ms: 100,
+          #|    failures: 0,
+          #|    attempt_count: 1,
+          #|    state: EvidencePollInFlight(200),
+          #|  },
+          #|]
+        ),
+      )
+    _ => abort("valid evidence poll job did not survive restart")
+  }
+  match
+    restore_player_local_audit_store({
+      ..image,
+      evidence_poll_jobs: [{ ..job, attempt_count: 0 }],
+    }) {
+    PlayerLocalAuditStoreRefused(reason) =>
+      debug_inspect(reason, content="LocalStoreInvalidImage")
+    _ => abort("unfenced in-flight poll job must not restore")
+  }
+  match
+    restore_player_local_audit_store({ ..image, evidence_poll_jobs: [job, job] }) {
+    PlayerLocalAuditStoreRefused(reason) =>
+      debug_inspect(reason, content="LocalStoreInvalidImage")
+    _ => abort("duplicate poll source must not restore")
+  }
+}
+
+///|
 test "player-local store refuses a canonical collision on a known fork digest" {
   let store = ready_local_store()
   debug_inspect(
@@ -309,5 +434,73 @@ test "player-local restore rejects a head without its atomic seal footprint" {
     PlayerLocalAuditStoreRefused(reason) =>
       debug_inspect(reason, content="LocalStoreInvalidImage")
     PlayerLocalAuditStoreReady(_) => abort("orphan head must be rejected")
+  }
+}
+
+///|
+test "player-local restore accepts a chain suffix after durable prefix pruning" {
+  let store = ready_local_store()
+  let first = match
+    store.prepare_seal(local_draft(), local_closure(), ["authority"]) {
+    PlayerLocalSealPrepared(plan) => plan
+    _ => abort("expected first seal")
+  }
+  ignore(store.commit_seal(first))
+  let claimed = match
+    store.claim_outbox_at(0, now_ms=100, lease_duration_ms=30) {
+    PlayerLocalOutboxUpdated(entry) => entry
+    _ => abort("expected first claim")
+  }
+  let ack = match
+    open_authenticated_checkpoint_ack(
+      {
+        boundary: claimed.boundary(),
+        authority_id: claimed.destination_id(),
+        epoch: claimed.epoch(),
+        checkpoint_digest: claimed.checkpoint_digest(),
+        decision: CheckpointAccepted,
+      },
+      authentication_succeeded=true,
+    ) {
+    CheckpointAckReady(value) => value
+    _ => abort("expected first ACK")
+  }
+  ignore(store.acknowledge_outbox_at(0, ack))
+  let second = match
+    store.prepare_seal(
+      local_draft_at(1, "checkpoint-0", "checkpoint-1"),
+      local_closure_at(1),
+      ["authority"],
+    ) {
+    PlayerLocalSealPrepared(plan) => plan
+    _ => abort("expected second seal")
+  }
+  ignore(store.commit_seal(second))
+  let image = store.durable_image()
+  let pruned = {
+    ..image,
+    events: [],
+    equivocations: [],
+    checkpoints: [image.checkpoints[1]],
+    retention_anchor: {
+      boundary: local_store_boundary(),
+      epoch: 0,
+      checkpoint_digest: @commitment.AuditDigest("checkpoint-0"),
+    },
+    consumed_closure_epochs: [1],
+    outbox: [image.outbox[1]],
+    ack_history: [],
+    storage_revision: image.storage_revision + 1,
+  }
+  match restore_player_local_audit_store(pruned) {
+    PlayerLocalAuditStoreReady(restored) => {
+      inspect(restored.checkpoint_count(), content="1")
+      inspect(restored.head().epoch, content="1")
+      debug_inspect(
+        restored.admit_event(local_event(99, "late-pruned-event")),
+        content="LocalEventRefused(LocalEventPrunedEpoch)",
+      )
+    }
+    _ => abort("valid pruned suffix must restore")
   }
 }

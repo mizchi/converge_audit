@@ -45,6 +45,49 @@ predicate asset_lineage_decision_allowed_post(
 }
 
 ///|
+predicate asset_lineage_certificate_allowed_post(
+  certificate_authenticated : Bool,
+  arbiter_known : Bool,
+  lineage_bound : Bool,
+  certificate_time_valid : Bool,
+  lifecycle_valid : Bool,
+  is_appeal : Bool,
+  appeal_target_matches : Bool,
+  appeal_window_open : Bool,
+  result : Bool,
+) {
+  if certificate_authenticated {
+    if arbiter_known {
+      if lineage_bound {
+        if certificate_time_valid {
+          if lifecycle_valid {
+            if is_appeal {
+              if appeal_target_matches {
+                result == appeal_window_open
+              } else {
+                result == false
+              }
+            } else {
+              result == true
+            }
+          } else {
+            result == false
+          }
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
 predicate asset_lineage_slice_allowed_post(
   has_transfers : Bool,
   within_limit : Bool,
@@ -139,6 +182,88 @@ pub lemma accepted_lineage_decision_has_exact_ancestor_head(
   proof_ensure: expected_decision_matches == true,
   proof_ensure: revision_advances == true,
   proof_ensure: decision_changes_status == true,
+} {
+}
+
+///|
+pub lemma accepted_lineage_certificate_has_every_trust_boundary(
+  certificate_authenticated : Bool,
+  arbiter_known : Bool,
+  lineage_bound : Bool,
+  certificate_time_valid : Bool,
+  lifecycle_valid : Bool,
+  is_appeal : Bool,
+  appeal_target_matches : Bool,
+  appeal_window_open : Bool,
+) where {
+  proof_require: asset_lineage_certificate_allowed_post(
+    certificate_authenticated,
+    arbiter_known,
+    lineage_bound,
+    certificate_time_valid,
+    lifecycle_valid,
+    is_appeal,
+    appeal_target_matches,
+    appeal_window_open,
+    true,
+  ),
+  proof_ensure: certificate_authenticated == true,
+  proof_ensure: arbiter_known == true,
+  proof_ensure: lineage_bound == true,
+  proof_ensure: certificate_time_valid == true,
+  proof_ensure: lifecycle_valid == true,
+} {
+}
+
+///|
+pub lemma accepted_lineage_appeal_has_exact_open_window(
+  certificate_authenticated : Bool,
+  arbiter_known : Bool,
+  lineage_bound : Bool,
+  certificate_time_valid : Bool,
+  lifecycle_valid : Bool,
+  appeal_target_matches : Bool,
+  appeal_window_open : Bool,
+) where {
+  proof_require: asset_lineage_certificate_allowed_post(
+    certificate_authenticated,
+    arbiter_known,
+    lineage_bound,
+    certificate_time_valid,
+    lifecycle_valid,
+    true,
+    appeal_target_matches,
+    appeal_window_open,
+    true,
+  ),
+  proof_ensure: appeal_target_matches == true,
+  proof_ensure: appeal_window_open == true,
+} {
+}
+
+///|
+pub lemma expired_lineage_certificate_is_rejected(
+  certificate_authenticated : Bool,
+  arbiter_known : Bool,
+  lineage_bound : Bool,
+  lifecycle_valid : Bool,
+  is_appeal : Bool,
+  appeal_target_matches : Bool,
+  appeal_window_open : Bool,
+  allowed : Bool,
+) where {
+  proof_require: asset_lineage_certificate_allowed_post(
+    certificate_authenticated,
+    arbiter_known,
+    lineage_bound,
+    false,
+    lifecycle_valid,
+    is_appeal,
+    appeal_target_matches,
+    appeal_window_open,
+    allowed,
+  ),
+  proof_ensure: allowed == false,
 } {
 }
 

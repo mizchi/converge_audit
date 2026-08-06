@@ -46,6 +46,122 @@ pub fn audit_classify_checkpoint_head(
 }
 
 ///|
+/// Primitive bridge for the proof-checked one-step pruning guard.
+pub fn audit_player_local_checkpoint_prunable(
+  candidate_epoch : Int,
+  retention_anchor_epoch : Int,
+  retain_from_epoch : Int,
+  all_outbox_acknowledged : Bool,
+  unresolved_reference : Bool,
+) -> Bool {
+  @checkpoint_audit.player_local_checkpoint_prunable(
+    candidate_epoch, retention_anchor_epoch, retain_from_epoch, all_outbox_acknowledged,
+    unresolved_reference,
+  )
+}
+
+///|
+/// Primitive bridge for authenticated durable evidence-hold admission.
+pub fn audit_player_local_evidence_hold_admission_allowed(
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+  authentication_succeeded : Bool,
+) -> Bool {
+  @checkpoint_audit.player_local_evidence_hold_admission_allowed(
+    boundary_matches, checkpoint_matches, authentication_succeeded,
+  )
+}
+
+///|
+/// Primitive bridge for authenticated durable evidence-hold resolution.
+pub fn audit_player_local_evidence_hold_resolution_allowed(
+  boundary_matches : Bool,
+  epoch_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  active : Bool,
+  authentication_succeeded : Bool,
+) -> Bool {
+  @checkpoint_audit.player_local_evidence_hold_resolution_allowed(
+    boundary_matches, epoch_matches, checkpoint_matches, reference_matches, active,
+    authentication_succeeded,
+  )
+}
+
+///|
+/// Primitive bridge for one proof-checked evidence inbox hash-chain step.
+pub fn audit_player_local_evidence_inbox_advance_allowed(
+  current_sequence : Int,
+  next_sequence : Int,
+  previous_digest_matches : Bool,
+  message_digest_advances : Bool,
+  authentication_succeeded : Bool,
+  operation_allowed : Bool,
+) -> Bool {
+  @checkpoint_audit.player_local_evidence_inbox_advance_allowed(
+    current_sequence, next_sequence, previous_digest_matches, message_digest_advances,
+    authentication_succeeded, operation_allowed,
+  )
+}
+
+///|
+/// Primitive bridge for one proof-checked bounded evidence inbox page.
+pub fn audit_player_local_evidence_inbox_page_allowed(
+  received_at_ms : Int,
+  deadline_at_ms : Int,
+  message_count : Int,
+  max_messages : Int,
+  response_bytes : Int,
+  max_response_bytes : Int,
+  source_matches : Bool,
+  cursor_matches : Bool,
+) -> Bool {
+  @checkpoint_audit.player_local_evidence_inbox_page_allowed(
+    received_at_ms, deadline_at_ms, message_count, max_messages, response_bytes,
+    max_response_bytes, source_matches, cursor_matches,
+  )
+}
+
+///|
+/// Primitive bridge for durable evidence poll claim admission.
+pub fn audit_player_local_evidence_poll_claim_allowed(
+  now_ms : Int,
+  deadline_at_ms : Int,
+  next_poll_at_ms : Int,
+  lease_available : Bool,
+) -> Bool {
+  @checkpoint_audit.player_local_evidence_poll_claim_allowed(
+    now_ms, deadline_at_ms, next_poll_at_ms, lease_available,
+  )
+}
+
+///|
+/// Primitive bridge for a deadline-capped evidence poll lease.
+pub fn audit_player_local_evidence_poll_lease_expiry(
+  now_ms : Int,
+  deadline_at_ms : Int,
+  lease_duration_ms : Int,
+) -> Int {
+  @checkpoint_audit.player_local_evidence_poll_lease_expiry(
+    now_ms, deadline_at_ms, lease_duration_ms,
+  )
+}
+
+///|
+/// Primitive bridge for deadline-capped exponential retry scheduling.
+pub fn audit_player_local_evidence_poll_next_retry_at(
+  now_ms : Int,
+  deadline_at_ms : Int,
+  failures : Int,
+  base_backoff_ms : Int,
+  max_backoff_ms : Int,
+) -> Int {
+  @checkpoint_audit.player_local_evidence_poll_next_retry_at(
+    now_ms, deadline_at_ms, failures, base_backoff_ms, max_backoff_ms,
+  )
+}
+
+///|
 /// Stable bridge for persisting only closure evidence that can mint the
 /// runtime's opaque `TrustedEpochClosure` capability.
 pub fn audit_open_checkpoint_closure(

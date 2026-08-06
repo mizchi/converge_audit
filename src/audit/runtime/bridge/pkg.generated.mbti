@@ -8,6 +8,22 @@ pub fn audit_classify_checkpoint_head(Bool, Bool, Bool, Int, Int, Bool) -> Strin
 
 pub fn audit_open_checkpoint_closure(Int, String, String, String, String, Int, String, String, String, Bool, Bool, Bool) -> String
 
+pub fn audit_player_local_checkpoint_prunable(Int, Int, Int, Bool, Bool) -> Bool
+
+pub fn audit_player_local_evidence_hold_admission_allowed(Bool, Bool, Bool) -> Bool
+
+pub fn audit_player_local_evidence_hold_resolution_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_player_local_evidence_inbox_advance_allowed(Int, Int, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_player_local_evidence_inbox_page_allowed(Int, Int, Int, Int, Int, Int, Bool, Bool) -> Bool
+
+pub fn audit_player_local_evidence_poll_claim_allowed(Int, Int, Int, Bool) -> Bool
+
+pub fn audit_player_local_evidence_poll_lease_expiry(Int, Int, Int) -> Int
+
+pub fn audit_player_local_evidence_poll_next_retry_at(Int, Int, Int, Int, Int) -> Int
+
 pub fn audit_prepare_atomic_checkpoint_seal(Int, String, String, String, String, Int, String, String, String, Int, String, Bool, Bool, Bool, Bool, Int, Int, Int, Int, String, String, String, Array[String]) -> String
 
 pub fn audit_record_peer_delivery_failure(String, Bool, Bool, Int, Int, Int, Int, Int, Int, Int) -> String

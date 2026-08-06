@@ -246,13 +246,15 @@ just prove-audit-core
 ```
 
 The Nix development shell pins Why3 1.7.2 and Z3 4.8.17. The generic audit
-packages prove 39 goals for nested cadence/retention, localization precision,
+core proves 50 goals for nested cadence/retention, localization precision,
 finality arithmetic, exact-next head classification, late-event admission,
 trusted epoch closure, exact success-ACK admission, and checkpoint delivery
-authentication, plus vote-merge idempotence, commutativity, associativity, and
-equivocation absorption.
+authentication, including the evidence-inbox hash-chain, bounded-page, and durable poll
+claim/deadline/backoff gates. The quorum vote
+package proves 8 additional goals for vote-merge idempotence, commutativity,
+associativity, and equivocation absorption.
 The game audit package
-proves 161 additional goals that establish:
+proves 172 additional goals that establish:
 
 - a finalized checkpoint requires an authority acceptance;
 - a challenged checkpoint can finalize only after a matching replay;
@@ -605,6 +607,8 @@ cryptography.
 | Current-owner listing is included under signed `public_state_root` | inventory/market contract | owner, record, root, and proof-tamper tests | Tested |
 | Witness-certified current-owner proof binds authority checkpoint, game manifest, origin receipt, owner/version, and inventory root | central inventory-listing contract | canonical wire, quorum, stale-owner, origin, version/root tamper tests | Tested |
 | Worker per-asset inventory head advances only through an exact parent with increasing epoch and owner/version consistency | MoonBit proof + DO transaction contract | 64-case predicate test, wrong-parent/version regression workerd test | Proven + Tested locally |
+| A multi-asset inventory checkpoint is accepted only when every canonical member shares the expected parent/epoch and passes origin, proof, head/version, and lineage gates | MoonBit proof + central checkpoint verifier | exhaustive 10-condition test, stale/revoked member regressions | Proven + Tested locally |
+| A multi-asset write set commits every head/history row or none, and exact retries do not reapply it | Cloudflare SQLite transaction contract | injected mid-write fault, stale/revoked member, idempotency conflict/duplicate workerd tests | Tested locally |
 | Inventory survives process restart without trusting a snapshot | storage adapter contract | Worker per-asset head survives in SQLite; player-local treap reconstruction remains | Partially met |
 | Creation and transfer source events are replay-authorized | replay capability contract | missing, wrong-session, wrong-effect, and wrong-manifest tests | Tested |
 | Authority-emitted canonical effect is accepted only from configured key | reference replay-kernel contract | author-key and exact-payload tests | Tested |
@@ -668,7 +672,7 @@ inventory slices are now present. The remaining integration work is:
    in addition to requiring a globally unique session id;
 7. persist checkpoints, inventory records, treap nodes, proofs, and evidence
    alerts transactionally in each player's local-first database, reconstruct
-   the authenticated root on restart, and batch multiple asset proofs under one
-   inventory checkpoint instead of only the Worker prototype's per-asset heads;
+   the authenticated root on restart, and apply the implemented multi-asset
+   inventory checkpoint write set through the same local transaction contract;
 8. define snapshot/pruning and checkpoint-recovery rules so old event logs can
    be discarded without trusting an unauthenticated local snapshot.
