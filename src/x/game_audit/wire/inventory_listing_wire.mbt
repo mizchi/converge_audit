@@ -1,5 +1,5 @@
 ///|
-const INVENTORY_LISTING_WIRE_VERSION : Int = 1
+const INVENTORY_LISTING_WIRE_VERSION : Int = 2
 
 ///|
 /// Compact current-owner evidence. The checkpoint authenticates the inventory
@@ -72,6 +72,7 @@ fn encode_inventory_asset_record(
     @cbor.CborValue::Text(record.origin_receipt_digest.0),
     wire_int(record.version),
     @cbor.CborValue::Text(record.last_event.0),
+    @cbor.CborValue::Text(record.lineage_root.0),
   ])
 }
 
@@ -80,7 +81,7 @@ fn decode_inventory_asset_record(
   value : @cbor.CborValue,
   limits : OpenWorldAuditWireLimits,
 ) -> @inventory.AssetRecord raise OpenWorldAuditWireError {
-  let fields = decode_wire_array(value, 9)
+  let fields = decode_wire_array(value, 10)
   {
     asset_id: decode_wire_text(fields[0], limits),
     owner_id: decode_wire_text(fields[1], limits),
@@ -91,6 +92,7 @@ fn decode_inventory_asset_record(
     origin_receipt_digest: decode_wire_digest(fields[6], limits),
     version: decode_wire_int(fields[7]),
     last_event: decode_wire_digest(fields[8], limits),
+    lineage_root: decode_wire_digest(fields[9], limits),
   }
 }
 

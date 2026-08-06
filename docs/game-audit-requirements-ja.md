@@ -242,9 +242,11 @@ originまたはtransferが後からreject/revokeされた場合、descendant own
 `Model checked`。reference PvE Workerはorigin/transfer単位のrevision付きdecisionを履歴へ残し、
 未解決revocationを索引付きで判定してactive listingを同じtransactionでquarantineする。
 appeal後も旧nonceを自動復活させずfresh nonceを要求する経路まで`Tested locally`。
-汎用open-world inventoryもverified origin/current headに限り同じrevision付きdecision APIへ接続し、
+汎用open-world inventoryもverified origin/current headに加え、bounded authenticated sliceで登録した
+中間transferを同じrevision付きdecision APIへ接続し、
 複数の未解決revokeがすべてappealされるまでlisting/head更新を拒否する経路が`Tested locally`。
-中間transferのlineage proof、外部裁定者の認証、appeal deadlineは`Pending`。
+lineage admission predicateは`Proven`、retention anchor/未証明transfer revoke拒否は`Model checked`。
+外部裁定者の認証とappeal deadlineは`Pending`。
 
 ## 7. 永続化、配送、障害時動作
 
@@ -373,7 +375,7 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 1. 監査済みcrypto、key custody、rotation/revocation
 2. observer signing store、IndexedDB/mobile SQLite player DB、migration/fsync/暗号化at-rest
 3. remote witness/transparency socket fanoutと端末credential（pure retry/fork選択は実装済み）
-4. 汎用inventoryの中間transfer lineage proof、appeal window、multi-asset atomic checkpointを実装
+4. 汎用inventoryのMerkle lineage pruning、appeal window、multi-asset atomic checkpointを実装
 5. projectile/visibility、raid lootを含む実ゲームkernel完全化とmanifest/wire migration
 6. packet loss、partition、crash、Queue重複を含むfault-injection
 7. Quintモデルを複数authority shard、pruning/appealへ拡張（bounded outboxは完了）

@@ -54,6 +54,8 @@ options(
         "audit_verify_open_world_pve_replay_bundle",
         "audit_benchmark_make_inventory_listing_proof_bundle",
         "audit_verify_inventory_listing_proof_bundle",
+        "audit_benchmark_make_inventory_lineage_proof_bundle",
+        "audit_verify_inventory_lineage_proof_bundle",
       ],
     },
     "wasm-gc": {
@@ -84,6 +86,8 @@ options(
         "audit_verify_open_world_pve_replay_bundle",
         "audit_benchmark_make_inventory_listing_proof_bundle",
         "audit_verify_inventory_listing_proof_bundle",
+        "audit_benchmark_make_inventory_lineage_proof_bundle",
+        "audit_verify_inventory_lineage_proof_bundle",
       ],
       "use-js-builtin-string": true,
     },

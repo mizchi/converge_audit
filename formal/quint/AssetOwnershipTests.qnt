@@ -5,7 +5,10 @@ module assetOwnershipTests {
     enforceExactVersion = true,
     blockTransferWhileListed = true,
     quarantineOnRevocation = true,
-    blockUseOnRevocation = true
+    blockUseOnRevocation = true,
+    enforceLineageProofAuthentication = true,
+    enforceLineageParent = true,
+    enforceLineageTerminal = true
   ).* from "./AssetOwnership"
 
   run transferListCancelTransfer =
@@ -53,6 +56,7 @@ module assetOwnershipTests {
     init
       .then(transfer(O1, O2, 0, 1, true, true))
       .then(list(O2, 1, N1, true))
+      .then(registerLineageSlice(0, 1, true, true, true))
       .then(revokeAncestor(0))
       .expect(and {
         state.owner == O2,
@@ -65,6 +69,7 @@ module assetOwnershipTests {
     init
       .then(transfer(O1, O2, 0, 1, true, true))
       .then(list(O2, 1, N1, true))
+      .then(registerLineageSlice(0, 1, true, true, true))
       .then(revokeAncestor(0))
       .then(restoreAncestor(0))
       .then(list(O2, 1, N2, true))
@@ -78,6 +83,7 @@ module assetOwnershipTests {
     init
       .then(transfer(O1, O2, 0, 1, true, true))
       .then(list(O2, 1, N1, true))
+      .then(registerLineageSlice(0, 1, true, true, true))
       .then(revokeAncestor(0))
       .then(restoreAncestor(0))
       .then(list(O2, 1, N1, true).fail())
@@ -86,6 +92,7 @@ module assetOwnershipTests {
     init
       .then(transfer(O1, O2, 0, 1, true, true))
       .then(list(O2, 1, N1, true))
+      .then(registerLineageSlice(0, 1, true, true, true))
       .then(revokeAncestor(0))
       .then(revokeAncestor(1))
       .then(restoreAncestor(0))
@@ -110,4 +117,25 @@ module assetOwnershipTests {
         state.ownerVersion == 1,
         state.lineageClean,
       })
+
+  run unprovenHistoricalTransferCannotBeRevoked =
+    init
+      .then(transfer(O1, O2, 0, 1, true, true))
+      .then(revokeAncestor(1).fail())
+
+  run authenticatedSliceEnablesHistoricalRevocation =
+    init
+      .then(transfer(O1, O2, 0, 1, true, true))
+      .then(registerLineageSlice(0, 1, true, true, true))
+      .then(revokeAncestor(1))
+      .expect(and {
+        state.retainedAnchorVersion == 1,
+        state.verifiedAncestors == Set(0, 1),
+        state.revokedAncestors == Set(1),
+      })
+
+  run wrongParentSliceIsRejected =
+    init
+      .then(transfer(O1, O2, 0, 1, true, true))
+      .then(registerLineageSlice(0, 1, true, false, true).fail())
 }

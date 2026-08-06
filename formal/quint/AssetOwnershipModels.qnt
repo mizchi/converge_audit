@@ -6,7 +6,10 @@ module assetOwnershipSafety {
     enforceExactVersion = true,
     blockTransferWhileListed = true,
     quarantineOnRevocation = true,
-    blockUseOnRevocation = true
+    blockUseOnRevocation = true,
+    enforceLineageProofAuthentication = true,
+    enforceLineageParent = true,
+    enforceLineageTerminal = true
   ).* from "./AssetOwnership"
 }
 
@@ -17,7 +20,10 @@ module assetOwnershipBrokenRecipient {
     enforceExactVersion = true,
     blockTransferWhileListed = true,
     quarantineOnRevocation = true,
-    blockUseOnRevocation = true
+    blockUseOnRevocation = true,
+    enforceLineageProofAuthentication = true,
+    enforceLineageParent = true,
+    enforceLineageTerminal = true
   ).* from "./AssetOwnership"
 }
 
@@ -28,7 +34,10 @@ module assetOwnershipBrokenVersion {
     enforceExactVersion = false,
     blockTransferWhileListed = true,
     quarantineOnRevocation = true,
-    blockUseOnRevocation = true
+    blockUseOnRevocation = true,
+    enforceLineageProofAuthentication = true,
+    enforceLineageParent = true,
+    enforceLineageTerminal = true
   ).* from "./AssetOwnership"
 }
 
@@ -39,7 +48,10 @@ module assetOwnershipBrokenListingGate {
     enforceExactVersion = true,
     blockTransferWhileListed = false,
     quarantineOnRevocation = true,
-    blockUseOnRevocation = true
+    blockUseOnRevocation = true,
+    enforceLineageProofAuthentication = true,
+    enforceLineageParent = true,
+    enforceLineageTerminal = true
   ).* from "./AssetOwnership"
 }
 
@@ -50,7 +62,10 @@ module assetOwnershipBrokenRevocationPropagation {
     enforceExactVersion = true,
     blockTransferWhileListed = true,
     quarantineOnRevocation = false,
-    blockUseOnRevocation = true
+    blockUseOnRevocation = true,
+    enforceLineageProofAuthentication = true,
+    enforceLineageParent = true,
+    enforceLineageTerminal = true
   ).* from "./AssetOwnership"
 }
 
@@ -61,6 +76,23 @@ module assetOwnershipBrokenRevokedTransfer {
     enforceExactVersion = true,
     blockTransferWhileListed = true,
     quarantineOnRevocation = true,
-    blockUseOnRevocation = false
+    blockUseOnRevocation = false,
+    enforceLineageProofAuthentication = true,
+    enforceLineageParent = true,
+    enforceLineageTerminal = true
+  ).* from "./AssetOwnership"
+}
+
+module assetOwnershipBrokenLineageParent {
+  import assetOwnership(
+    enforceSenderSignature = true,
+    enforceRecipientSignature = true,
+    enforceExactVersion = true,
+    blockTransferWhileListed = true,
+    quarantineOnRevocation = true,
+    blockUseOnRevocation = true,
+    enforceLineageProofAuthentication = true,
+    enforceLineageParent = false,
+    enforceLineageTerminal = true
   ).* from "./AssetOwnership"
 }

@@ -31,16 +31,23 @@ pub(all) struct AssetSnapshot {
   listing_nonce : AssetListingNonce
   canceled_nonce_mask : Int
   revoked_version_mask : Int
+  verified_version_mask : Int
+  retained_anchor_version : Int
+  lineage_proof_count : Int
   lineage_clean : Bool
   last_transfer_lineage_clean : Bool
   last_sender_authenticated : Bool
   last_recipient_authenticated : Bool
+  last_lineage_proof_authenticated : Bool
+  last_lineage_parent_matches : Bool
+  last_lineage_terminal_matches : Bool
 } derive(Eq, Debug)
 
 ///|
 pub struct AssetDriver {
   snapshot : AssetSnapshot
   broken_revocation : Bool
+  broken_lineage_registration : Bool
 }
 
 ///|
@@ -55,16 +62,29 @@ fn initial_asset_snapshot() -> AssetSnapshot {
     listing_nonce: N1,
     canceled_nonce_mask: 0,
     revoked_version_mask: 0,
+    verified_version_mask: 1,
+    retained_anchor_version: 0,
+    lineage_proof_count: 0,
     lineage_clean: true,
     last_transfer_lineage_clean: true,
     last_sender_authenticated: true,
     last_recipient_authenticated: true,
+    last_lineage_proof_authenticated: true,
+    last_lineage_parent_matches: true,
+    last_lineage_terminal_matches: true,
   }
 }
 
 ///|
-pub fn new_asset_driver(broken_revocation? : Bool = false) -> AssetDriver {
-  { snapshot: initial_asset_snapshot(), broken_revocation }
+pub fn new_asset_driver(
+  broken_revocation? : Bool = false,
+  broken_lineage_registration? : Bool = false,
+) -> AssetDriver {
+  {
+    snapshot: initial_asset_snapshot(),
+    broken_revocation,
+    broken_lineage_registration,
+  }
 }
 
 ///|
@@ -130,6 +150,16 @@ fn version_bit(version : Int) -> Result[Int, String] {
     0 => Ok(1)
     1 => Ok(2)
     2 => Ok(4)
+    _ => Err("asset version must be between 0 and 2")
+  }
+}
+
+///|
+fn version_prefix_mask(version : Int) -> Result[Int, String] {
+  match version {
+    0 => Ok(1)
+    1 => Ok(3)
+    2 => Ok(7)
     _ => Err("asset version must be between 0 and 2")
   }
 }
@@ -339,7 +369,7 @@ fn AssetDriver::apply_revoke(
   }
   let allowed = @audit.asset_lineage_decision_allowed(
     asset_exists=true,
-    ancestor_in_lineage=version <= self.snapshot.owner_version,
+    ancestor_in_lineage=(self.snapshot.verified_version_mask & bit) != 0,
     expected_decision_matches=true,
     revision_advances=true,
     decision_changes_status=(self.snapshot.revoked_version_mask & bit) == 0,
@@ -366,6 +396,73 @@ fn AssetDriver::apply_revoke(
         },
         revoked_version_mask: self.snapshot.revoked_version_mask | bit,
         lineage_clean: false,
+      },
+    })
+  }
+}
+
+///|
+fn AssetDriver::apply_register_lineage(
+  self : AssetDriver,
+  picks : Json,
+) -> Result[AssetDriver, String] {
+  let start_version = match decode_pick_int(picks, "startVersion") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let end_version = match decode_pick_int(picks, "endVersion") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let authenticated = match decode_pick_bool(picks, "proofAuthenticated") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let parent_matches = match decode_pick_bool(picks, "parentMatches") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let terminal_matches = match decode_pick_bool(picks, "terminalMatches") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let within_limit = start_version == self.snapshot.retained_anchor_version &&
+    end_version > start_version &&
+    end_version <= self.snapshot.owner_version
+  let allowed = @audit.asset_lineage_slice_allowed(
+    has_transfers=end_version > start_version,
+    within_limit~,
+    origin_matches=true,
+    anchor_matches=start_version == self.snapshot.retained_anchor_version,
+    parent_chain_matches=parent_matches,
+    every_transfer_authenticated=authenticated,
+    current_record_matches=terminal_matches,
+  )
+  let prefix = match version_prefix_mask(end_version) {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  if !allowed {
+    Err("registerLineageSome rejected by the MoonBit asset policy")
+  } else {
+    Ok({
+      ..self,
+      snapshot: {
+        ..self.snapshot,
+        verified_version_mask: if self.broken_lineage_registration {
+          self.snapshot.verified_version_mask
+        } else {
+          self.snapshot.verified_version_mask | prefix
+        },
+        retained_anchor_version: if self.broken_lineage_registration {
+          self.snapshot.retained_anchor_version
+        } else {
+          end_version
+        },
+        lineage_proof_count: self.snapshot.lineage_proof_count + 1,
+        last_lineage_proof_authenticated: authenticated,
+        last_lineage_parent_matches: parent_matches,
+        last_lineage_terminal_matches: terminal_matches,
       },
     })
   }
@@ -417,6 +514,7 @@ fn AssetDriver::apply(
     "transferSome" => self.apply_transfer(picks)
     "listSome" => self.apply_list(picks)
     "cancelSome" => self.apply_cancel(picks)
+    "registerLineageSome" => self.apply_register_lineage(picks)
     "revokeSome" => self.apply_revoke(picks)
     "restoreSome" => self.apply_restore(picks)
     _ => Err("unknown AssetOwnership action \{action}")
@@ -548,6 +646,14 @@ fn decode_asset_snapshot(value : Json) -> Result[AssetSnapshot, String] {
       }
     Err(reason) => return Err(reason)
   }
+  let verified_version_mask = match object_field(fields, "verifiedAncestors") {
+    Ok(value) =>
+      match decode_version_set(value) {
+        Ok(value) => value
+        Err(reason) => return Err(reason)
+      }
+    Err(reason) => return Err(reason)
+  }
   let owner_version = match decode_state_int(fields, "ownerVersion") {
     Ok(value) => value
     Err(reason) => return Err(reason)
@@ -557,6 +663,16 @@ fn decode_asset_snapshot(value : Json) -> Result[AssetSnapshot, String] {
     Err(reason) => return Err(reason)
   }
   let listing_version = match decode_state_int(fields, "listingVersion") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let retained_anchor_version = match
+    decode_state_int(fields, "retainedAnchorVersion") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let lineage_proof_count = match
+    decode_state_int(fields, "lineageProofCount") {
     Ok(value) => value
     Err(reason) => return Err(reason)
   }
@@ -579,6 +695,21 @@ fn decode_asset_snapshot(value : Json) -> Result[AssetSnapshot, String] {
     Ok(value) => value
     Err(reason) => return Err(reason)
   }
+  let last_lineage_proof_authenticated = match
+    decode_state_bool(fields, "lastLineageProofAuthenticated") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let last_lineage_parent_matches = match
+    decode_state_bool(fields, "lastLineageParentMatches") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
+  let last_lineage_terminal_matches = match
+    decode_state_bool(fields, "lastLineageTerminalMatches") {
+    Ok(value) => value
+    Err(reason) => return Err(reason)
+  }
   Ok({
     owner,
     owner_version,
@@ -589,10 +720,16 @@ fn decode_asset_snapshot(value : Json) -> Result[AssetSnapshot, String] {
     listing_nonce,
     canceled_nonce_mask,
     revoked_version_mask,
+    verified_version_mask,
+    retained_anchor_version,
+    lineage_proof_count,
     lineage_clean,
     last_transfer_lineage_clean,
     last_sender_authenticated,
     last_recipient_authenticated,
+    last_lineage_proof_authenticated,
+    last_lineage_parent_matches,
+    last_lineage_terminal_matches,
   })
 }
 
@@ -614,10 +751,11 @@ pub fn replay_asset_ownership(
 pub fn replay_asset_ownership_suite(
   traces : Array[@quint_connect.ItfTrace],
   broken_revocation? : Bool = false,
+  broken_lineage_registration? : Bool = false,
 ) -> Result[@quint_connect.ReplaySuiteSummary, @quint_connect.SuiteError] {
   @quint_connect.replay_suite(
     traces,
-    () => new_asset_driver(broken_revocation~),
+    () => new_asset_driver(broken_revocation~, broken_lineage_registration~),
     (driver, action, picks) => driver.apply(action, picks),
     driver => driver.snapshot,
     decode_asset_snapshot,

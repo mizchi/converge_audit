@@ -396,3 +396,53 @@ test "worker bridge verifies real-crypto current-owner inventory proof" {
     fail("expected stale owner refusal")
   }
 }
+
+///|
+test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
+  let authority_seed = "000102030405060708090a0b0c0d0e0f" +
+    "101112131415161718191a1b1c1d1e1f"
+  let participant_seed = "202122232425262728292a2b2c2d2e2f" +
+    "303132333435363738393a3b3c3d3e3f"
+  let fixture = audit_benchmark_make_inventory_lineage_proof_bundle(
+    authority_seed, participant_seed, "inventory-session", "creation-checkpoint",
+    1, "asset-1", "alice", "bob", "raid-token", 1, "loot-event", 0, 1,
+  )
+  guard @json.parse(fixture) is Object(fields) &&
+    fields["ok"] is True &&
+    fields["bundle_hex"] is String(bundle_hex) &&
+    fields["authority_key"] is String(authority_key) &&
+    fields["checkpoint_digest"] is String(checkpoint_digest) &&
+    fields["game_manifest_digest"] is String(game_manifest_digest) &&
+    fields["anchor_owner_id"] is String(anchor_owner_id) &&
+    fields["anchor_version"] is Number(anchor_version, ..) &&
+    fields["anchor_last_event"] is String(anchor_last_event) &&
+    fields["anchor_lineage_root"] is String(anchor_lineage_root) else {
+    fail("expected real inventory lineage fixture")
+  }
+  let verified = audit_verify_inventory_lineage_proof_bundle(
+    bundle_hex,
+    "inventory-session",
+    authority_key,
+    checkpoint_digest,
+    game_manifest_digest,
+    "asset-1",
+    "alice",
+    "raid-token",
+    1,
+    "loot-event",
+    0,
+    "bob",
+    anchor_owner_id,
+    anchor_version.to_int(),
+    anchor_last_event,
+    anchor_lineage_root,
+  )
+  guard @json.parse(verified) is Object(result) &&
+    result["ok"] is True &&
+    result["current_owner_id"] is String("bob") &&
+    result["transfer_count"] is Number(1.0, ..) &&
+    result["transfer_events"] is Array([String(transfer_event), ..]) &&
+    transfer_event != "" else {
+    fail("expected historical inventory lineage verification")
+  }
+}

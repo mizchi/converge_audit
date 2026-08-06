@@ -99,18 +99,26 @@ the exact parent, an increasing epoch, and owner/version consistency. The
 reference-game Worker also keeps revisioned origin/transfer revocation heads,
 quarantines active descendant listings atomically, and requires a fresh nonce
 after appeal. The generic open-world path now applies the same revisioned
-decision contract to its verified origin and exact current inventory head,
-blocking listings and head advancement until all open revocations are appealed.
-Authenticated historical-transfer lineage proofs, observer signing-store
-durability, transparency-head remote witness quorum, multi-asset atomic
-inventory heads, timed appeal windows, and production cryptography remain open.
+decision contract to its verified origin, exact current inventory head, and
+historical transfers registered through a bounded authenticated lineage slice.
+Each slice starts at the server-retained anchor, carries authority-bound owner
+keys and dual-signed parent/version transitions, and must terminate at the
+current authenticated record's cumulative lineage root. Normal listing proofs
+still omit transfer history. The Worker retains at most 256 challenged
+transfers per asset and blocks listings and head advancement until all open
+revocations are appealed. Observer signing-store durability, transparency-head
+remote witness quorum, Merkle pruning beyond the hard retention cap,
+multi-asset atomic inventory heads, timed appeal windows, and production
+cryptography remain open.
 
 `quint_asset_driver` is a verification-only adapter built on
 [`mizchi/quint_connect`](https://github.com/mizchi/quint-connect-moonbit). It
 generates randomized `AssetOwnershipModels.qnt` ITF traces, calls the real
 MoonBit transfer/lineage predicates, and compares every observable ownership,
-listing, and revocation state. Its negative control skips listing quarantine
-and must report `StateDiverged`. This checks the pure policy projection, not the
+listing, revocation, verified-ancestor, and retention-anchor state. Fixed ITF
+tests include a healthy lineage registration and a broken retention update that
+must report `StateDiverged`; random traces retain the quarantine negative
+control. This checks the pure policy projection, not the
 Cloudflare/D1 persistence refinement.
 
 `browser_bridge` is a smaller JavaScript boundary for the reference game's hot

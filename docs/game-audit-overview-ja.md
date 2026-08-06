@@ -117,9 +117,10 @@ baselineなので、全地域SLAや異なるsource間の公平性は未保証で
   取得して既存`InventoryIndex`で中央replayする経路が次段階になる。
 - reference PvE Workerではorigin/transferの後発rejectionをasset単位の未解決revocationとして索引化し、
   descendant listingをquarantineする。appealでlineageを再計算しても旧listingは自動復活しない。
-- 汎用open-world inventoryはverified origin/current owner headの後発rejectionをrevision付きで索引化し、
-  未解決件数が0になるまでlistingとhead更新を拒否する。compact bundleが保持しない中間transferの
-  lineage proofと時間制appeal windowは未実装なので、任意の過去祖先まで追跡できるとは主張しない。
+- 汎用open-world inventoryはverified origin/current owner headと、challenge時にbounded sliceで登録した
+  中間transferの後発rejectionをrevision付きで索引化し、未解決件数が0になるまでlistingとhead更新を
+  拒否する。通常fast pathはtransfer列を送らず、slow pathは保持済みanchorから最大64件だけを送る。
+  時間制appeal windowと256件到達後のMerkle pruning proofは未実装である。
 - certificate不足: cheat確定ではなく、報酬保留と中央replayへの昇格。
 
 予兆AoE、projectile travel、charge/release、parry window、capture/hold、seed固定waveは監査と相性が
@@ -135,7 +136,7 @@ prototypeのprotocol骨格は通ったが、production完成ではない。優�
    pure bounded fanout/retry/multi-peer response選択と、SQLite lease + bounded HTTP loopbackは実装済み。
 3. observer signing storeとIndexedDB/mobile SQLiteへのproduction persistence、appeal window、pruning。
    player-local論理DB、storage-neutral write-set、Node SQLiteのatomic seal/restart/ACK復元は実装済み。
-4. 汎用inventoryへ中間transferのlineage proofとappeal windowを追加し、複数assetを同じinventory
+4. 汎用inventoryへMerkle lineage pruningとappeal windowを追加し、複数assetを同じinventory
    checkpointへ一括反映するhead registryと、risk-adaptive sampling/Queue backpressureを追加する。
 5. PvE raidのwire/loot binding、PvPのprojectile/visibilityなど実ゲームkernel。
    phase分離boss HP/player attack/cooldownとPvP cooldown/capture objectiveのreferenceは実装済み。

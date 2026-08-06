@@ -16,6 +16,8 @@ pub fn accepted_encounter_clear_requires_completion_and_survivor(Bool, Int) -> U
 
 pub fn accepted_lineage_decision_has_exact_ancestor_head(Bool, Bool, Bool, Bool, Bool) -> Unit
 
+pub fn accepted_lineage_slice_has_every_boundary(Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
 pub fn accepted_open_world_observer_certificate_has_quorum(Int, Int, Int) -> Unit
 
 pub fn accepted_open_world_observer_certificate_has_valid_policy(Int, Int, Int) -> Unit
@@ -45,6 +47,8 @@ pub fn already_defeated_pvp_target_cannot_score_again(Int, Int, Bool, Int, Int) 
 pub fn anchor_only_central_job_awaits_transcript(Bool, Bool, Bool) -> Unit
 
 pub fn asset_lineage_decision_allowed(asset_exists~ : Bool, ancestor_in_lineage~ : Bool, expected_decision_matches~ : Bool, revision_advances~ : Bool, decision_changes_status~ : Bool) -> Bool
+
+pub fn asset_lineage_slice_allowed(has_transfers~ : Bool, within_limit~ : Bool, origin_matches~ : Bool, anchor_matches~ : Bool, parent_chain_matches~ : Bool, every_transfer_authenticated~ : Bool, current_record_matches~ : Bool) -> Bool
 
 pub fn asset_lineage_use_allowed(creation_verified~ : Bool, current_head_verified~ : Bool, open_revocations~ : Int) -> Bool
 
@@ -307,6 +311,8 @@ pub fn surviving_pvp_target_cannot_score(Int, Int, Bool, Int, Int) -> Unit
 pub fn telegraph_dodge_allowed(telegraph_valid~ : Bool, player_evidence_valid~ : Bool, causally_bound~ : Bool, reaction_window~ : Bool, receipt_bound~ : Bool, movement_legal~ : Bool) -> Bool
 
 pub fn transfer_transition_allowed(asset_exists~ : Bool, owner_matches~ : Bool, version_matches~ : Bool, recipient_valid~ : Bool, changes_owner~ : Bool, source_authenticated~ : Bool) -> Bool
+
+pub fn unauthenticated_lineage_slice_is_rejected(Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn unauthenticated_open_world_plan_never_verifies(Bool, Bool, Bool, Bool) -> Unit
 

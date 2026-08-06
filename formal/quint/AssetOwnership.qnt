@@ -17,10 +17,16 @@ module assetOwnership {
     listingNonce: ListingNonce,
     canceledListingNonces: Set[ListingNonce],
     revokedAncestors: Set[int],
+    verifiedAncestors: Set[int],
+    retainedAnchorVersion: int,
+    lineageProofCount: int,
     lineageClean: bool,
     lastTransferLineageClean: bool,
     lastSenderAuthenticated: bool,
     lastRecipientAuthenticated: bool,
+    lastLineageProofAuthenticated: bool,
+    lastLineageParentMatches: bool,
+    lastLineageTerminalMatches: bool,
   }
 
   const enforceSenderSignature: bool
@@ -29,6 +35,9 @@ module assetOwnership {
   const blockTransferWhileListed: bool
   const quarantineOnRevocation: bool
   const blockUseOnRevocation: bool
+  const enforceLineageProofAuthentication: bool
+  const enforceLineageParent: bool
+  const enforceLineageTerminal: bool
 
   pure val Owners = Set(O1, O2, O3)
   pure val Versions = Set(0, 1, 2)
@@ -48,11 +57,47 @@ module assetOwnership {
       listingNonce: N1,
       canceledListingNonces: Set(),
       revokedAncestors: Set(),
+      verifiedAncestors: Set(0),
+      retainedAnchorVersion: 0,
+      lineageProofCount: 0,
       lineageClean: true,
       lastTransferLineageClean: true,
       lastSenderAuthenticated: true,
       lastRecipientAuthenticated: true,
+      lastLineageProofAuthenticated: true,
+      lastLineageParentMatches: true,
+      lastLineageTerminalMatches: true,
     }
+  }
+
+  /// Admit only a bounded contiguous suffix from the retained anchor to an
+  /// already checkpoint-authenticated current owner version. Hash/signature
+  /// details are abstracted to three booleans and checked by Red models.
+  action registerLineageSlice(
+    startVersion: int,
+    endVersion: int,
+    proofAuthenticated: bool,
+    parentMatches: bool,
+    terminalMatches: bool,
+  ): bool = all {
+    startVersion.in(Versions),
+    endVersion.in(Versions),
+    startVersion == state.retainedAnchorVersion,
+    endVersion > startVersion,
+    endVersion <= state.ownerVersion,
+    not(enforceLineageProofAuthentication) or proofAuthenticated,
+    not(enforceLineageParent) or parentMatches,
+    not(enforceLineageTerminal) or terminalMatches,
+    state' = {
+      ...state,
+      verifiedAncestors:
+        state.verifiedAncestors.union(Versions.filter(v => v <= endVersion)),
+      retainedAnchorVersion: endVersion,
+      lineageProofCount: state.lineageProofCount + 1,
+      lastLineageProofAuthenticated: proofAuthenticated,
+      lastLineageParentMatches: parentMatches,
+      lastLineageTerminalMatches: terminalMatches,
+    },
   }
 
   /// Advance one exact owner head after both transfer participants authenticate.
@@ -132,7 +177,7 @@ module assetOwnership {
   /// its nonce can never be replayed.
   action revokeAncestor(version: int): bool = all {
     version.in(Versions),
-    version <= state.ownerVersion,
+    version.in(state.verifiedAncestors),
     not(version.in(state.revokedAncestors)),
     state' = {
       ...state,
@@ -200,6 +245,21 @@ module assetOwnership {
     revokeAncestor(version)
   }
 
+  action registerLineageSome = {
+    nondet startVersion = Versions.oneOf()
+    nondet endVersion = Versions.oneOf()
+    nondet proofAuthenticated = Set(true, false).oneOf()
+    nondet parentMatches = Set(true, false).oneOf()
+    nondet terminalMatches = Set(true, false).oneOf()
+    registerLineageSlice(
+      startVersion,
+      endVersion,
+      proofAuthenticated,
+      parentMatches,
+      terminalMatches,
+    )
+  }
+
   action restoreSome = {
     nondet version = Versions.oneOf()
     restoreAncestor(version)
@@ -209,6 +269,7 @@ module assetOwnership {
     transferSome,
     listSome,
     cancelSome,
+    registerLineageSome,
     revokeSome,
     restoreSome,
   }
@@ -223,6 +284,10 @@ module assetOwnership {
     state.listingVersion >= -1,
     state.listingVersion <= 2,
     state.revokedAncestors.subseteq(Versions),
+    state.verifiedAncestors.subseteq(Versions),
+    state.retainedAnchorVersion.in(Versions),
+    state.lineageProofCount >= 0,
+    state.lineageProofCount <= 2,
   }
 
   val ownerVersionAdvancesExactlyOnce =
@@ -249,6 +314,17 @@ module assetOwnership {
   val activeListingRequiresCleanLineage =
     state.listingStatus == Active implies state.lineageClean
 
+  val verifiedAncestorsRespectRetentionBoundary =
+    state.verifiedAncestors.forall(version =>
+      version <= state.retainedAnchorVersion)
+
+  val registeredSliceRequiresExactBoundary =
+    state.lineageProofCount > 0 implies and {
+      state.lastLineageProofAuthenticated,
+      state.lastLineageParentMatches,
+      state.lastLineageTerminalMatches,
+    }
+
   val safety = and {
     typeOk,
     ownerVersionAdvancesExactlyOnce,
@@ -257,5 +333,7 @@ module assetOwnership {
     activeListingMatchesCurrentOwnerHead,
     lineageFlagMatchesRevocations,
     activeListingRequiresCleanLineage,
+    verifiedAncestorsRespectRetentionBoundary,
+    registeredSliceRequiresExactBoundary,
   }
 }

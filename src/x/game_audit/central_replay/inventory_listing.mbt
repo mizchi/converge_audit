@@ -30,6 +30,7 @@ pub struct InventoryListingCentralVerified {
   current_owner_id : String
   version : Int
   last_event : @bft.Digest
+  lineage_root : @bft.Digest
   approval_count : Int
   required_approvals : Int
 } derive(Eq, Debug)
@@ -108,6 +109,13 @@ pub fn InventoryListingCentralVerified::last_event(
   self : InventoryListingCentralVerified,
 ) -> @bft.Digest {
   self.last_event
+}
+
+///|
+pub fn InventoryListingCentralVerified::lineage_root(
+  self : InventoryListingCentralVerified,
+) -> @bft.Digest {
+  self.lineage_root
 }
 
 ///|
@@ -270,6 +278,7 @@ pub fn verify_inventory_listing_proof_bundle(
     current_owner_id: record.owner_id,
     version: record.version,
     last_event: record.last_event,
+    lineage_root: record.lineage_root,
     approval_count: certificate.approval_count(),
     required_approvals: certificate.required_approvals(),
   })

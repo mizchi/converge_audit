@@ -10,6 +10,9 @@ pub(all) struct AssetRecord {
   origin_receipt_digest : @bft.Digest
   version : Int
   last_event : @bft.Digest
+  /// Cumulative commitment from the origin receipt through every accepted
+  /// ownership transition. Historical slices must end at this exact root.
+  lineage_root : @bft.Digest
 } derive(Eq, Debug)
 
 ///|
@@ -21,6 +24,21 @@ pub(all) struct AssetTransfer {
   to_owner : String
   expected_version : Int
   source_event : @bft.Digest
+} derive(Eq, Debug)
+
+///|
+/// Canonical parent-bound transition committed into `AssetRecord.lineage_root`.
+/// The next root is intentionally derived rather than carried by the wire so a
+/// prover cannot choose it independently of the transition semantics.
+pub(all) struct AssetLineageTransition {
+  asset_id : String
+  origin_receipt_digest : @bft.Digest
+  from_owner : String
+  to_owner : String
+  expected_version : Int
+  previous_event : @bft.Digest
+  source_event : @bft.Digest
+  previous_lineage_root : @bft.Digest
 } derive(Eq, Debug)
 
 ///|
@@ -100,7 +118,7 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 ///|
 pub fn serialize_asset_record(record : AssetRecord) -> String {
   let buffer = StringBuilder::new()
-  append_field(buffer, "asset-record-v1")
+  append_field(buffer, "asset-record-v2")
   append_field(buffer, record.asset_id)
   append_field(buffer, record.owner_id)
   append_field(buffer, record.item_type)
@@ -110,6 +128,7 @@ pub fn serialize_asset_record(record : AssetRecord) -> String {
   append_field(buffer, record.origin_receipt_digest.0)
   append_field(buffer, record.version.to_string())
   append_field(buffer, record.last_event.0)
+  append_field(buffer, record.lineage_root.0)
   buffer.to_string()
 }
 
@@ -122,6 +141,61 @@ pub fn inventory_origin_receipt_digest(
   append_field(buffer, "inventory-origin-receipt-v1")
   append_field(buffer, @market.serialize_item_receipt(receipt))
   hasher.hash_string(buffer.to_string())
+}
+
+///|
+/// Initial lineage commitment. The receipt digest already binds the asset,
+/// original owner, item payload, source event and output index.
+pub fn inventory_origin_lineage_root(
+  hasher : &@bft.Hasher,
+  receipt : @market.ItemReceipt,
+) -> @bft.Digest {
+  let buffer = StringBuilder::new()
+  append_field(buffer, "inventory-origin-lineage-v1")
+  append_field(buffer, inventory_origin_receipt_digest(hasher, receipt).0)
+  hasher.hash_string(buffer.to_string())
+}
+
+///|
+pub fn asset_lineage_transition(
+  record : AssetRecord,
+  transfer : AssetTransfer,
+) -> AssetLineageTransition {
+  {
+    asset_id: transfer.asset_id,
+    origin_receipt_digest: record.origin_receipt_digest,
+    from_owner: transfer.from_owner,
+    to_owner: transfer.to_owner,
+    expected_version: transfer.expected_version,
+    previous_event: record.last_event,
+    source_event: transfer.source_event,
+    previous_lineage_root: record.lineage_root,
+  }
+}
+
+///|
+pub fn serialize_asset_lineage_transition(
+  transition : AssetLineageTransition,
+) -> String {
+  let buffer = StringBuilder::new()
+  append_field(buffer, "inventory-asset-lineage-transition-v1")
+  append_field(buffer, transition.asset_id)
+  append_field(buffer, transition.origin_receipt_digest.0)
+  append_field(buffer, transition.from_owner)
+  append_field(buffer, transition.to_owner)
+  append_field(buffer, transition.expected_version.to_string())
+  append_field(buffer, transition.previous_event.0)
+  append_field(buffer, transition.source_event.0)
+  append_field(buffer, transition.previous_lineage_root.0)
+  buffer.to_string()
+}
+
+///|
+pub fn asset_lineage_transition_root(
+  hasher : &@bft.Hasher,
+  transition : AssetLineageTransition,
+) -> @bft.Digest {
+  hasher.hash_string(serialize_asset_lineage_transition(transition))
 }
 
 ///|
@@ -205,6 +279,7 @@ fn create_record(
     origin_receipt_digest: inventory_origin_receipt_digest(hasher, receipt),
     version: 0,
     last_event: receipt.source_event,
+    lineage_root: inventory_origin_lineage_root(hasher, receipt),
   }
 }
 
@@ -379,11 +454,13 @@ pub fn InventoryIndex::plan(
             }
         }
         let record = current.unwrap()
+        let transition = asset_lineage_transition(record, transfer)
         let updated : AssetRecord = {
           ..record,
           owner_id: transfer.to_owner,
           version: record.version + 1,
           last_event: transfer.source_event,
+          lineage_root: asset_lineage_transition_root(self.hasher, transition),
         }
         record_updates[transfer.asset_id] = updated
         ignore(
@@ -474,7 +551,8 @@ fn record_is_structurally_valid(record : AssetRecord) -> Bool {
   record.origin_source_event.0 != "" &&
   record.origin_receipt_digest.0 != "" &&
   record.version >= 0 &&
-  record.last_event.0 != ""
+  record.last_event.0 != "" &&
+  record.lineage_root.0 != ""
 }
 
 ///|

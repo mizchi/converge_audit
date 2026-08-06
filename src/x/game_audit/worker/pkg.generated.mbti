@@ -12,6 +12,8 @@ pub fn audit_benchmark_make_anchor_envelope(String, String, String, Int, String)
 
 pub fn audit_benchmark_make_checkpoint_delivery_authentication(String, String, Array[String], Array[String], Int, Int, Int, String, String, String, String, String, Int, String, String, String) -> String
 
+pub fn audit_benchmark_make_inventory_lineage_proof_bundle(String, String, String, String, Int, String, String, String, String, Int, String, Int, Int) -> String
+
 pub fn audit_benchmark_make_inventory_listing_proof_bundle(String, String, String, String, Int, String, String, String, String, Int, String, Int, Int) -> String
 
 pub fn audit_benchmark_make_open_world_pve_replay_bundle(String, String, String, String) -> String
@@ -45,6 +47,8 @@ pub fn audit_select_peer_delivery_batch(Array[String], Array[Bool], Array[Bool],
 pub fn audit_verify_anchor_envelope(String, String, String) -> String
 
 pub fn audit_verify_checkpoint_delivery_authentication(Int, String, String, String, String, String, Int, String, String, String, String, String, Array[String], Array[String], Int, String, String, String, String, Array[String], Array[String], Array[String], Array[String], Array[String]) -> String
+
+pub fn audit_verify_inventory_lineage_proof_bundle(String, String, String, String, String, String, String, String, Int, String, Int, String, String, Int, String, String) -> String
 
 pub fn audit_verify_inventory_listing_proof_bundle(String, String, String, String, String, String, String, String, Int, String, Int, String, Bool) -> String
 

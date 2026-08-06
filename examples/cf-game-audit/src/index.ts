@@ -57,6 +57,7 @@ import {
   marketplaceCreationPersistAllowed,
   openCheckpointClosure,
   verifyAnchorEnvelope,
+  verifyInventoryLineageProofBundle,
   verifyInventoryListingProofBundle,
   verifyOpenWorldPveReplayBundle,
   verifyPveReplayBundle,
@@ -179,6 +180,7 @@ interface VerifiedItemCreationRow extends Record<string, SqlStorageValue> {
   inventory_game_manifest_digest: string | null;
   inventory_public_state_root: string | null;
   inventory_last_event: string | null;
+  inventory_lineage_root: string | null;
   replay_key: string;
   status: "eligible" | "revoked";
   lineage_status: "eligible" | "revoked";
@@ -189,7 +191,7 @@ interface VerifiedAssetLineageHeadRow
   extends Record<string, SqlStorageValue> {
   asset_id: string;
   ancestor_id: string;
-  ancestor_kind: "origin" | "current_head";
+  ancestor_kind: "origin" | "transfer" | "current_head";
   revision: number;
   status: "eligible" | "revoked";
   last_decision_id: string;
@@ -202,11 +204,45 @@ interface VerifiedAssetLineageDecisionRow
   decision_id: string;
   asset_id: string;
   ancestor_id: string;
-  ancestor_kind: "origin" | "current_head";
+  ancestor_kind: "origin" | "transfer" | "current_head";
   revision: number;
   outcome: "eligible" | "revoked";
   reason: string;
   decided_at: number;
+}
+
+interface VerifiedAssetLineageAnchorRow
+  extends Record<string, SqlStorageValue> {
+  asset_id: string;
+  owner_id: string;
+  version: number;
+  last_event: string;
+  lineage_root: string;
+  checkpoint_digest: string;
+  updated_at: number;
+}
+
+interface VerifiedAssetLineageTransitionRow
+  extends Record<string, SqlStorageValue> {
+  asset_id: string;
+  source_event: string;
+  previous_event: string;
+  from_owner: string;
+  to_owner: string;
+  expected_version: number;
+  previous_lineage_root: string;
+  next_lineage_root: string;
+  checkpoint_digest: string;
+  registered_at: number;
+}
+
+interface VerifiedAssetLineageProofRow
+  extends Record<string, SqlStorageValue> {
+  proof_digest: string;
+  asset_id: string;
+  checkpoint_digest: string;
+  transfer_count: number;
+  registered_at: number;
 }
 
 interface ReferenceGameItemReceiptRow extends Record<string, SqlStorageValue> {
@@ -324,6 +360,8 @@ const MAX_JSON_BODY_BYTES = 2_200_000;
 const MAX_ENVELOPE_HEX_CHARS = 131_072;
 const MAX_REPLAY_BUNDLE_HEX_CHARS = 2_097_152;
 const MAX_INVENTORY_BUNDLE_HEX_CHARS = 524_288;
+const MAX_INVENTORY_LINEAGE_BUNDLE_HEX_CHARS = 1_048_576;
+const MAX_RETAINED_LINEAGE_TRANSFERS_PER_ASSET = 256;
 const MAX_GAP_ITEMS = 256;
 const CHECKPOINT_DELIVERY_LEASE_MS = 30_000;
 const REFERENCE_GAME_VERIFICATION_WINDOW_MS = 60_000;
@@ -337,6 +375,7 @@ const REFERENCE_GAME_PUBLIC_ACTIONS = new Set([
 ]);
 const AUDIT_ADMIN_ACTIONS = new Set([
   "asset-lineage-decisions",
+  "asset-lineage-proofs",
   "game-asset-lineage-decisions",
 ]);
 const LOCATION_HINTS = new Set([
@@ -737,6 +776,7 @@ export class GameAuditShard extends DurableObject<Env> {
         inventory_game_manifest_digest TEXT,
         inventory_public_state_root TEXT,
         inventory_last_event TEXT,
+        inventory_lineage_root TEXT,
         replay_key TEXT NOT NULL,
         status TEXT NOT NULL CHECK (status IN ('eligible', 'revoked')),
         lineage_status TEXT NOT NULL DEFAULT 'eligible' CHECK (
@@ -749,7 +789,7 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id TEXT NOT NULL,
         ancestor_id TEXT NOT NULL,
         ancestor_kind TEXT NOT NULL CHECK (
-          ancestor_kind IN ('origin', 'current_head')
+          ancestor_kind IN ('origin', 'transfer', 'current_head')
         ),
         revision INTEGER NOT NULL CHECK (revision > 0),
         status TEXT NOT NULL CHECK (status IN ('eligible', 'revoked')),
@@ -767,13 +807,43 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id TEXT NOT NULL,
         ancestor_id TEXT NOT NULL,
         ancestor_kind TEXT NOT NULL CHECK (
-          ancestor_kind IN ('origin', 'current_head')
+          ancestor_kind IN ('origin', 'transfer', 'current_head')
         ),
         revision INTEGER NOT NULL CHECK (revision > 0),
         outcome TEXT NOT NULL CHECK (outcome IN ('eligible', 'revoked')),
         reason TEXT NOT NULL,
         decided_at INTEGER NOT NULL CHECK (decided_at >= 0),
         UNIQUE(asset_id, ancestor_id, revision)
+      );
+      CREATE TABLE IF NOT EXISTS verified_asset_lineage_anchors (
+        asset_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version >= 0),
+        last_event TEXT NOT NULL,
+        lineage_root TEXT NOT NULL,
+        checkpoint_digest TEXT NOT NULL,
+        updated_at INTEGER NOT NULL CHECK (updated_at >= 0)
+      );
+      CREATE TABLE IF NOT EXISTS verified_asset_lineage_transitions (
+        asset_id TEXT NOT NULL,
+        source_event TEXT NOT NULL,
+        previous_event TEXT NOT NULL,
+        from_owner TEXT NOT NULL,
+        to_owner TEXT NOT NULL,
+        expected_version INTEGER NOT NULL CHECK (expected_version >= 0),
+        previous_lineage_root TEXT NOT NULL,
+        next_lineage_root TEXT NOT NULL,
+        checkpoint_digest TEXT NOT NULL,
+        registered_at INTEGER NOT NULL CHECK (registered_at >= 0),
+        PRIMARY KEY(asset_id, source_event),
+        UNIQUE(asset_id, expected_version)
+      );
+      CREATE TABLE IF NOT EXISTS verified_asset_lineage_proofs (
+        proof_digest TEXT PRIMARY KEY CHECK (length(proof_digest) = 64),
+        asset_id TEXT NOT NULL,
+        checkpoint_digest TEXT NOT NULL,
+        transfer_count INTEGER NOT NULL CHECK (transfer_count > 0),
+        registered_at INTEGER NOT NULL CHECK (registered_at >= 0)
       );
       CREATE TABLE IF NOT EXISTS reference_game_item_receipts (
         asset_id TEXT PRIMARY KEY,
@@ -887,6 +957,7 @@ export class GameAuditShard extends DurableObject<Env> {
     `);
     this.migrateReplayArtifacts();
     this.migrateReferenceGameMarketListings();
+    this.migrateVerifiedAssetLineageDecisions();
     this.addAuditConfigColumnIfMissing("initial_epoch", "INTEGER");
     this.addAuditConfigColumnIfMissing("initial_previous_digest", "TEXT");
     this.addReplayOutboxColumnIfMissing("replay_decision", "TEXT");
@@ -911,6 +982,10 @@ export class GameAuditShard extends DurableObject<Env> {
       "TEXT",
     );
     this.addVerifiedItemCreationColumnIfMissing("inventory_last_event", "TEXT");
+    this.addVerifiedItemCreationColumnIfMissing(
+      "inventory_lineage_root",
+      "TEXT",
+    );
     this.addVerifiedItemCreationColumnIfMissing(
       "lineage_status",
       "TEXT NOT NULL DEFAULT 'eligible' CHECK (lineage_status IN ('eligible', 'revoked'))",
@@ -1011,6 +1086,8 @@ export class GameAuditShard extends DurableObject<Env> {
         return this.checkMarketListing(request, mode, unit);
       case "POST asset-lineage-decisions":
         return this.decideVerifiedAssetLineage(request, mode, unit);
+      case "POST asset-lineage-proofs":
+        return this.registerVerifiedAssetLineageProof(request, mode, unit);
       case "POST game-item-verifications":
         return this.verifyReferenceGameItem(request, mode, unit);
       case "POST game-item-transfers":
@@ -3766,6 +3843,305 @@ export class GameAuditShard extends DurableObject<Env> {
     }, 201);
   }
 
+  private async registerVerifiedAssetLineageProof(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "open") return jsonError("not_found", 404);
+    const config = this.config();
+    if (!config || config.mode !== mode || config.unit_key !== unit) {
+      return jsonError("shard_not_configured", 409);
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const assetId = stringField(body.value, "asset_id");
+    const sellerId = stringField(body.value, "seller_id");
+    const lineageBundleHex = stringField(body.value, "lineage_bundle_hex");
+    const checkpointDigest = stringField(
+      body.value,
+      "inventory_checkpoint_digest",
+    );
+    const gameManifestDigest = stringField(
+      body.value,
+      "inventory_game_manifest_digest",
+    );
+    const anchorOwnerId = stringField(body.value, "anchor_owner_id");
+    const anchorVersion = numberField(body.value, "anchor_version");
+    const anchorLastEvent = stringField(body.value, "anchor_last_event");
+    const anchorLineageRoot = stringField(body.value, "anchor_lineage_root");
+    if (
+      !assetId || assetId.length > 4_096 ||
+      !sellerId || sellerId.length > 4_096 ||
+      !lineageBundleHex ||
+      lineageBundleHex.length > MAX_INVENTORY_LINEAGE_BUNDLE_HEX_CHARS ||
+      lineageBundleHex.length % 2 !== 0 ||
+      !/^[0-9a-f]+$/.test(lineageBundleHex) ||
+      !checkpointDigest || !/^[0-9a-f]{64}$/.test(checkpointDigest) ||
+      !gameManifestDigest || !/^[0-9a-f]{64}$/.test(gameManifestDigest) ||
+      !anchorOwnerId || anchorOwnerId.length > 4_096 ||
+      anchorVersion === undefined || anchorVersion < 0 ||
+      !isMoonBitInt(anchorVersion) ||
+      !anchorLastEvent || anchorLastEvent.length > 4_096 ||
+      !anchorLineageRoot || !/^[0-9a-f]{64}$/.test(anchorLineageRoot)
+    ) {
+      return jsonError("invalid_asset_lineage_proof", 400);
+    }
+    const proofDigest = referenceGameDigest.hashString(JSON.stringify([
+      "converge-audit-inventory-lineage-proof-v1",
+      unit,
+      assetId,
+      lineageBundleHex,
+    ]));
+    const duplicate = this.verifiedAssetLineageProofAt(proofDigest);
+    if (duplicate) {
+      return jsonResponse({
+        ok: true,
+        decision: "duplicate",
+        proof_digest: duplicate.proof_digest,
+        asset_id: duplicate.asset_id,
+        checkpoint_digest: duplicate.checkpoint_digest,
+        transfer_count: duplicate.transfer_count,
+      });
+    }
+    const creation = this.verifiedItemCreationAt(assetId);
+    if (!creation) {
+      return jsonResponse({
+        ok: true,
+        decision: "asset_not_found",
+        asset_id: assetId,
+      }, 404);
+    }
+    if (
+      creation.inventory_checkpoint_digest !== checkpointDigest ||
+      creation.current_owner_id !== sellerId
+    ) {
+      return jsonResponse({
+        ok: true,
+        decision: "inventory_head_mismatch",
+        asset_id: assetId,
+        current_checkpoint: creation.inventory_checkpoint_digest,
+        current_owner_id: creation.current_owner_id,
+      }, 409);
+    }
+    if (
+      creation.inventory_game_manifest_digest !== null &&
+      creation.inventory_game_manifest_digest !== gameManifestDigest
+    ) {
+      return jsonResponse({
+        ok: true,
+        decision: "inventory_manifest_mismatch",
+        asset_id: assetId,
+      }, 409);
+    }
+    const retainedAnchor = this.verifiedAssetLineageAnchorAt(assetId);
+    if (
+      retainedAnchor &&
+      (retainedAnchor.owner_id !== anchorOwnerId ||
+        retainedAnchor.version !== anchorVersion ||
+        retainedAnchor.last_event !== anchorLastEvent ||
+        retainedAnchor.lineage_root !== anchorLineageRoot)
+    ) {
+      return jsonResponse({
+        ok: true,
+        decision: "retention_anchor_mismatch",
+        asset_id: assetId,
+        anchor_owner_id: retainedAnchor.owner_id,
+        anchor_version: retainedAnchor.version,
+        anchor_last_event: retainedAnchor.last_event,
+        anchor_lineage_root: retainedAnchor.lineage_root,
+      }, 409);
+    }
+    if (
+      !retainedAnchor &&
+      (anchorVersion !== 0 ||
+        anchorOwnerId !== creation.initial_owner_id ||
+        anchorLastEvent !== creation.source_event)
+    ) {
+      return jsonResponse({
+        ok: true,
+        decision: "initial_anchor_mismatch",
+        asset_id: assetId,
+      }, 409);
+    }
+    const verification = await verifyInventoryLineageProofBundle(
+      lineageBundleHex,
+      creation.inventory_session_id,
+      config.authority_key,
+      checkpointDigest,
+      gameManifestDigest,
+      creation.asset_id,
+      creation.initial_owner_id,
+      creation.item_type,
+      creation.quantity,
+      creation.source_event,
+      creation.output_index,
+      sellerId,
+      retainedAnchor?.owner_id ?? anchorOwnerId,
+      retainedAnchor?.version ?? anchorVersion,
+      retainedAnchor?.last_event ?? anchorLastEvent,
+      retainedAnchor?.lineage_root ?? anchorLineageRoot,
+    );
+    if (!verification.ok) {
+      return jsonResponse({
+        ok: true,
+        decision: "lineage_proof_refused",
+        proof_error: verification.error,
+        asset_id: assetId,
+      }, 403);
+    }
+    if (
+      verification.asset_id !== assetId ||
+      verification.checkpoint_digest !== checkpointDigest ||
+      verification.current_owner_id !== sellerId ||
+      verification.transfer_count !== verification.transitions.length ||
+      verification.transfer_count <= 0 ||
+      verification.transfer_count > 64 ||
+      verification.final_version !==
+        (retainedAnchor?.version ?? anchorVersion) +
+          verification.transfer_count ||
+      verification.final_owner_id !== creation.current_owner_id ||
+      verification.final_last_event !== creation.inventory_last_event ||
+      verification.final_lineage_root !== creation.inventory_lineage_root
+    ) {
+      return jsonResponse({
+        ok: true,
+        decision: "lineage_terminal_mismatch",
+        asset_id: assetId,
+      }, 409);
+    }
+    const existingTransitions = verification.transitions.map((transition) =>
+      this.verifiedAssetLineageTransitionAt(assetId, transition.source_event)
+    );
+    for (let index = 0; index < verification.transitions.length; index++) {
+      const transition = verification.transitions[index];
+      const existing = existingTransitions[index];
+      if (
+        transition.asset_id !== assetId ||
+        !/^[0-9a-f]{64}$/.test(transition.source_event) ||
+        !/^[0-9a-f]{64}$/.test(transition.next_lineage_root) ||
+        (existing &&
+          (existing.previous_event !== transition.previous_event ||
+            existing.from_owner !== transition.from_owner ||
+            existing.to_owner !== transition.to_owner ||
+            existing.expected_version !== transition.expected_version ||
+            existing.previous_lineage_root !==
+              transition.previous_lineage_root ||
+            existing.next_lineage_root !== transition.next_lineage_root))
+      ) {
+        return jsonResponse({
+          ok: true,
+          decision: "lineage_transition_conflict",
+          asset_id: assetId,
+          transition_index: index,
+        }, 409);
+      }
+    }
+    const newTransitionCount = existingTransitions.filter((row) => !row).length;
+    if (
+      this.verifiedAssetLineageTransitionCount(assetId) + newTransitionCount >
+        MAX_RETAINED_LINEAGE_TRANSFERS_PER_ASSET
+    ) {
+      return jsonResponse({
+        ok: true,
+        decision: "lineage_retention_capacity_exceeded",
+        asset_id: assetId,
+        max_retained_transfers: MAX_RETAINED_LINEAGE_TRANSFERS_PER_ASSET,
+      }, 409);
+    }
+    const registeredAt = Date.now();
+    const committed = this.ctx.storage.transactionSync(() => {
+      const latestCreation = this.verifiedItemCreationAt(assetId);
+      const latestAnchor = this.verifiedAssetLineageAnchorAt(assetId);
+      if (
+        !latestCreation ||
+        latestCreation.inventory_checkpoint_digest !== checkpointDigest ||
+        latestCreation.current_owner_id !== sellerId ||
+        latestCreation.inventory_last_event !== verification.final_last_event ||
+        latestCreation.inventory_lineage_root !==
+          verification.final_lineage_root ||
+        JSON.stringify(latestAnchor ?? null) !==
+          JSON.stringify(retainedAnchor ?? null)
+      ) return false;
+      for (const transition of verification.transitions) {
+        this.ctx.storage.sql.exec(
+          `INSERT OR IGNORE INTO verified_asset_lineage_transitions
+           (asset_id, source_event, previous_event, from_owner, to_owner,
+            expected_version, previous_lineage_root, next_lineage_root,
+            checkpoint_digest, registered_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          assetId,
+          transition.source_event,
+          transition.previous_event,
+          transition.from_owner,
+          transition.to_owner,
+          transition.expected_version,
+          transition.previous_lineage_root,
+          transition.next_lineage_root,
+          checkpointDigest,
+          registeredAt,
+        );
+      }
+      this.ctx.storage.sql.exec(
+        `INSERT INTO verified_asset_lineage_anchors
+         (asset_id, owner_id, version, last_event, lineage_root,
+          checkpoint_digest, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(asset_id) DO UPDATE SET
+           owner_id = excluded.owner_id,
+           version = excluded.version,
+           last_event = excluded.last_event,
+           lineage_root = excluded.lineage_root,
+           checkpoint_digest = excluded.checkpoint_digest,
+           updated_at = excluded.updated_at`,
+        assetId,
+        verification.final_owner_id,
+        verification.final_version,
+        verification.final_last_event,
+        verification.final_lineage_root,
+        checkpointDigest,
+        registeredAt,
+      );
+      this.ctx.storage.sql.exec(
+        `INSERT INTO verified_asset_lineage_proofs
+         (proof_digest, asset_id, checkpoint_digest, transfer_count,
+          registered_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        proofDigest,
+        assetId,
+        checkpointDigest,
+        verification.transfer_count,
+        registeredAt,
+      );
+      return true;
+    });
+    if (!committed) {
+      return jsonResponse({
+        ok: true,
+        decision: "lineage_registration_raced",
+        asset_id: assetId,
+      }, 409);
+    }
+    await this.ctx.storage.sync();
+    return jsonResponse({
+      ok: true,
+      decision: "registered",
+      proof_digest: proofDigest,
+      asset_id: assetId,
+      checkpoint_digest: checkpointDigest,
+      transfer_count: verification.transfer_count,
+      transitions: verification.transitions,
+      retained_anchor: {
+        owner_id: verification.final_owner_id,
+        version: verification.final_version,
+        last_event: verification.final_last_event,
+        lineage_root: verification.final_lineage_root,
+      },
+      retained_transfers: this.verifiedAssetLineageTransitionCount(assetId),
+      max_retained_transfers: MAX_RETAINED_LINEAGE_TRANSFERS_PER_ASSET,
+    }, 201);
+  }
+
   private async decideVerifiedAssetLineage(
     request: Request,
     mode: AuditMode,
@@ -4100,7 +4476,11 @@ export class GameAuditShard extends DurableObject<Env> {
         if (
           verification.epoch !== creation.inventory_epoch ||
           verification.current_owner_id !== creation.current_owner_id ||
-          verification.version !== creation.current_version
+          verification.version !== creation.current_version ||
+          (creation.inventory_last_event !== null &&
+            verification.last_event !== creation.inventory_last_event) ||
+          (creation.inventory_lineage_root !== null &&
+            verification.lineage_root !== creation.inventory_lineage_root)
         ) {
           return jsonResponse({
             ok: true,
@@ -4109,6 +4489,21 @@ export class GameAuditShard extends DurableObject<Env> {
             asset_id: assetId,
             seller_id: sellerId,
           }, 409);
+        }
+        if (
+          creation.inventory_last_event === null ||
+          creation.inventory_lineage_root === null
+        ) {
+          this.ctx.storage.sql.exec(
+            `UPDATE verified_item_creations
+             SET inventory_last_event = ?, inventory_lineage_root = ?
+             WHERE asset_id = ? AND inventory_checkpoint_digest = ?`,
+            verification.last_event,
+            verification.lineage_root,
+            assetId,
+            verification.checkpoint_digest,
+          );
+          creation = this.verifiedItemCreationAt(assetId) ?? creation;
         }
       } else if (!await inventoryHeadAdvanceAllowed({
         creationEligible: creation.status === "eligible" &&
@@ -4150,7 +4545,8 @@ export class GameAuditShard extends DurableObject<Env> {
                SET current_owner_id = ?, current_version = ?,
                    inventory_checkpoint_digest = ?, inventory_epoch = ?,
                    inventory_game_manifest_digest = ?,
-                   inventory_public_state_root = ?, inventory_last_event = ?
+                   inventory_public_state_root = ?, inventory_last_event = ?,
+                   inventory_lineage_root = ?
                WHERE asset_id = ?`,
               verification.current_owner_id,
               verification.version,
@@ -4159,6 +4555,7 @@ export class GameAuditShard extends DurableObject<Env> {
               inventoryGameManifestDigest,
               verification.public_state_root,
               verification.last_event,
+              verification.lineage_root,
               assetId,
             );
             advanced = true;
@@ -4257,6 +4654,7 @@ export class GameAuditShard extends DurableObject<Env> {
                 current_owner_id, current_version, inventory_checkpoint_digest,
                 inventory_epoch, inventory_game_manifest_digest,
                 inventory_public_state_root, inventory_last_event,
+                inventory_lineage_root,
                 replay_key, status, lineage_status, created_at
          FROM verified_item_creations
          WHERE source_event = ? AND output_index = ?`,
@@ -4281,8 +4679,9 @@ export class GameAuditShard extends DurableObject<Env> {
           current_owner_id, current_version, inventory_checkpoint_digest,
           inventory_epoch, inventory_game_manifest_digest,
           inventory_public_state_root, inventory_last_event,
+          inventory_lineage_root,
           replay_key, status, lineage_status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL,
                  ?, 'eligible', 'eligible', ?)`,
         creation.asset_id,
         creation.initial_owner_id,
@@ -4653,6 +5052,7 @@ export class GameAuditShard extends DurableObject<Env> {
               current_owner_id, current_version, inventory_checkpoint_digest,
               inventory_epoch, inventory_game_manifest_digest,
               inventory_public_state_root, inventory_last_event,
+              inventory_lineage_root,
               replay_key, status, lineage_status, created_at
        FROM verified_item_creations WHERE asset_id = ?`,
       assetId,
@@ -4685,6 +5085,51 @@ export class GameAuditShard extends DurableObject<Env> {
     ).toArray()[0];
   }
 
+  private verifiedAssetLineageAnchorAt(
+    assetId: string,
+  ): VerifiedAssetLineageAnchorRow | undefined {
+    return this.ctx.storage.sql.exec<VerifiedAssetLineageAnchorRow>(
+      `SELECT asset_id, owner_id, version, last_event, lineage_root,
+              checkpoint_digest, updated_at
+       FROM verified_asset_lineage_anchors WHERE asset_id = ?`,
+      assetId,
+    ).toArray()[0];
+  }
+
+  private verifiedAssetLineageTransitionAt(
+    assetId: string,
+    sourceEvent: string,
+  ): VerifiedAssetLineageTransitionRow | undefined {
+    return this.ctx.storage.sql.exec<VerifiedAssetLineageTransitionRow>(
+      `SELECT asset_id, source_event, previous_event, from_owner, to_owner,
+              expected_version, previous_lineage_root, next_lineage_root,
+              checkpoint_digest, registered_at
+       FROM verified_asset_lineage_transitions
+       WHERE asset_id = ? AND source_event = ?`,
+      assetId,
+      sourceEvent,
+    ).toArray()[0];
+  }
+
+  private verifiedAssetLineageProofAt(
+    proofDigest: string,
+  ): VerifiedAssetLineageProofRow | undefined {
+    return this.ctx.storage.sql.exec<VerifiedAssetLineageProofRow>(
+      `SELECT proof_digest, asset_id, checkpoint_digest, transfer_count,
+              registered_at
+       FROM verified_asset_lineage_proofs WHERE proof_digest = ?`,
+      proofDigest,
+    ).toArray()[0];
+  }
+
+  private verifiedAssetLineageTransitionCount(assetId: string): number {
+    return this.ctx.storage.sql.exec<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM verified_asset_lineage_transitions
+       WHERE asset_id = ?`,
+      assetId,
+    ).toArray()[0]?.count ?? 0;
+  }
+
   private verifiedAssetOpenRevocationCount(assetId: string): number {
     return this.ctx.storage.sql.exec<{ count: number }>(
       `SELECT COUNT(*) AS count
@@ -4697,8 +5142,11 @@ export class GameAuditShard extends DurableObject<Env> {
   private verifiedAssetAncestorKind(
     creation: VerifiedItemCreationRow,
     ancestorId: string,
-  ): "origin" | "current_head" | undefined {
+  ): "origin" | "transfer" | "current_head" | undefined {
     if (creation.asset_id === ancestorId) return "origin";
+    if (this.verifiedAssetLineageTransitionAt(creation.asset_id, ancestorId)) {
+      return "transfer";
+    }
     if (creation.inventory_checkpoint_digest === ancestorId) {
       return "current_head";
     }
@@ -4785,6 +5233,74 @@ export class GameAuditShard extends DurableObject<Env> {
         `ALTER TABLE ${table} ADD COLUMN ${name} ${sqlType}`,
       );
     }
+  }
+
+  private migrateVerifiedAssetLineageDecisions(): void {
+    const headSchema = this.ctx.storage.sql.exec<{ sql: string }>(
+      `SELECT sql FROM sqlite_master
+       WHERE type = 'table' AND name = 'verified_asset_lineage_heads'`,
+    ).toArray()[0]?.sql;
+    const decisionSchema = this.ctx.storage.sql.exec<{ sql: string }>(
+      `SELECT sql FROM sqlite_master
+       WHERE type = 'table' AND name = 'verified_asset_lineage_decisions'`,
+    ).toArray()[0]?.sql;
+    if (
+      !headSchema ||
+      !decisionSchema ||
+      (headSchema.includes("'transfer'") &&
+        decisionSchema.includes("'transfer'"))
+    ) return;
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        "DROP INDEX IF EXISTS verified_asset_lineage_open",
+      );
+      this.ctx.storage.sql.exec(
+        `ALTER TABLE verified_asset_lineage_heads
+         RENAME TO verified_asset_lineage_heads_legacy`,
+      );
+      this.ctx.storage.sql.exec(
+        `ALTER TABLE verified_asset_lineage_decisions
+         RENAME TO verified_asset_lineage_decisions_legacy`,
+      );
+      this.ctx.storage.sql.exec(`
+        CREATE TABLE verified_asset_lineage_heads (
+          asset_id TEXT NOT NULL,
+          ancestor_id TEXT NOT NULL,
+          ancestor_kind TEXT NOT NULL CHECK (
+            ancestor_kind IN ('origin', 'transfer', 'current_head')
+          ),
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          status TEXT NOT NULL CHECK (status IN ('eligible', 'revoked')),
+          last_decision_id TEXT NOT NULL UNIQUE CHECK (
+            length(last_decision_id) = 64
+          ),
+          reason TEXT NOT NULL,
+          updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
+          PRIMARY KEY(asset_id, ancestor_id)
+        );
+        CREATE TABLE verified_asset_lineage_decisions (
+          decision_id TEXT PRIMARY KEY CHECK (length(decision_id) = 64),
+          asset_id TEXT NOT NULL,
+          ancestor_id TEXT NOT NULL,
+          ancestor_kind TEXT NOT NULL CHECK (
+            ancestor_kind IN ('origin', 'transfer', 'current_head')
+          ),
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          outcome TEXT NOT NULL CHECK (outcome IN ('eligible', 'revoked')),
+          reason TEXT NOT NULL,
+          decided_at INTEGER NOT NULL CHECK (decided_at >= 0),
+          UNIQUE(asset_id, ancestor_id, revision)
+        );
+        INSERT INTO verified_asset_lineage_heads
+        SELECT * FROM verified_asset_lineage_heads_legacy;
+        INSERT INTO verified_asset_lineage_decisions
+        SELECT * FROM verified_asset_lineage_decisions_legacy;
+        DROP TABLE verified_asset_lineage_heads_legacy;
+        DROP TABLE verified_asset_lineage_decisions_legacy;
+        CREATE INDEX verified_asset_lineage_open
+          ON verified_asset_lineage_heads(asset_id, status);
+      `);
+    });
   }
 
   private migrateReferenceGameMarketListings(): void {

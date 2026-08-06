@@ -17,57 +17,83 @@ fn revocation_trace_fixture() -> String {
     #|        "listingNonce": { "tag": "N1", "value": { "#tup": [] } },
     #|        "canceledListingNonces": { "#set": [] },
     #|        "revokedAncestors": { "#set": [] },
+    #|        "verifiedAncestors": { "#set": [{ "#bigint": "0" }] },
+    #|        "retainedAnchorVersion": { "#bigint": "0" },
+    #|        "lineageProofCount": { "#bigint": "0" },
     #|        "lineageClean": true,
     #|        "lastTransferLineageClean": true,
     #|        "lastSenderAuthenticated": true,
-    #|        "lastRecipientAuthenticated": true
+    #|        "lastRecipientAuthenticated": true,
+    #|        "lastLineageProofAuthenticated": true,
+    #|        "lastLineageParentMatches": true,
+    #|        "lastLineageTerminalMatches": true
     #|      }
     #|    },
     #|    {
     #|      "#meta": { "index": 1 },
-    #|      "mbt::actionTaken": "listSome",
+    #|      "mbt::actionTaken": "transferSome",
     #|      "mbt::nondetPicks": {
-    #|        "seller": { "tag": "O1", "value": { "#tup": [] } },
-    #|        "version": { "#bigint": "0" },
-    #|        "nonce": { "tag": "N1", "value": { "#tup": [] } },
-    #|        "authenticated": true
+    #|        "from": { "tag": "O1", "value": { "#tup": [] } },
+    #|        "recipient": { "tag": "O2", "value": { "#tup": [] } },
+    #|        "previousVersion": { "#bigint": "0" },
+    #|        "nextVersion": { "#bigint": "1" },
+    #|        "senderAuthenticated": true,
+    #|        "recipientAuthenticated": true
     #|      },
     #|      "state": {
-    #|        "owner": { "tag": "O1", "value": { "#tup": [] } },
-    #|        "ownerVersion": { "#bigint": "0" },
-    #|        "transferCount": { "#bigint": "0" },
-    #|        "listingStatus": { "tag": "Active", "value": { "#tup": [] } },
+    #|        "owner": { "tag": "O2", "value": { "#tup": [] } },
+    #|        "ownerVersion": { "#bigint": "1" },
+    #|        "transferCount": { "#bigint": "1" },
+    #|        "listingStatus": { "tag": "NeverListed", "value": { "#tup": [] } },
     #|        "listingOwner": { "tag": "O1", "value": { "#tup": [] } },
-    #|        "listingVersion": { "#bigint": "0" },
+    #|        "listingVersion": { "#bigint": "-1" },
     #|        "listingNonce": { "tag": "N1", "value": { "#tup": [] } },
     #|        "canceledListingNonces": { "#set": [] },
     #|        "revokedAncestors": { "#set": [] },
+    #|        "verifiedAncestors": { "#set": [{ "#bigint": "0" }] },
+    #|        "retainedAnchorVersion": { "#bigint": "0" },
+    #|        "lineageProofCount": { "#bigint": "0" },
     #|        "lineageClean": true,
     #|        "lastTransferLineageClean": true,
     #|        "lastSenderAuthenticated": true,
-    #|        "lastRecipientAuthenticated": true
+    #|        "lastRecipientAuthenticated": true,
+    #|        "lastLineageProofAuthenticated": true,
+    #|        "lastLineageParentMatches": true,
+    #|        "lastLineageTerminalMatches": true
     #|      }
     #|    },
     #|    {
     #|      "#meta": { "index": 2 },
-    #|      "mbt::actionTaken": "revokeSome",
-    #|      "mbt::nondetPicks": { "version": { "#bigint": "0" } },
+    #|      "mbt::actionTaken": "registerLineageSome",
+    #|      "mbt::nondetPicks": {
+    #|        "startVersion": { "#bigint": "0" },
+    #|        "endVersion": { "#bigint": "1" },
+    #|        "proofAuthenticated": true,
+    #|        "parentMatches": true,
+    #|        "terminalMatches": true
+    #|      },
     #|      "state": {
-    #|        "owner": { "tag": "O1", "value": { "#tup": [] } },
-    #|        "ownerVersion": { "#bigint": "0" },
-    #|        "transferCount": { "#bigint": "0" },
-    #|        "listingStatus": { "tag": "Quarantined", "value": { "#tup": [] } },
+    #|        "owner": { "tag": "O2", "value": { "#tup": [] } },
+    #|        "ownerVersion": { "#bigint": "1" },
+    #|        "transferCount": { "#bigint": "1" },
+    #|        "listingStatus": { "tag": "NeverListed", "value": { "#tup": [] } },
     #|        "listingOwner": { "tag": "O1", "value": { "#tup": [] } },
-    #|        "listingVersion": { "#bigint": "0" },
+    #|        "listingVersion": { "#bigint": "-1" },
     #|        "listingNonce": { "tag": "N1", "value": { "#tup": [] } },
-    #|        "canceledListingNonces": {
-    #|          "#set": [{ "tag": "N1", "value": { "#tup": [] } }]
+    #|        "canceledListingNonces": { "#set": [] },
+    #|        "revokedAncestors": { "#set": [] },
+    #|        "verifiedAncestors": {
+    #|          "#set": [{ "#bigint": "0" }, { "#bigint": "1" }]
     #|        },
-    #|        "revokedAncestors": { "#set": [{ "#bigint": "0" }] },
-    #|        "lineageClean": false,
+    #|        "retainedAnchorVersion": { "#bigint": "1" },
+    #|        "lineageProofCount": { "#bigint": "1" },
+    #|        "lineageClean": true,
     #|        "lastTransferLineageClean": true,
     #|        "lastSenderAuthenticated": true,
-    #|        "lastRecipientAuthenticated": true
+    #|        "lastRecipientAuthenticated": true,
+    #|        "lastLineageProofAuthenticated": true,
+    #|        "lastLineageParentMatches": true,
+    #|        "lastLineageTerminalMatches": true
     #|      }
     #|    }
     #|  ]
@@ -76,7 +102,7 @@ fn revocation_trace_fixture() -> String {
 }
 
 ///|
-test "Quint asset revocation trace matches the MoonBit audit policy" {
+test "Quint asset lineage registration trace matches the MoonBit audit policy" {
   let trace = @quint_connect.parse_itf_with_config(revocation_trace_fixture(), {
     state_path: ["state"],
     nondet_path: [],
@@ -86,17 +112,20 @@ test "Quint asset revocation trace matches the MoonBit audit policy" {
 }
 
 ///|
-test "Quint Connect detects an implementation that skips quarantine" {
+test "Quint Connect detects an implementation that skips lineage retention" {
   let trace = @quint_connect.parse_itf_with_config(revocation_trace_fixture(), {
     state_path: ["state"],
     nondet_path: [],
   }).unwrap()
   match
-    replay_asset_ownership(trace, new_asset_driver(broken_revocation=true)) {
-    Err(StateDiverged(2, "revokeSome", expected, actual)) => {
-      assert_true(expected.contains("Quarantined"))
-      assert_true(actual.contains("Active"))
+    replay_asset_ownership(
+      trace,
+      new_asset_driver(broken_lineage_registration=true),
+    ) {
+    Err(StateDiverged(2, "registerLineageSome", expected, actual)) => {
+      assert_true(expected.contains("retained_anchor_version: 1"))
+      assert_true(actual.contains("retained_anchor_version: 0"))
     }
-    _ => fail("broken revocation propagation must diverge")
+    _ => fail("broken lineage retention must diverge")
   }
 }

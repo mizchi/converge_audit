@@ -58,6 +58,9 @@ active listing中のtransfer禁止、cancel後のtransfer許可、取消済みli
 origin/transfer versionごとのrevocationとappealも扱い、祖先revoke時はdescendantのactive listingを
 quarantineする。appealはclean lineageを再計算するが旧listingを自動復活させず、新nonceなら同じowner
 headでも再出品できる。
+中間transferはowner versionだけでは裁定対象にせず、originまたは前回の`retainedAnchorVersion`から
+current headへ到達する認証済みsliceを`registerLineageSlice`で登録した場合だけ`verifiedAncestors`へ入る。
+未登録transferのrevoke、wrong-parent slice、終端不一致は拒否する。
 暗号primitive、HTTP decode、SQLite migrationはMoonBit/Workers testの責務に残す。
 
 asset settlementのclaim ledgerは次のとおりである。
@@ -70,6 +73,7 @@ asset settlementのclaim ledgerは次のとおりである。
 | cancel後はtransferと新nonceでの再出品が可能、旧nonceのreplayは不可 | `AssetOwnership.cancel/list` | `transferListCancelTransfer` / `canceledListingCannotReplay` / `canceledOwnerCanRelistWithFreshNonce` | scenario verified |
 | 祖先revoke後にdescendant listingをactiveのまま残さない | `AssetOwnership.revokeAncestor` | `activeListingRequiresCleanLineage` + broken-revocation反例 | verified（有限model） |
 | 未解決revoke中は新しいdescendant transferを作らない | `AssetOwnership.transfer` | `transferRequiresCleanLineage` + broken-revoked-transfer反例 | verified（有限model） |
+| historical transferのrevoke前にexact authenticated sliceを要求する | `AssetOwnership.registerLineageSlice/revokeAncestor` | `registeredSliceRequiresExactBoundary` + broken-lineage-parent反例 + 3 scenario | verified（有限model） |
 | appeal後もquarantine済みnonceを自動復活させない | `AssetOwnership.restoreAncestor/list` | `appealRecomputesButDoesNotReactivateListing` / `appealDoesNotPermitQuarantinedNonceReplay` | scenario verified |
 | Ed25519、wire binding、永続化migrationが上記抽象に従う | Workers API/SQLite contract | owner-auth unit test + workerd integration test | regression tested（refinement proofではない） |
 
@@ -91,6 +95,7 @@ asset settlementのclaim ledgerは次のとおりである。
 - active listingは常に現在のowner headと一致し、出品中のowner変更を許さない。
 - `lineageClean`は未解決revocation集合が空であることと一致する。
 - active listingはclean lineageでのみ存在し、祖先revoke時はquarantineされる。
+- verified historical ancestorはretention anchorを越えず、登録sliceは認証・親・終端の全境界に一致する。
 
 checkpoint配送のlivenessは次の条件付き性質である。
 

@@ -26,6 +26,7 @@
     "bench": "tsx scripts/bench.ts",
     "bench:local": "tsx scripts/bench.ts",
     "bench:witness": "tsx scripts/bench-witness.ts",
+    "bench:lineage": "tsx scripts/bench-lineage.ts",
     "witness": "tsx scripts/witness-client.ts"
   },
   "devDependencies": {

@@ -109,3 +109,9 @@ check_expected_failure \
   invariant \
   transferRequiresCleanLineage \
   "$audit_quint_tmp/asset-revoked-transfer.log"
+check_expected_failure \
+  formal/quint/AssetOwnershipModels.qnt \
+  assetOwnershipBrokenLineageParent \
+  invariant \
+  registeredSliceRequiresExactBoundary \
+  "$audit_quint_tmp/asset-lineage-parent.log"

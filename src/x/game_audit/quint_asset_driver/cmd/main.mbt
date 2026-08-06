@@ -7,6 +7,9 @@ async fn main {
     "formal/quint/AssetOwnershipModels.qnt"
   }
   let broken_revocation = args.any(arg => arg == "--broken-revocation")
+  let broken_lineage_registration = args.any(arg => {
+    arg == "--broken-lineage-registration"
+  })
   let seed = "0xa55e7"
   let config : @quint_connect.RunConfig = {
     spec,
@@ -29,6 +32,7 @@ async fn main {
   let result = @quint_asset_driver.replay_asset_ownership_suite(
     batch.traces,
     broken_revocation~,
+    broken_lineage_registration~,
   )
   @runner.cleanup(batch.temp_dir)
   match result {

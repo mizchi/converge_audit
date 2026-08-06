@@ -50,3 +50,37 @@ pub fn asset_lineage_decision_allowed(
   )
   result
 }
+
+///|
+/// Aggregate fail-closed contract for admitting one bounded historical slice.
+/// Cryptographic verification and hash recomputation happen in the inventory
+/// layer; this proof-visible predicate fixes the required trust boundaries.
+pub fn asset_lineage_slice_allowed(
+  has_transfers~ : Bool,
+  within_limit~ : Bool,
+  origin_matches~ : Bool,
+  anchor_matches~ : Bool,
+  parent_chain_matches~ : Bool,
+  every_transfer_authenticated~ : Bool,
+  current_record_matches~ : Bool,
+) -> Bool where {
+  proof_ensure: result => {
+    asset_lineage_slice_allowed_post(
+      has_transfers, within_limit, origin_matches, anchor_matches, parent_chain_matches,
+      every_transfer_authenticated, current_record_matches, result,
+    )
+  },
+} {
+  let result = has_transfers &&
+    within_limit &&
+    origin_matches &&
+    anchor_matches &&
+    parent_chain_matches &&
+    every_transfer_authenticated &&
+    current_record_matches
+  proof_assert asset_lineage_slice_allowed_post(
+    has_transfers, within_limit, origin_matches, anchor_matches, parent_chain_matches,
+    every_transfer_authenticated, current_record_matches, result,
+  )
+  result
+}

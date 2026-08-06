@@ -11,19 +11,103 @@ import {
 }
 
 // Values
+pub fn asset_lineage_transfer_authorization_digest(&@converge_audit.Hasher, AssetLineageTransferAuthorization) -> @converge_audit.Digest
+
+pub fn asset_lineage_transition(AssetRecord, AssetTransfer) -> AssetLineageTransition
+
+pub fn asset_lineage_transition_root(&@converge_audit.Hasher, AssetLineageTransition) -> @converge_audit.Digest
+
+pub fn asset_owner_key_binding_digest(&@converge_audit.Hasher, AssetOwnerKeyBinding) -> @converge_audit.Digest
+
+pub fn asset_record_lineage_anchor(AssetRecord) -> AssetLineageAnchor
+
+pub fn inventory_origin_lineage_root(&@converge_audit.Hasher, @market.ItemReceipt) -> @converge_audit.Digest
+
 pub fn inventory_origin_receipt_digest(&@converge_audit.Hasher, @market.ItemReceipt) -> @converge_audit.Digest
 
 pub fn inventory_proof_matches_origin_receipt(&@converge_audit.Hasher, InventoryProof, @market.ItemReceipt) -> Bool
 
 pub fn market_accepts_inventory_listing(&@converge_audit.Hasher, @attestation.FinalizedCheckpoint, InventoryProof, seller_id~ : String, rejected_ancestor~ : Bool) -> Bool
 
+pub fn origin_asset_lineage_anchor(&@converge_audit.Hasher, @market.ItemReceipt) -> AssetLineageAnchor
+
+pub fn serialize_asset_lineage_transfer_authorization(AssetLineageTransferAuthorization) -> String
+
+pub fn serialize_asset_lineage_transition(AssetLineageTransition) -> String
+
+pub fn serialize_asset_owner_key_binding(AssetOwnerKeyBinding) -> String
+
 pub fn serialize_asset_record(AssetRecord) -> String
+
+pub fn sign_asset_lineage_transfer(&@converge_audit.Hasher, &@converge_audit.Signer, &@converge_audit.Signer, session_id~ : String, transition~ : AssetLineageTransition) -> SignedAssetLineageTransfer
+
+pub fn sign_asset_owner_key_binding(&@converge_audit.Hasher, &@converge_audit.Signer, AssetOwnerKeyBinding) -> SignedAssetOwnerKeyBinding
+
+pub fn verify_asset_lineage_slice(&@converge_audit.Hasher, &@converge_audit.Verifier, AssetLineageSlice, expected_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_origin_receipt_digest~ : @converge_audit.Digest, expected_anchor~ : AssetLineageAnchor, expected_current~ : AssetRecord, max_transfers~ : Int) -> AssetLineageVerificationResult
 
 pub fn verify_inventory_proof(&@converge_audit.Hasher, @converge_audit.Digest, InventoryProof) -> Bool
 
 // Errors
 
 // Types and methods
+pub(all) struct AssetLineageAnchor {
+  asset_id : String
+  owner_id : String
+  version : Int
+  last_event : @converge_audit.Digest
+  lineage_root : @converge_audit.Digest
+  origin_receipt_digest : @converge_audit.Digest
+} derive(Eq, @debug.Debug)
+
+pub(all) enum AssetLineageRefusal {
+  InvalidAssetLineageLimit
+  MissingAssetLineageTransfers
+  AssetLineageTransfersTooMany(Int, Int)
+  AssetLineageOriginMismatch
+  AssetLineageAnchorMismatch
+  AssetLineageAssetMismatch(Int)
+  AssetLineageParentMismatch(Int)
+  AssetLineageOwnerMismatch(Int)
+  AssetLineageVersionMismatch(Int)
+  AssetLineageInvalidRecipient(Int)
+  AssetLineageAuthenticationRefused(Int)
+  AssetLineageCurrentRecordMismatch
+} derive(Eq, @debug.Debug)
+
+pub(all) struct AssetLineageSlice {
+  anchor : AssetLineageAnchor
+  transfers : Array[AuthenticatedAssetLineageTransfer]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct AssetLineageTransferAuthorization {
+  session_id : String
+  transition : AssetLineageTransition
+  sender_key : @converge_audit.PublicKey
+  recipient_key : @converge_audit.PublicKey
+} derive(Eq, @debug.Debug)
+
+pub(all) struct AssetLineageTransition {
+  asset_id : String
+  origin_receipt_digest : @converge_audit.Digest
+  from_owner : String
+  to_owner : String
+  expected_version : Int
+  previous_event : @converge_audit.Digest
+  source_event : @converge_audit.Digest
+  previous_lineage_root : @converge_audit.Digest
+} derive(Eq, @debug.Debug)
+
+pub(all) enum AssetLineageVerificationResult {
+  AssetLineageVerified(VerifiedAssetLineageSlice)
+  AssetLineageRefused(AssetLineageRefusal)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct AssetOwnerKeyBinding {
+  session_id : String
+  owner_id : String
+  owner_key : @converge_audit.PublicKey
+} derive(Eq, @debug.Debug)
+
 pub(all) struct AssetRecord {
   asset_id : String
   owner_id : String
@@ -34,6 +118,7 @@ pub(all) struct AssetRecord {
   origin_receipt_digest : @converge_audit.Digest
   version : Int
   last_event : @converge_audit.Digest
+  lineage_root : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 
 pub(all) struct AssetTransfer {
@@ -42,6 +127,12 @@ pub(all) struct AssetTransfer {
   to_owner : String
   expected_version : Int
   source_event : @converge_audit.Digest
+} derive(Eq, @debug.Debug)
+
+pub(all) struct AuthenticatedAssetLineageTransfer {
+  signed_transfer : SignedAssetLineageTransfer
+  sender_binding : SignedAssetOwnerKeyBinding
+  recipient_binding : SignedAssetOwnerKeyBinding
 } derive(Eq, @debug.Debug)
 
 pub(all) enum InventoryCommitResult {
@@ -106,6 +197,20 @@ pub(all) struct InventoryProof {
   map_proof : @authmap.AuthMapProof
 } derive(Eq, @debug.Debug)
 
+pub(all) struct SignedAssetLineageTransfer {
+  authorization : AssetLineageTransferAuthorization
+  digest : @converge_audit.Digest
+  sender_signature : @converge_audit.Signature
+  recipient_signature : @converge_audit.Signature
+} derive(Eq, @debug.Debug)
+
+pub(all) struct SignedAssetOwnerKeyBinding {
+  binding : AssetOwnerKeyBinding
+  digest : @converge_audit.Digest
+  signature : @converge_audit.Signature
+  authority_key : @converge_audit.PublicKey
+} derive(Eq, @debug.Debug)
+
 pub(all) enum TransferValidation {
   UnknownAsset
   OwnerMismatch
@@ -114,6 +219,18 @@ pub(all) enum TransferValidation {
   SameOwner
   UnreplayedSourceEvent
 } derive(Eq, @debug.Debug)
+
+pub struct VerifiedAssetLineageSlice {
+  initial_anchor : AssetLineageAnchor
+  final_anchor : AssetLineageAnchor
+  transitions : Array[AssetLineageTransition]
+} derive(Eq, @debug.Debug)
+pub fn VerifiedAssetLineageSlice::contains_event(Self, @converge_audit.Digest) -> Bool
+pub fn VerifiedAssetLineageSlice::final_anchor(Self) -> AssetLineageAnchor
+pub fn VerifiedAssetLineageSlice::initial_anchor(Self) -> AssetLineageAnchor
+pub fn VerifiedAssetLineageSlice::transfer_count(Self) -> Int
+pub fn VerifiedAssetLineageSlice::transfer_events(Self) -> Array[@converge_audit.Digest]
+pub fn VerifiedAssetLineageSlice::transitions(Self) -> Array[AssetLineageTransition]
 
 // Type aliases
 

@@ -45,6 +45,44 @@ predicate asset_lineage_decision_allowed_post(
 }
 
 ///|
+predicate asset_lineage_slice_allowed_post(
+  has_transfers : Bool,
+  within_limit : Bool,
+  origin_matches : Bool,
+  anchor_matches : Bool,
+  parent_chain_matches : Bool,
+  every_transfer_authenticated : Bool,
+  current_record_matches : Bool,
+  result : Bool,
+) {
+  if has_transfers {
+    if within_limit {
+      if origin_matches {
+        if anchor_matches {
+          if parent_chain_matches {
+            if every_transfer_authenticated {
+              result == current_record_matches
+            } else {
+              result == false
+            }
+          } else {
+            result == false
+          }
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
 pub lemma accepted_asset_use_has_no_open_revocation(
   creation_verified : Bool,
   current_head_verified : Bool,
@@ -101,5 +139,59 @@ pub lemma accepted_lineage_decision_has_exact_ancestor_head(
   proof_ensure: expected_decision_matches == true,
   proof_ensure: revision_advances == true,
   proof_ensure: decision_changes_status == true,
+} {
+}
+
+///|
+pub lemma accepted_lineage_slice_has_every_boundary(
+  has_transfers : Bool,
+  within_limit : Bool,
+  origin_matches : Bool,
+  anchor_matches : Bool,
+  parent_chain_matches : Bool,
+  every_transfer_authenticated : Bool,
+  current_record_matches : Bool,
+) where {
+  proof_require: asset_lineage_slice_allowed_post(
+    has_transfers,
+    within_limit,
+    origin_matches,
+    anchor_matches,
+    parent_chain_matches,
+    every_transfer_authenticated,
+    current_record_matches,
+    true,
+  ),
+  proof_ensure: has_transfers == true,
+  proof_ensure: within_limit == true,
+  proof_ensure: origin_matches == true,
+  proof_ensure: anchor_matches == true,
+  proof_ensure: parent_chain_matches == true,
+  proof_ensure: every_transfer_authenticated == true,
+  proof_ensure: current_record_matches == true,
+} {
+}
+
+///|
+pub lemma unauthenticated_lineage_slice_is_rejected(
+  has_transfers : Bool,
+  within_limit : Bool,
+  origin_matches : Bool,
+  anchor_matches : Bool,
+  parent_chain_matches : Bool,
+  current_record_matches : Bool,
+  allowed : Bool,
+) where {
+  proof_require: asset_lineage_slice_allowed_post(
+    has_transfers,
+    within_limit,
+    origin_matches,
+    anchor_matches,
+    parent_chain_matches,
+    false,
+    current_record_matches,
+    allowed,
+  ),
+  proof_ensure: allowed == false,
 } {
 }

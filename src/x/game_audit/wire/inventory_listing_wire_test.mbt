@@ -11,6 +11,7 @@ fn inventory_listing_wire_bundle() -> InventoryListingProofBundle raise Error {
     origin_receipt_digest: @bft.Digest("origin-receipt"),
     version: 1,
     last_event: @bft.Digest("transfer-event"),
+    lineage_root: @bft.Digest("lineage-root"),
   }
   let state = @authmap.AuthenticatedMap::new(hasher)
   ignore(state.put(record.asset_id, @inventory.serialize_asset_record(record)))
@@ -78,10 +79,10 @@ test "inventory listing wire rejects versions and resource excess" {
   let defaults = InventoryListingWireLimits::default()
   match
     decode_inventory_listing_proof_bundle(
-      replace_canonical_version(encoded, b'\x02'),
+      replace_canonical_version(encoded, b'\x03'),
       limits=defaults,
     ) {
-    Err(InventoryListingWireError::InventoryWireUnsupportedVersion(2)) => ()
+    Err(InventoryListingWireError::InventoryWireUnsupportedVersion(3)) => ()
     _ => fail("expected inventory listing version refusal")
   }
   match
@@ -130,5 +131,108 @@ test "inventory listing wire rejects versions and resource excess" {
       )
     ) => ()
     _ => fail("expected inventory listing proof-budget refusal")
+  }
+}
+
+///|
+fn inventory_lineage_wire_bundle() -> InventoryLineageProofBundle raise Error {
+  let transition : @inventory.AssetLineageTransition = {
+    asset_id: "asset-1",
+    origin_receipt_digest: @bft.Digest("origin-receipt"),
+    from_owner: "alice",
+    to_owner: "bob",
+    expected_version: 0,
+    previous_event: @bft.Digest("loot-event"),
+    source_event: @bft.Digest("transfer-event"),
+    previous_lineage_root: @bft.Digest("origin-root"),
+  }
+  let sender_binding : @inventory.SignedAssetOwnerKeyBinding = {
+    binding: {
+      session_id: "inventory-session",
+      owner_id: "alice",
+      owner_key: @bft.PublicKey("alice-key"),
+    },
+    digest: @bft.Digest("alice-binding-digest"),
+    signature: @bft.Signature("alice-binding-signature"),
+    authority_key: @bft.PublicKey("authority-key"),
+  }
+  let recipient_binding : @inventory.SignedAssetOwnerKeyBinding = {
+    binding: {
+      session_id: "inventory-session",
+      owner_id: "bob",
+      owner_key: @bft.PublicKey("bob-key"),
+    },
+    digest: @bft.Digest("bob-binding-digest"),
+    signature: @bft.Signature("bob-binding-signature"),
+    authority_key: @bft.PublicKey("authority-key"),
+  }
+  {
+    listing: inventory_listing_wire_bundle(),
+    lineage: {
+      anchor: {
+        asset_id: "asset-1",
+        owner_id: "alice",
+        version: 0,
+        last_event: @bft.Digest("loot-event"),
+        lineage_root: @bft.Digest("origin-root"),
+        origin_receipt_digest: @bft.Digest("origin-receipt"),
+      },
+      transfers: [
+        {
+          signed_transfer: {
+            authorization: {
+              session_id: "inventory-session",
+              transition,
+              sender_key: @bft.PublicKey("alice-key"),
+              recipient_key: @bft.PublicKey("bob-key"),
+            },
+            digest: @bft.Digest("transfer-digest"),
+            sender_signature: @bft.Signature("sender-signature"),
+            recipient_signature: @bft.Signature("recipient-signature"),
+          },
+          sender_binding,
+          recipient_binding,
+        },
+      ],
+    },
+  }
+}
+
+///|
+test "inventory lineage bundle has a canonical bounded round trip" {
+  let bundle = inventory_lineage_wire_bundle()
+  let encoded = encode_inventory_lineage_proof_bundle(bundle)
+  let decoded = match
+    decode_inventory_lineage_proof_bundle(
+      encoded,
+      limits=InventoryLineageWireLimits::default(),
+    ) {
+    Ok(value) => value
+    Err(_) => fail("expected inventory lineage proof bundle decode")
+  }
+  assert_eq(decoded, bundle)
+  assert_eq(encode_inventory_lineage_proof_bundle(decoded), encoded)
+}
+
+///|
+test "inventory lineage wire rejects unsupported versions and transfer excess" {
+  let bundle = inventory_lineage_wire_bundle()
+  let encoded = encode_inventory_lineage_proof_bundle(bundle)
+  let defaults = InventoryLineageWireLimits::default()
+  match
+    decode_inventory_lineage_proof_bundle(
+      replace_canonical_version(encoded, b'\x03'),
+      limits=defaults,
+    ) {
+    Err(InventoryLineageWireUnsupportedVersion(3)) => ()
+    _ => fail("expected inventory lineage version refusal")
+  }
+  match
+    decode_inventory_lineage_proof_bundle(encoded, limits={
+      ..defaults,
+      max_transfers: 0,
+    }) {
+    Err(InventoryLineageWireTransfersTooMany(1, 0)) => ()
+    _ => fail("expected inventory lineage transfer-budget refusal")
   }
 }

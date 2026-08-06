@@ -70,20 +70,36 @@ open-world replay bundleは外部transparency linkを必須化したversion 2 co
 | eligibility proof | `[leaf_index, leaf_count, merkle_path]` |
 | Merkle step | `[direction(0/1), sibling_digest]` |
 
-current-owner inventory listing bundleはversion 1で、ゲーム全体のtranscriptではなく、現在の
+current-owner inventory listing bundleはversion 2で、ゲーム全体のtranscriptではなく、現在の
 authenticated inventory rootに対する1 assetのmembershipと、そのrootを再実行したwitness quorumを
 運ぶ。
 
 | 型 | CBOR array |
 | --- | --- |
-| inventory listing bundle | `[1, signed_checkpoint, game_manifest_digest, witnesses, max_faults, attestations, inventory_proof]` |
+| inventory listing bundle | `[2, signed_checkpoint, game_manifest_digest, witnesses, max_faults, attestations, inventory_proof]` |
 | inventory proof | `[asset_record, authenticated_map_proof]` |
-| asset record | `[asset_id, current_owner_id, item_type, quantity, origin_source_event, origin_output_index, origin_receipt_digest, version, last_event]` |
+| asset record | `[asset_id, current_owner_id, item_type, quantity, origin_source_event, origin_output_index, origin_receipt_digest, version, last_event, lineage_root]` |
 
 中央verifierはauthority署名と期待session/checkpoint/game manifest、`n > 3f` roster、`n-f` replay
 witness、origin `ItemReceipt`、`public_state_root` membership、seller=current ownerを一体で検証する。
 bundleが自己申告するcheckpointをlatest headとしては信用しない。Durable Objectがassetごとに保持する
 headに対し、exact parent、epoch前進、owner変更時のversion前進を満たす場合だけCAS更新する。
+
+historical inventory lineage bundleはversion 2で、listing bundleをそのまま包含し、保存済みretention
+anchorからcurrent recordの`lineage_root`までの最大64 transferだけを運ぶ。
+
+| 型 | CBOR array |
+| --- | --- |
+| lineage bundle | `[2, inventory_listing_bundle_bytes, lineage_anchor, [owner_binding_table, transfers]]` |
+| lineage anchor | `[asset_id, owner_id, version, last_event, lineage_root, origin_receipt_digest]` |
+| owner binding | `[[session_id, owner_id, owner_key], digest, authority_signature, authority_key]` |
+| transfer | `[[session_id, transition, sender_key, recipient_key], digest, sender_signature, recipient_signature]` とbinding tableへの2 index |
+| transition | `[asset_id, origin_receipt_digest, from_owner, to_owner, expected_version, previous_event, source_event, previous_lineage_root]` |
+
+`next_lineage_root`はwireで自己申告せず、domain-separated transitionから再計算する。隣接transferが
+共有するowner bindingはtableで一度だけ送り、同一署名の検証結果も再利用する。既定上限はbundle
+512 KiB、transfer 64、owner binding 128である。空slice、wrong parent/version/asset、authority binding、
+sender/recipient署名、終端rootのどれかが不一致なら全体を拒否する。
 
 `intent`と`observed_receipt`は署名event payloadから独立に信用しない。replay kernelがcanonical
 payloadと完全一致することを再確認する。署名eventはdecode後に`AuditAdapter`へ渡し、session、hash、

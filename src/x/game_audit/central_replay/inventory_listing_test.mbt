@@ -19,6 +19,17 @@ fn inventory_listing_central_fixture() -> InventoryListingCentralFixture raise E
     source_event: @bft.Digest("loot-event"),
     output_index: 0,
   }
+  let anchor = @inventory.origin_asset_lineage_anchor(hasher, origin)
+  let transfer : @inventory.AssetLineageTransition = {
+    asset_id: origin.asset_id,
+    origin_receipt_digest: anchor.origin_receipt_digest,
+    from_owner: "alice",
+    to_owner: "bob",
+    expected_version: 0,
+    previous_event: anchor.last_event,
+    source_event: @bft.Digest("transfer-event"),
+    previous_lineage_root: anchor.lineage_root,
+  }
   let record = @inventory.AssetRecord::{
     asset_id: origin.asset_id,
     owner_id: "bob",
@@ -26,11 +37,10 @@ fn inventory_listing_central_fixture() -> InventoryListingCentralFixture raise E
     quantity: origin.quantity,
     origin_source_event: origin.source_event,
     origin_output_index: origin.output_index,
-    origin_receipt_digest: @inventory.inventory_origin_receipt_digest(
-      hasher, origin,
-    ),
+    origin_receipt_digest: anchor.origin_receipt_digest,
     version: 1,
-    last_event: @bft.Digest("transfer-event"),
+    last_event: transfer.source_event,
+    lineage_root: @inventory.asset_lineage_transition_root(hasher, transfer),
   }
   let state = @authmap.AuthenticatedMap::new(hasher)
   ignore(state.put(record.asset_id, @inventory.serialize_asset_record(record)))
@@ -94,6 +104,121 @@ fn inventory_listing_central_fixture() -> InventoryListingCentralFixture raise E
       attestations,
       proof: { record, map_proof },
     },
+  }
+}
+
+///|
+fn inventory_lineage_central_bundle(
+  fixture : InventoryListingCentralFixture,
+) -> @wire.InventoryLineageProofBundle {
+  let hasher = @bft.FnvHasher::new()
+  let authority = @bft.MockSigner::new("inventory-authority")
+  let alice = @bft.MockSigner::new("alice-lineage-key")
+  let bob = @bft.MockSigner::new("bob-lineage-key")
+  let anchor = @inventory.origin_asset_lineage_anchor(hasher, fixture.origin)
+  let transition : @inventory.AssetLineageTransition = {
+    asset_id: fixture.origin.asset_id,
+    origin_receipt_digest: anchor.origin_receipt_digest,
+    from_owner: "alice",
+    to_owner: "bob",
+    expected_version: 0,
+    previous_event: anchor.last_event,
+    source_event: fixture.bundle.proof.record.last_event,
+    previous_lineage_root: anchor.lineage_root,
+  }
+  let sender_binding = @inventory.sign_asset_owner_key_binding(
+    hasher,
+    authority,
+    {
+      session_id: fixture.session_id,
+      owner_id: "alice",
+      owner_key: alice.public_key(),
+    },
+  )
+  let recipient_binding = @inventory.sign_asset_owner_key_binding(
+    hasher,
+    authority,
+    {
+      session_id: fixture.session_id,
+      owner_id: "bob",
+      owner_key: bob.public_key(),
+    },
+  )
+  {
+    listing: fixture.bundle,
+    lineage: {
+      anchor,
+      transfers: [
+        {
+          signed_transfer: @inventory.sign_asset_lineage_transfer(
+            hasher,
+            alice,
+            bob,
+            session_id=fixture.session_id,
+            transition~,
+          ),
+          sender_binding,
+          recipient_binding,
+        },
+      ],
+    },
+  }
+}
+
+///|
+fn verify_inventory_lineage_fixture(
+  fixture : InventoryListingCentralFixture,
+  bundle : @wire.InventoryLineageProofBundle,
+) -> InventoryLineageCentralResult {
+  verify_inventory_lineage_proof_bundle(
+    @bft.FnvHasher::new(),
+    @bft.MockVerifier::new(),
+    @wire.encode_inventory_lineage_proof_bundle(bundle),
+    expected_session_id=fixture.session_id,
+    expected_authority_key=fixture.authority_key,
+    expected_checkpoint_digest=fixture.checkpoint_digest,
+    expected_game_manifest_digest=fixture.bundle.game_manifest_digest,
+    expected_origin=fixture.origin,
+    expected_seller_id="bob",
+    expected_anchor=@inventory.origin_asset_lineage_anchor(
+      @bft.FnvHasher::new(),
+      fixture.origin,
+    ),
+    limits=@wire.InventoryLineageWireLimits::default(),
+  )
+}
+
+///|
+test "central lineage proof binds bounded history to current checkpoint" {
+  let fixture = inventory_listing_central_fixture()
+  let bundle = inventory_lineage_central_bundle(fixture)
+  match verify_inventory_lineage_fixture(fixture, bundle) {
+    InventoryLineageCentralVerified(verified) => {
+      assert_eq(verified.asset_id(), "asset-1")
+      assert_eq(verified.current_owner_id(), "bob")
+      assert_eq(verified.transfer_count(), 1)
+      assert_true(verified.contains_event(@bft.Digest("transfer-event")))
+      assert_eq(verified.final_anchor().version, 1)
+    }
+    _ => fail("expected central historical lineage verification")
+  }
+}
+
+///|
+test "central lineage proof rejects an omitted slice" {
+  let fixture = inventory_listing_central_fixture()
+  let bundle = inventory_lineage_central_bundle(fixture)
+  match
+    verify_inventory_lineage_fixture(fixture, {
+      ..bundle,
+      lineage: { ..bundle.lineage, transfers: [] },
+    }) {
+    InventoryLineageCentralRefused(
+      InventoryLineageVerificationRefused(
+        @inventory.AssetLineageRefusal::MissingAssetLineageTransfers
+      )
+    ) => ()
+    _ => fail("central verifier accepted missing lineage evidence")
   }
 }
 

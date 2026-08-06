@@ -78,3 +78,28 @@ test "lineage decisions require an exact monotonic ancestor head" {
     ),
   )
 }
+
+///|
+test "bounded lineage admission requires every retention and authentication boundary" {
+  for mask in 0..<128 {
+    let has_transfers = (mask & 1) != 0
+    let within_limit = (mask & 2) != 0
+    let origin_matches = (mask & 4) != 0
+    let anchor_matches = (mask & 8) != 0
+    let parent_chain_matches = (mask & 16) != 0
+    let every_transfer_authenticated = (mask & 32) != 0
+    let current_record_matches = (mask & 64) != 0
+    assert_eq(
+      asset_lineage_slice_allowed(
+        has_transfers~,
+        within_limit~,
+        origin_matches~,
+        anchor_matches~,
+        parent_chain_matches~,
+        every_transfer_authenticated~,
+        current_record_matches~,
+      ),
+      mask == 127,
+    )
+  }
+}

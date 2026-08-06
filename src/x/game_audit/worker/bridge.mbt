@@ -2319,6 +2319,85 @@ pub fn audit_verify_open_world_pve_replay_bundle(
 }
 
 ///|
+priv struct WorkerInventorySemanticLineage {
+  record : @inventory.AssetRecord
+  anchor : @inventory.AssetLineageAnchor
+  transitions : Array[@inventory.AssetLineageTransition]
+}
+
+///|
+/// Deterministic semantic chain shared by the listing and historical-lineage
+/// benchmark fixtures. It mirrors `InventoryIndex`: every resulting root is
+/// derived from the exact parent event/root and owner/version transition.
+fn worker_inventory_semantic_lineage(
+  hasher : &@bft.Hasher,
+  origin : @market.ItemReceipt,
+  current_owner_id : String,
+  version : Int,
+) -> WorkerInventorySemanticLineage? {
+  if version < 0 {
+    return None
+  }
+  let anchor = @inventory.origin_asset_lineage_anchor(hasher, origin)
+  let transitions : Array[@inventory.AssetLineageTransition] = []
+  let mut record : @inventory.AssetRecord = {
+    asset_id: origin.asset_id,
+    owner_id: if version == 0 {
+      current_owner_id
+    } else {
+      origin.recipient_id
+    },
+    item_type: origin.item_type,
+    quantity: origin.quantity,
+    origin_source_event: origin.source_event,
+    origin_output_index: origin.output_index,
+    origin_receipt_digest: anchor.origin_receipt_digest,
+    version: 0,
+    last_event: origin.source_event,
+    lineage_root: anchor.lineage_root,
+  }
+  for index in 0..<version {
+    let mut next_owner = if index == version - 1 {
+      current_owner_id
+    } else {
+      "inventory-fixture-owner-" + (index + 1).to_string()
+    }
+    if next_owner == record.owner_id {
+      next_owner = next_owner + "-next"
+    }
+    let source_event = hasher.hash_string(
+      "inventory-transfer-fixture-v2:" +
+      origin.asset_id +
+      ":" +
+      record.owner_id +
+      ":" +
+      next_owner +
+      ":" +
+      index.to_string(),
+    )
+    let transition : @inventory.AssetLineageTransition = {
+      asset_id: origin.asset_id,
+      origin_receipt_digest: anchor.origin_receipt_digest,
+      from_owner: record.owner_id,
+      to_owner: next_owner,
+      expected_version: record.version,
+      previous_event: record.last_event,
+      source_event,
+      previous_lineage_root: record.lineage_root,
+    }
+    transitions.push(transition)
+    record = {
+      ..record,
+      owner_id: next_owner,
+      version: record.version + 1,
+      last_event: source_event,
+      lineage_root: @inventory.asset_lineage_transition_root(hasher, transition),
+    }
+  }
+  Some({ record, anchor, transitions })
+}
+
+///|
 /// Generate a compact real-crypto current-owner fixture. Production clients
 /// construct the same bundle after locally replaying inventory transitions;
 /// this deterministic helper exists for Worker integration benchmarks.
@@ -2370,31 +2449,12 @@ pub fn audit_benchmark_make_inventory_listing_proof_bundle(
     source_event: @bft.Digest(source_event_digest),
     output_index,
   }
-  let last_event = if version == 0 {
-    origin.source_event
-  } else {
-    hasher.hash_string(
-      "inventory-transfer-fixture-v1:" +
-      asset_id +
-      ":" +
-      current_owner_id +
-      ":" +
-      version.to_string(),
-    )
+  let semantic = match
+    worker_inventory_semantic_lineage(hasher, origin, current_owner_id, version) {
+    Some(value) => value
+    None => return worker_error("invalid_inventory_lineage_fixture")
   }
-  let record = @inventory.AssetRecord::{
-    asset_id,
-    owner_id: current_owner_id,
-    item_type,
-    quantity,
-    origin_source_event: origin.source_event,
-    origin_output_index: output_index,
-    origin_receipt_digest: @inventory.inventory_origin_receipt_digest(
-      hasher, origin,
-    ),
-    version,
-    last_event,
-  }
+  let record = semantic.record
   let state = @authmap.AuthenticatedMap::new(hasher)
   ignore(state.put(asset_id, @inventory.serialize_asset_record(record)))
   let map_proof = match state.proof(asset_id) {
@@ -2559,6 +2619,7 @@ pub fn audit_verify_inventory_listing_proof_bundle(
         "current_owner_id": Json::string(verified.current_owner_id()),
         "version": Json::number(verified.version().to_double()),
         "last_event": Json::string(verified.last_event().0),
+        "lineage_root": Json::string(verified.lineage_root().0),
         "approval_count": Json::number(verified.approval_count().to_double()),
         "required_approvals": Json::number(
           verified.required_approvals().to_double(),
@@ -2570,6 +2631,270 @@ pub fn audit_verify_inventory_listing_proof_bundle(
         "ok": Json::boolean(false),
         "complete": Json::boolean(true),
         "error": Json::string(worker_inventory_listing_refusal_code(reason)),
+      }).stringify()
+  }
+}
+
+///|
+/// Build a real-crypto bounded transfer slice around the compact listing proof.
+/// `version` is also the slice length for this benchmark fixture; production
+/// clients may start at a newer server-retained anchor instead.
+pub fn audit_benchmark_make_inventory_lineage_proof_bundle(
+  authority_seed_hex : String,
+  participant_seed_hex : String,
+  session_id : String,
+  previous_checkpoint_digest : String,
+  epoch : Int,
+  asset_id : String,
+  initial_owner_id : String,
+  current_owner_id : String,
+  item_type : String,
+  quantity : Int,
+  source_event_digest : String,
+  output_index : Int,
+  version : Int,
+) -> String {
+  if version <= 0 || version > 64 {
+    return worker_error("invalid_inventory_lineage_length")
+  }
+  let listing_fixture = audit_benchmark_make_inventory_listing_proof_bundle(
+    authority_seed_hex, participant_seed_hex, session_id, previous_checkpoint_digest,
+    epoch, asset_id, initial_owner_id, current_owner_id, item_type, quantity, source_event_digest,
+    output_index, version,
+  )
+  let listing_json = @json.parse(listing_fixture) catch {
+    _ => return worker_error("fixture_inventory_listing_json_invalid")
+  }
+  guard listing_json is Object(listing_fields) &&
+    listing_fields["ok"] is True &&
+    listing_fields["bundle_hex"] is String(listing_hex) else {
+    return listing_fixture
+  }
+  let listing_bytes = match worker_bytes_from_hex(listing_hex) {
+    Some(value) => value
+    None => return worker_error("fixture_inventory_listing_hex_invalid")
+  }
+  let listing = match
+    @wire.decode_inventory_listing_proof_bundle(
+      listing_bytes,
+      limits=@wire.InventoryListingWireLimits::default(),
+    ) {
+    Ok(value) => value
+    Err(_) => return worker_error("fixture_inventory_listing_decode_failed")
+  }
+  let authority_seed = match worker_bytes_from_hex(authority_seed_hex) {
+    Some(value) => value
+    None => return worker_error("invalid_authority_seed_hex")
+  }
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
+  let authority = @crypto.ExperimentalEd25519Signer::new(authority_seed) catch {
+    _ => return worker_error("invalid_authority_seed")
+  }
+  let origin : @market.ItemReceipt = {
+    asset_id,
+    recipient_id: initial_owner_id,
+    item_type,
+    quantity,
+    source_event: @bft.Digest(source_event_digest),
+    output_index,
+  }
+  let semantic = match
+    worker_inventory_semantic_lineage(hasher, origin, current_owner_id, version) {
+    Some(value) => value
+    None => return worker_error("invalid_inventory_lineage_fixture")
+  }
+  if listing.proof.record != semantic.record {
+    return worker_error("fixture_inventory_lineage_record_mismatch")
+  }
+  let transfers : Array[@inventory.AuthenticatedAssetLineageTransfer] = []
+  for transition in semantic.transitions {
+    let sender = match
+      worker_derived_ed25519_signer(
+        hasher,
+        participant_seed_hex,
+        "inventory-lineage-owner:" + transition.from_owner,
+      ) {
+      Some(value) => value
+      None => return worker_error("fixture_inventory_sender_key_failed")
+    }
+    let recipient = match
+      worker_derived_ed25519_signer(
+        hasher,
+        participant_seed_hex,
+        "inventory-lineage-owner:" + transition.to_owner,
+      ) {
+      Some(value) => value
+      None => return worker_error("fixture_inventory_recipient_key_failed")
+    }
+    let sender_binding = @inventory.sign_asset_owner_key_binding(
+      hasher,
+      authority,
+      {
+        session_id,
+        owner_id: transition.from_owner,
+        owner_key: sender.public_key(),
+      },
+    )
+    let recipient_binding = @inventory.sign_asset_owner_key_binding(
+      hasher,
+      authority,
+      {
+        session_id,
+        owner_id: transition.to_owner,
+        owner_key: recipient.public_key(),
+      },
+    )
+    transfers.push({
+      signed_transfer: @inventory.sign_asset_lineage_transfer(
+        hasher,
+        sender,
+        recipient,
+        session_id~,
+        transition~,
+      ),
+      sender_binding,
+      recipient_binding,
+    })
+  }
+  let encoded = @wire.encode_inventory_lineage_proof_bundle({
+    listing,
+    lineage: { anchor: semantic.anchor, transfers },
+  })
+  Json::object({
+    "ok": Json::boolean(true),
+    "bundle_hex": Json::string(worker_bytes_to_hex(encoded)),
+    "bundle_bytes": Json::number(encoded.length().to_double()),
+    "session_id": Json::string(session_id),
+    "authority_key": Json::string(authority.public_key().0),
+    "checkpoint_digest": Json::string(listing.signed_checkpoint.digest.0),
+    "game_manifest_digest": Json::string(listing.game_manifest_digest.0),
+    "asset_id": Json::string(asset_id),
+    "initial_owner_id": Json::string(initial_owner_id),
+    "current_owner_id": Json::string(current_owner_id),
+    "version": Json::number(version.to_double()),
+    "anchor_owner_id": Json::string(semantic.anchor.owner_id),
+    "anchor_version": Json::number(semantic.anchor.version.to_double()),
+    "anchor_last_event": Json::string(semantic.anchor.last_event.0),
+    "anchor_lineage_root": Json::string(semantic.anchor.lineage_root.0),
+  }).stringify()
+}
+
+///|
+fn worker_inventory_lineage_refusal_code(
+  reason : @central_replay.InventoryLineageCentralRefusal,
+) -> String {
+  match reason {
+    InventoryLineageWireRefused(_) => "lineage_wire_refused"
+    InventoryLineageListingRefused(_) => "lineage_listing_refused"
+    InventoryLineageVerificationRefused(_) => "lineage_verification_refused"
+  }
+}
+
+///|
+/// Verify a bounded historical suffix against an explicit server-retained
+/// anchor and the exact monotonic inventory checkpoint boundary.
+pub fn audit_verify_inventory_lineage_proof_bundle(
+  bundle_hex : String,
+  expected_session_id : String,
+  expected_authority_key : String,
+  expected_checkpoint_digest : String,
+  expected_game_manifest_digest : String,
+  expected_asset_id : String,
+  expected_initial_owner_id : String,
+  expected_item_type : String,
+  expected_quantity : Int,
+  expected_source_event : String,
+  expected_output_index : Int,
+  expected_seller_id : String,
+  expected_anchor_owner_id : String,
+  expected_anchor_version : Int,
+  expected_anchor_last_event : String,
+  expected_anchor_lineage_root : String,
+) -> String {
+  let input = match worker_bytes_from_hex(bundle_hex) {
+    Some(value) => value
+    None => return worker_error("invalid_bundle_hex")
+  }
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
+  let verifier = @crypto.ExperimentalEd25519Verifier::new()
+  let origin : @market.ItemReceipt = {
+    asset_id: expected_asset_id,
+    recipient_id: expected_initial_owner_id,
+    item_type: expected_item_type,
+    quantity: expected_quantity,
+    source_event: @bft.Digest(expected_source_event),
+    output_index: expected_output_index,
+  }
+  let expected_anchor : @inventory.AssetLineageAnchor = {
+    asset_id: expected_asset_id,
+    owner_id: expected_anchor_owner_id,
+    version: expected_anchor_version,
+    last_event: @bft.Digest(expected_anchor_last_event),
+    lineage_root: @bft.Digest(expected_anchor_lineage_root),
+    origin_receipt_digest: @inventory.inventory_origin_receipt_digest(
+      hasher, origin,
+    ),
+  }
+  match
+    @central_replay.verify_inventory_lineage_proof_bundle(
+      hasher,
+      verifier,
+      input,
+      expected_session_id~,
+      expected_authority_key=@bft.PublicKey(expected_authority_key),
+      expected_checkpoint_digest=@bft.Digest(expected_checkpoint_digest),
+      expected_game_manifest_digest=@bft.Digest(expected_game_manifest_digest),
+      expected_origin=origin,
+      expected_seller_id~,
+      expected_anchor~,
+      limits=@wire.InventoryLineageWireLimits::default(),
+    ) {
+    InventoryLineageCentralVerified(verified) => {
+      let events = verified
+        .transfer_events()
+        .map(fn(event) { Json::string(event.0) })
+      let transitions = verified
+        .transitions()
+        .map(fn(transition) {
+          Json::object({
+            "asset_id": Json::string(transition.asset_id),
+            "from_owner": Json::string(transition.from_owner),
+            "to_owner": Json::string(transition.to_owner),
+            "expected_version": Json::number(
+              transition.expected_version.to_double(),
+            ),
+            "previous_event": Json::string(transition.previous_event.0),
+            "source_event": Json::string(transition.source_event.0),
+            "previous_lineage_root": Json::string(
+              transition.previous_lineage_root.0,
+            ),
+            "next_lineage_root": Json::string(
+              @inventory.asset_lineage_transition_root(hasher, transition).0,
+            ),
+          })
+        })
+      let final_anchor = verified.final_anchor()
+      Json::object({
+        "ok": Json::boolean(true),
+        "complete": Json::boolean(true),
+        "checkpoint_digest": Json::string(verified.checkpoint_digest().0),
+        "asset_id": Json::string(verified.asset_id()),
+        "current_owner_id": Json::string(verified.current_owner_id()),
+        "transfer_count": Json::number(verified.transfer_count().to_double()),
+        "transfer_events": Json::array(events),
+        "transitions": Json::array(transitions),
+        "final_owner_id": Json::string(final_anchor.owner_id),
+        "final_version": Json::number(final_anchor.version.to_double()),
+        "final_last_event": Json::string(final_anchor.last_event.0),
+        "final_lineage_root": Json::string(final_anchor.lineage_root.0),
+        "bundle_bytes": Json::number(input.length().to_double()),
+      }).stringify()
+    }
+    InventoryLineageCentralRefused(reason) =>
+      Json::object({
+        "ok": Json::boolean(false),
+        "complete": Json::boolean(true),
+        "error": Json::string(worker_inventory_lineage_refusal_code(reason)),
       }).stringify()
   }
 }

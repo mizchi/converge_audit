@@ -75,4 +75,6 @@ quint verify formal/quint/AssetOwnershipModels.qnt \
     activeListingMatchesCurrentOwnerHead \
     lineageFlagMatchesRevocations \
     activeListingRequiresCleanLineage \
+    verifiedAncestorsRespectRetentionBoundary \
+    registeredSliceRequiresExactBoundary \
   --verbosity=1

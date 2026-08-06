@@ -150,18 +150,36 @@ reference PvEの`POST /v1/pve/:unit/game-asset-lineage-decisions`は管理token�
 ancestor headはSQLiteへ残り、未解決revocationは`(asset_id, status)` indexで判定する。revokeとactive
 listingの`quarantined`化は同じtransactionで行い、appeal後も旧nonceは復活させない。
 
-汎用側の`POST /v1/open/:unit/asset-lineage-decisions`も管理tokenとancestor単位のrevision CASを使う。
-verified originは`ancestor_id = asset_id`、現在owner headは`ancestor_id = inventory checkpoint digest`で
+汎用側ではまず`POST /v1/open/:unit/asset-lineage-proofs`が、authority署名owner-key binding、
+sender/recipient二重署名、exact parent/version、累積`lineage_root`、current checkpoint membershipを
+一体で検証する。通常listingにはtransfer列を載せず、challenge slow pathだけ最大64件のsliceを送る。
+DOは検証済みtransferを資産ごと最大256件、最新retention anchorを1件、冪等proof digestを1件ずつ
+SQLite transactionで保存する。上限到達時は暗黙にpruneせずfail-closedにする。
+
+`POST /v1/open/:unit/asset-lineage-decisions`は管理tokenとancestor単位のrevision CASを使う。
+verified originは`ancestor_id = asset_id`、登録済み中間transferは`source_event`、現在owner headは
+`ancestor_id = inventory checkpoint digest`で
 指定する。未解決decisionは`verified_item_creations.lineage_status`へ集約し、1件でもあればproof省略の
 listing、proof付きlisting、次inventory headへの更新をすべて拒否する。originとcurrent headを別々に
 revokeした場合は、両方がappealされるまで再許可しない。decision head/historyは別tableへ保存する。
-compact bundleは中間transfer列を保持しないため、過去headの直接revokeは受理しない。そこまで扱うには
-challenge slow pathのtransition sliceまたは認証済みlineage proofが必要である。
 
 このcompact listing verifierはtransfer event列をbundleに含めず、manifest-bound `n-f` witnessが
 同じinventory transitionをreplayしたというByzantine fault assumptionを使う。したがって通常出品の
-低コストfast pathにはなるが、challenge・高価値・witness fork時にtransition sliceを取得して
-`InventoryIndex`を中央replayするslow pathはまだ未接続である。
+低コストfast pathになる。challenge・高価値・witness fork時のbounded lineage slow pathは接続済みで、
+全frame logではなくcurrent authenticated recordへ到達するtransfer証拠だけを検証する。
+
+local generated-JS実暗号benchmark（20反復、同一開発機）では次の値だった。これはremote Worker RTTを
+含まず、比較用の小標本である。
+
+| transfer数 | bundle bytes | verify mean | verify p95 |
+| ---: | ---: | ---: | ---: |
+| 1 | 4,313 | 33.001 ms | 34.207 ms |
+| 8 | 12,727 | 115.017 ms | 115.789 ms |
+| 32 | 41,670 | 398.702 ms | 403.495 ms |
+| 64 | 80,326 | 814.079 ms | 824.046 ms |
+
+`pnpm --dir examples/cf-game-audit bench:lineage`で再測定できる。binding table導入前の64件
+104,360 bytes / 1,139.736 msから、80,326 bytes / 773.854 msへ減少した（各1反復の比較）。
 
 このprototypeの`checkpoint link`は、管理tokenで認証した要求が対象game checkpoint digestを
 指定した、という接続境界である。signing-anchor内にgame checkpoint inclusionを証明するものでは
@@ -334,8 +352,8 @@ pnpm bench:witness
 3. experimental Ed25519とWorkers WebCrypto Ed25519を比較し、監査済みbackend境界を決める。
 4. PvE bundle v2を拡張し、phase checkpoint、cooldown、player attack、boss HPを扱う。
 5. open-world plan/sealのexternal transparency headへ、remote実測済みcheckpoint witness collectionを接続する。
-6. open-world inventoryへ中間transferのlineage proof、appeal window、checkpoint単位の
-   multi-asset head更新を追加する（origin/current-head revocationは接続済み）。
+6. open-world inventoryの256件retention上限をMerkle pruning boundaryへ置き換え、appeal windowと
+   checkpoint単位のmulti-asset head更新を追加する（bounded lineage proofは接続済み）。
 7. witness sourceをIP以外のdevice/session credentialへ結び、NAT-aware global fair queueとhistory pruningを実装する。
 8. playtest telemetryを接続する。
 
@@ -373,7 +391,7 @@ pnpm bench:witness
 | TS側遷移がMoonBit proofと同じ | Worker bridgeがproved classifierを直接呼ぶ | Proven core + Tested bridge |
 | current-owner listingはauthority checkpoint、`n-f` replay witness、origin receipt、inventory root membershipを要求する | MoonBit central verifier + real-crypto workerd integration + apac-ne benchmark | Tested locally + remote |
 | per-asset inventory headはexact parent・epoch前進・owner/version整合なしに進まない | 6条件MoonBit predicate、64-case test、wrong-parent/version integration、apac-ne head advance | Proven + Tested locally + remote |
-| reference origin/transfer revokeはdescendant listingをquarantineし、汎用origin/current-head revokeは全未解決decisionのappealまでlisting/head更新を止める | MoonBit clean-lineage predicate、Quint正常/破損model、revision CAS、workerd integration | Proven core + Model checked + Tested locally |
+| reference origin/transfer revokeはdescendant listingをquarantineし、汎用origin/証明済み中間transfer/current-head revokeは全未解決decisionのappealまでlisting/head更新を止める | bounded authenticated lineage slice、MoonBit clean-lineage predicate、Quint正常/破損model、revision CAS、workerd integration | Proven core + Model checked + Tested locally |
 | Cloudflare apac-ne hintでcheckpoint/Queue/inventoryのend-to-end値を得られる | 64-head×3 mode remote benchmark | Measured once |
 | remote peerからmode policyどおりquorumを収集する | 公開pull、端末ローカル署名submit、durable collection、deadline、collection-backed seal、HMAC-source fixed window、全mode apac-ne + PvP wnam/weur各20 run | 全mode remote E2E、outbound push・global fairnessはPending |
 | checkpoint outboxを配送しACKで完了する | direct DO RPC、lease/alarm retry、historical Duplicate ACK | Tested locally + remote 20/20、本番ACK-loss回復を観測 |

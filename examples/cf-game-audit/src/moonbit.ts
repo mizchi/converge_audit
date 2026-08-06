@@ -315,6 +315,7 @@ export interface VerifiedInventoryListing {
   current_owner_id: string;
   version: number;
   last_event: string;
+  lineage_root: string;
   approval_count: number;
   required_approvals: number;
   bundle_bytes: number;
@@ -329,6 +330,43 @@ export interface RefusedInventoryListing {
 export type InventoryListingVerification =
   | VerifiedInventoryListing
   | RefusedInventoryListing;
+
+export interface VerifiedInventoryLineageTransition {
+  asset_id: string;
+  from_owner: string;
+  to_owner: string;
+  expected_version: number;
+  previous_event: string;
+  source_event: string;
+  previous_lineage_root: string;
+  next_lineage_root: string;
+}
+
+export interface VerifiedInventoryLineage {
+  ok: true;
+  complete: true;
+  checkpoint_digest: string;
+  asset_id: string;
+  current_owner_id: string;
+  transfer_count: number;
+  transfer_events: string[];
+  transitions: VerifiedInventoryLineageTransition[];
+  final_owner_id: string;
+  final_version: number;
+  final_last_event: string;
+  final_lineage_root: string;
+  bundle_bytes: number;
+}
+
+export interface RefusedInventoryLineage {
+  ok: false;
+  complete: boolean;
+  error: string;
+}
+
+export type InventoryLineageVerification =
+  | VerifiedInventoryLineage
+  | RefusedInventoryLineage;
 
 export async function verifyAnchorEnvelope(
   envelopeHex: string,
@@ -733,4 +771,45 @@ export async function verifyInventoryListingProofBundle(
       rejectedAncestor,
     ),
   ) as InventoryListingVerification;
+}
+
+export async function verifyInventoryLineageProofBundle(
+  bundleHex: string,
+  expectedSessionId: string,
+  expectedAuthorityKey: string,
+  expectedCheckpointDigest: string,
+  expectedGameManifestDigest: string,
+  expectedAssetId: string,
+  expectedInitialOwnerId: string,
+  expectedItemType: string,
+  expectedQuantity: number,
+  expectedSourceEvent: string,
+  expectedOutputIndex: number,
+  expectedSellerId: string,
+  expectedAnchorOwnerId: string,
+  expectedAnchorVersion: number,
+  expectedAnchorLastEvent: string,
+  expectedAnchorLineageRoot: string,
+): Promise<InventoryLineageVerification> {
+  const audit = await loadAuditModule();
+  return JSON.parse(
+    audit.audit_verify_inventory_lineage_proof_bundle(
+      bundleHex,
+      expectedSessionId,
+      expectedAuthorityKey,
+      expectedCheckpointDigest,
+      expectedGameManifestDigest,
+      expectedAssetId,
+      expectedInitialOwnerId,
+      expectedItemType,
+      expectedQuantity,
+      expectedSourceEvent,
+      expectedOutputIndex,
+      expectedSellerId,
+      expectedAnchorOwnerId,
+      expectedAnchorVersion,
+      expectedAnchorLastEvent,
+      expectedAnchorLineageRoot,
+    ),
+  ) as InventoryLineageVerification;
 }

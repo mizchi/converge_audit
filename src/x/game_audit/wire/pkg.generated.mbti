@@ -14,6 +14,8 @@ import {
 }
 
 // Values
+pub fn decode_inventory_lineage_proof_bundle(Bytes, limits~ : InventoryLineageWireLimits) -> Result[InventoryLineageProofBundle, InventoryLineageWireError]
+
 pub fn decode_inventory_listing_proof_bundle(Bytes, limits~ : InventoryListingWireLimits) -> Result[InventoryListingProofBundle, InventoryListingWireError]
 
 pub fn decode_open_world_observer_signing_anchor_envelope(Bytes, limits~ : OpenWorldAuditWireLimits) -> Result[@open_world.OpenWorldObserverSigningAnchorEnvelope, OpenWorldAuditWireError]
@@ -27,6 +29,8 @@ pub fn decode_open_world_pve_replay_bundle(Bytes, limits~ : OpenWorldPveReplayWi
 pub fn decode_pve_replay_bundle(Bytes, limits~ : PveReplayWireLimits) -> Result[PveReplayBundle, PveReplayWireError]
 
 pub fn decode_pvp_replay_bundle(Bytes, limits~ : PvpReplayWireLimits) -> Result[PvpReplayBundle, PvpReplayWireError]
+
+pub fn encode_inventory_lineage_proof_bundle(InventoryLineageProofBundle) -> Bytes
 
 pub fn encode_inventory_listing_proof_bundle(InventoryListingProofBundle) -> Bytes
 
@@ -85,6 +89,30 @@ pub suberror PveReplayWireError {
 } derive(Eq, @debug.Debug)
 
 // Types and methods
+pub(all) struct InventoryLineageProofBundle {
+  listing : InventoryListingProofBundle
+  lineage : @inventory.AssetLineageSlice
+} derive(Eq, @debug.Debug)
+
+pub(all) enum InventoryLineageWireError {
+  InventoryLineageWireInputTooLarge(Int, Int)
+  InventoryLineageWireTransfersTooMany(Int, Int)
+  InventoryLineageWireOwnerBindingsTooMany(Int, Int)
+  InventoryLineageWireUnsupportedVersion(Int)
+  InventoryLineageWireNonCanonicalEncoding
+  InventoryLineageWireMalformedCbor
+  InventoryLineageWireCodecRefused(OpenWorldAuditWireError)
+  InventoryLineageWireListingRefused(InventoryListingWireError)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct InventoryLineageWireLimits {
+  max_bundle_bytes : Int
+  max_transfers : Int
+  max_owner_bindings : Int
+  listing_limits : InventoryListingWireLimits
+} derive(Eq, @debug.Debug)
+pub fn InventoryLineageWireLimits::default() -> Self
+
 pub(all) struct InventoryListingProofBundle {
   signed_checkpoint : @checkpoint.SignedCheckpoint
   game_manifest_digest : @converge_audit.Digest

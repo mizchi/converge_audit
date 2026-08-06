@@ -298,7 +298,13 @@ test "authorized transfer updates owner version and authenticated proof" {
   ignore(
     inventory.commit(finalized_plan(inventory, create_plan, 1), create_plan),
   )
+  let origin_record = inventory.get("asset-1").unwrap()
+  assert_eq(
+    origin_record.lineage_root,
+    inventory_origin_lineage_root(hasher, receipt),
+  )
   let (transfer, transfer_effect) = replayed_transfer()
+  let transition = asset_lineage_transition(origin_record, transfer)
   let transfer_plan = plan_or_fail(inventory, batch([]), [transfer], [
     transfer_effect,
   ])
@@ -313,6 +319,11 @@ test "authorized transfer updates owner version and authenticated proof" {
   assert_eq(record.origin_source_event, receipt.source_event)
   assert_eq(record.origin_output_index, 0)
   assert_eq(record.last_event, transfer.source_event)
+  assert_eq(
+    record.lineage_root,
+    asset_lineage_transition_root(hasher, transition),
+  )
+  assert_true(record.lineage_root != origin_record.lineage_root)
   let proof = inventory.proof("asset-1").unwrap()
   assert_true(verify_inventory_proof(hasher, inventory.root(), proof))
   assert_true(inventory_proof_matches_origin_receipt(hasher, proof, receipt))
