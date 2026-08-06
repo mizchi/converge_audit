@@ -39,7 +39,7 @@
     "@mizchi/vlmkit-generate": "0.9.1",
     "@mizchi/vlmkit-plan": "0.9.1",
     "@playwright/test": "1.62.1",
-    "@types/node": "24.13.3",
+    "@types/node": "26.1.2",
     "fake-indexeddb": "6.2.4",
     "playwright": "1.62.1",
     "tsx": "4.20.6",
