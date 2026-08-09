@@ -1,0 +1,62 @@
+[
+  {
+    "url": "http://127.0.0.1:8792/?seed=4661&run=observed-lineage-baseline",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Audit Survivors\"",
+      "heading \"Inventory\"",
+      "heading \"Event log\"",
+      "button \"監査待ち\"",
+      "button \"マーケットへ出品\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "ember-blade",
+      "common · provisional",
+      "common · authority verified",
+      "loot picked up (provisional)"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:8792/?seed=4661&run=observed-lineage-quarantined",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Inventory\"",
+      "button \"監査状態を再確認\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "ember-blade",
+      "common · quarantined · appeal open"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:8792/?seed=4661&run=observed-lineage-checking",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Inventory\"",
+      "button \"状態確認中\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "common · quarantined · appeal open"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:8792/?seed=4661&run=observed-lineage-expired",
+    "title": "Audit Survivors",
+    "roles": [
+      "heading \"Inventory\"",
+      "button \"監査状態を再確認\""
+    ],
+    "labels": ["Encounter seed"],
+    "testIds": [],
+    "texts": [
+      "ember-blade",
+      "common · expired · listing blocked"
+    ]
+  }
+]

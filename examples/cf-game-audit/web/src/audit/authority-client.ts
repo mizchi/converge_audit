@@ -92,6 +92,43 @@ export interface GameAssetOwnershipHead {
   updatedAt: number;
 }
 
+export type GameAssetSettlementStatus =
+  | "provisional"
+  | "quarantined"
+  | "finalized"
+  | "expired";
+
+export interface GameAssetLineageCase {
+  ancestorId: string;
+  ancestorKind: "origin" | "transfer" | "current_head";
+  revision: number;
+  decisionId: string;
+  reasonCode: string;
+  lifecycle: "appeal_open" | "expired";
+  appealDeadlineAtMs: number | null;
+  finalizedAtMs: number | null;
+  updatedAtMs: number;
+}
+
+export interface GameAssetLineageStatus {
+  assetId: string;
+  eligibility: "unverified" | "eligible" | "revoked";
+  settlementStatus: GameAssetSettlementStatus;
+  openRevocations: number;
+  lineageCases: GameAssetLineageCase[];
+}
+
+export type RequestGameAssetLineageStatusResult =
+  | { ok: true; status: GameAssetLineageStatus }
+  | { ok: false; reason: "network_error" | "invalid_response" }
+  | {
+      ok: false;
+      reason: "authority_refused";
+      error: string;
+      status: number;
+      retryAfterSeconds?: number;
+    };
+
 export type RequestGameItemTransferResult =
   | {
       ok: true;
@@ -155,6 +192,7 @@ export type RequestGameMarketListingResult =
       reason: "listing_refused";
       decision: string;
       status: number;
+      lineageStatus?: GameAssetLineageStatus;
     }
   | {
       ok: false;
@@ -224,6 +262,121 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function retryAfterSeconds(response: Response): number | undefined {
   const value = Number(response.headers.get("retry-after"));
   return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function nullableTimestamp(value: unknown): value is number | null {
+  return value === null ||
+    (typeof value === "number" && Number.isSafeInteger(value) && value >= 0);
+}
+
+function lineageStatusFromResponse(
+  value: unknown,
+  expectedAssetId: string,
+): GameAssetLineageStatus | undefined {
+  if (!isRecord(value) || value.ok !== true ||
+    value.asset_id !== expectedAssetId ||
+    (value.eligibility !== "unverified" && value.eligibility !== "eligible" &&
+      value.eligibility !== "revoked") ||
+    (value.settlement_status !== "provisional" &&
+      value.settlement_status !== "quarantined" &&
+      value.settlement_status !== "finalized" &&
+      value.settlement_status !== "expired") ||
+    typeof value.open_revocations !== "number" ||
+    !Number.isSafeInteger(value.open_revocations) ||
+    value.open_revocations < 0 || !Array.isArray(value.lineage_cases)) {
+    return undefined;
+  }
+  const lineageCases: GameAssetLineageCase[] = [];
+  for (const item of value.lineage_cases) {
+    if (!isRecord(item) || typeof item.ancestor_id !== "string" ||
+      (item.ancestor_kind !== "origin" && item.ancestor_kind !== "transfer" &&
+        item.ancestor_kind !== "current_head") ||
+      typeof item.revision !== "number" || !Number.isSafeInteger(item.revision) ||
+      item.revision <= 0 || typeof item.decision_id !== "string" ||
+      !/^[0-9a-f]{64}$/.test(item.decision_id) ||
+      typeof item.reason_code !== "string" || item.reason_code.length === 0 ||
+      (item.lifecycle !== "appeal_open" && item.lifecycle !== "expired") ||
+      !nullableTimestamp(item.appeal_deadline_at_ms) ||
+      !nullableTimestamp(item.finalized_at_ms) ||
+      typeof item.updated_at_ms !== "number" ||
+      !Number.isSafeInteger(item.updated_at_ms) || item.updated_at_ms < 0) {
+      return undefined;
+    }
+    lineageCases.push({
+      ancestorId: item.ancestor_id,
+      ancestorKind: item.ancestor_kind,
+      revision: item.revision,
+      decisionId: item.decision_id,
+      reasonCode: item.reason_code,
+      lifecycle: item.lifecycle,
+      appealDeadlineAtMs: item.appeal_deadline_at_ms,
+      finalizedAtMs: item.finalized_at_ms,
+      updatedAtMs: item.updated_at_ms,
+    });
+  }
+  const openRevocations = value.open_revocations;
+  const statusIsConsistent =
+    (value.settlement_status === "provisional" &&
+      value.eligibility === "unverified" && openRevocations === 0 &&
+      lineageCases.length === 0) ||
+    (value.settlement_status === "finalized" &&
+      value.eligibility === "eligible" && openRevocations === 0 &&
+      lineageCases.length === 0) ||
+    (value.settlement_status === "quarantined" &&
+      value.eligibility === "revoked" && openRevocations > 0 &&
+      lineageCases.length === openRevocations &&
+      lineageCases.some((item) => item.lifecycle === "appeal_open")) ||
+    (value.settlement_status === "expired" &&
+      value.eligibility === "revoked" && openRevocations > 0 &&
+      lineageCases.length === openRevocations &&
+      lineageCases.every((item) => item.lifecycle === "expired"));
+  if (!statusIsConsistent) return undefined;
+  return {
+    assetId: expectedAssetId,
+    eligibility: value.eligibility,
+    settlementStatus: value.settlement_status,
+    openRevocations,
+    lineageCases,
+  };
+}
+
+export async function requestGameAssetLineageStatus(
+  fetcher: AuthorityFetch,
+  unit: string,
+  assetId: string,
+): Promise<RequestGameAssetLineageStatusResult> {
+  let response: Response;
+  try {
+    response = await fetcher(
+      `/v1/pve/${encodeURIComponent(unit)}/game-asset-lineage-status?asset_id=${encodeURIComponent(assetId)}`,
+      { method: "GET", cache: "no-store" },
+    );
+  } catch {
+    return { ok: false, reason: "network_error" };
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, reason: "invalid_response" };
+  }
+  if (!response.ok) {
+    if (!isRecord(body) || body.ok !== false || typeof body.error !== "string") {
+      return { ok: false, reason: "invalid_response" };
+    }
+    const retryAfter = retryAfterSeconds(response);
+    return {
+      ok: false,
+      reason: "authority_refused",
+      error: body.error,
+      status: response.status,
+      ...(retryAfter === undefined ? {} : { retryAfterSeconds: retryAfter }),
+    };
+  }
+  const status = lineageStatusFromResponse(body, assetId);
+  return status
+    ? { ok: true, status }
+    : { ok: false, reason: "invalid_response" };
 }
 
 function receiptFromResponse(
@@ -526,11 +679,18 @@ export async function requestGameMarketListing(
       body.allowed === false &&
       typeof body.decision === "string"
     ) {
+      const lineageStatus = body.decision === "asset_lineage_revoked"
+        ? lineageStatusFromResponse(body.lineage_settlement, request.assetId)
+        : undefined;
+      if (body.decision === "asset_lineage_revoked" && !lineageStatus) {
+        return { ok: false, reason: "invalid_response" };
+      }
       return {
         ok: false,
         reason: "listing_refused",
         decision: body.decision,
         status: response.status,
+        ...(lineageStatus ? { lineageStatus } : {}),
       };
     }
     if (body.ok !== false || typeof body.error !== "string") {

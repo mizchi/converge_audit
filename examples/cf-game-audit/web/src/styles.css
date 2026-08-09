@@ -116,6 +116,10 @@ kbd { padding: 2px 5px; border: 1px solid #475956; border-radius: 4px; backgroun
 .panel-title span { color: var(--mint); font-family: ui-monospace, monospace; }
 .empty-state { color: var(--muted); font-size: 13px; }
 .item-card { padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #0c1715; }
+.item-card.settlement-quarantined { border-color: var(--amber); }
+.item-card.settlement-quarantined .item-meta { color: var(--amber); }
+.item-card.settlement-expired { border-color: #ff6b6b; }
+.item-card.settlement-expired .item-meta { color: #ff8787; }
 .item-card + .item-card { margin-top: 8px; }
 .item-name { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }
 .item-meta { margin: 6px 0 9px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }

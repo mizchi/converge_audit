@@ -436,12 +436,14 @@ const REFERENCE_GAME_PUBLIC_ACTIONS = new Set([
   "game-item-transfers",
   "game-market-listings",
   "game-market-listing-cancellations",
+  "game-asset-lineage-status",
 ]);
 const AUDIT_ADMIN_ACTIONS = new Set([
   "asset-lineage-decisions",
   "asset-lineage-proofs",
   "inventory-checkpoints",
   "game-asset-lineage-decisions",
+  "asset-lineage-status",
 ]);
 const LOCATION_HINTS = new Set([
   "wnam",
@@ -1261,6 +1263,10 @@ export class GameAuditShard extends DurableObject<Env> {
         return this.cancelReferenceGameMarketListing(request, mode, unit);
       case "POST game-asset-lineage-decisions":
         return this.decideReferenceGameAssetLineage(request, mode, unit);
+      case "GET game-asset-lineage-status":
+        return this.getReferenceGameAssetLineageStatus(url, mode);
+      case "GET asset-lineage-status":
+        return this.getVerifiedAssetLineageStatus(url, mode, unit);
       case "POST replay-delivered":
         return request.headers.get("x-audit-internal") === "queue-consumer"
           ? this.classifyDeliveredReplay(request, mode, unit)
@@ -2756,6 +2762,20 @@ export class GameAuditShard extends DurableObject<Env> {
     ).toArray()[0]?.count ?? 0;
   }
 
+  private referenceGameOpenRevocations(
+    assetId: string,
+  ): ReferenceGameAssetLineageHeadRow[] {
+    return this.ctx.storage.sql.exec<ReferenceGameAssetLineageHeadRow>(
+      `SELECT asset_id, ancestor_id, ancestor_kind, revision, status,
+              last_decision_id, reason, lifecycle, appeal_deadline_at,
+              finalized_at, updated_at
+       FROM reference_game_asset_lineage_heads
+       WHERE asset_id = ? AND status = 'revoked'
+       ORDER BY ancestor_id`,
+      assetId,
+    ).toArray();
+  }
+
   private referenceGameAncestorKind(
     creation: ReferenceGameItemReceiptRow,
     ancestorId: string,
@@ -3173,7 +3193,8 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id: assetId,
       }, 403);
     }
-    const openRevocations = this.referenceGameOpenRevocationCount(assetId);
+    const openRevocationHeads = this.referenceGameOpenRevocations(assetId);
+    const openRevocations = openRevocationHeads.length;
     if (!await assetLineageUseAllowed({
       creationVerified: true,
       currentHeadVerified: true,
@@ -3487,7 +3508,8 @@ export class GameAuditShard extends DurableObject<Env> {
         seller_id: sellerId,
       }, 403);
     }
-    const openRevocations = this.referenceGameOpenRevocationCount(assetId);
+    const openRevocationHeads = this.referenceGameOpenRevocations(assetId);
+    const openRevocations = openRevocationHeads.length;
     if (!await assetLineageUseAllowed({
       creationVerified: true,
       currentHeadVerified: true,
@@ -3500,6 +3522,12 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id: assetId,
         seller_id: sellerId,
         open_revocations: openRevocations,
+        lineage_settlement: assetLineageStatusWire(
+          assetId,
+          true,
+          openRevocationHeads,
+          Date.now(),
+        ),
       }, 403);
     }
     const listingId = referenceGameDigest.hashString(JSON.stringify([
@@ -3617,6 +3645,23 @@ export class GameAuditShard extends DurableObject<Env> {
       decision: "listed",
       listing: referenceGameMarketListingWire(listing, creation),
     }, 201);
+  }
+
+  private getReferenceGameAssetLineageStatus(
+    url: URL,
+    mode: AuditMode,
+  ): Response {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const assetId = url.searchParams.get("asset_id");
+    if (!assetId || assetId.length > 1_024) {
+      return jsonError("invalid_reference_game_asset_lineage_status", 400);
+    }
+    return jsonNoStoreResponse(assetLineageStatusWire(
+      assetId,
+      this.referenceGameItemReceiptAt(assetId) !== undefined,
+      this.referenceGameOpenRevocations(assetId),
+      Date.now(),
+    ));
   }
 
   private async decideReferenceGameAssetLineage(
@@ -4388,6 +4433,28 @@ export class GameAuditShard extends DurableObject<Env> {
     }, 201);
   }
 
+  private getVerifiedAssetLineageStatus(
+    url: URL,
+    mode: AuditMode,
+    unit: string,
+  ): Response {
+    if (mode !== "open") return jsonError("not_found", 404);
+    const config = this.config();
+    if (!config || config.mode !== mode || config.unit_key !== unit) {
+      return jsonError("shard_not_configured", 409);
+    }
+    const assetId = url.searchParams.get("asset_id");
+    if (!assetId || assetId.length > 4_096) {
+      return jsonError("invalid_asset_lineage_status", 400);
+    }
+    return jsonNoStoreResponse(assetLineageStatusWire(
+      assetId,
+      this.verifiedItemCreationAt(assetId) !== undefined,
+      this.verifiedAssetOpenRevocations(assetId),
+      Date.now(),
+    ));
+  }
+
   private async decideVerifiedAssetLineage(
     request: Request,
     mode: AuditMode,
@@ -5121,7 +5188,8 @@ export class GameAuditShard extends DurableObject<Env> {
         seller_id: sellerId,
       }, 403);
     }
-    let openRevocations = this.verifiedAssetOpenRevocationCount(assetId);
+    const openRevocationHeads = this.verifiedAssetOpenRevocations(assetId);
+    const openRevocations = openRevocationHeads.length;
     if (
       creation.lineage_status !== "eligible" ||
       !await assetLineageUseAllowed({
@@ -5137,6 +5205,12 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id: assetId,
         seller_id: sellerId,
         open_revocations: openRevocations,
+        lineage_settlement: assetLineageStatusWire(
+          assetId,
+          true,
+          openRevocationHeads,
+          Date.now(),
+        ),
       }, 403);
     }
     let previousCheckpoint: string | undefined;
@@ -5291,29 +5365,42 @@ export class GameAuditShard extends DurableObject<Env> {
       requiredApprovals = verification.required_approvals;
     }
     creation = this.verifiedItemCreationAt(assetId) ?? creation;
-    const finalOpenRevocations = this.verifiedAssetOpenRevocationCount(assetId);
+    const finalOpenRevocationHeads = this.verifiedAssetOpenRevocations(assetId);
+    const finalOpenRevocations = finalOpenRevocationHeads.length;
     const lineageAllowed = await assetLineageUseAllowed({
       creationVerified: creation.status === "eligible",
       currentHeadVerified: true,
       openRevocations: finalOpenRevocations,
     });
     const latestCreation = this.verifiedItemCreationAt(assetId) ?? creation;
-    openRevocations = this.verifiedAssetOpenRevocationCount(assetId);
+    const currentOpenRevocationHeads = this.verifiedAssetOpenRevocations(assetId);
+    const currentOpenRevocations = currentOpenRevocationHeads.length;
+    const lineageRaced = finalOpenRevocations !== currentOpenRevocations;
     if (
       !lineageAllowed ||
       latestCreation.lineage_status !== "eligible" ||
-      finalOpenRevocations !== openRevocations
+      lineageRaced
     ) {
       return jsonResponse({
         ok: true,
         allowed: false,
-        decision: finalOpenRevocations !== openRevocations
+        decision: lineageRaced
           ? "asset_lineage_raced"
           : "asset_lineage_revoked",
         asset_id: assetId,
         seller_id: sellerId,
-        open_revocations: openRevocations,
-      }, finalOpenRevocations !== openRevocations ? 409 : 403);
+        open_revocations: currentOpenRevocations,
+        ...(lineageRaced
+          ? {}
+          : {
+              lineage_settlement: assetLineageStatusWire(
+                assetId,
+                true,
+                currentOpenRevocationHeads,
+                Date.now(),
+              ),
+            }),
+      }, lineageRaced ? 409 : 403);
     }
     creation = latestCreation;
     if (creation.current_owner_id !== sellerId) {
@@ -5854,6 +5941,20 @@ export class GameAuditShard extends DurableObject<Env> {
        WHERE asset_id = ? AND status = 'revoked'`,
       assetId,
     ).toArray()[0]?.count ?? 0;
+  }
+
+  private verifiedAssetOpenRevocations(
+    assetId: string,
+  ): VerifiedAssetLineageHeadRow[] {
+    return this.ctx.storage.sql.exec<VerifiedAssetLineageHeadRow>(
+      `SELECT asset_id, ancestor_id, ancestor_kind, revision, status,
+              last_decision_id, reason, lifecycle, appeal_deadline_at,
+              finalized_at, updated_at
+       FROM verified_asset_lineage_heads
+       WHERE asset_id = ? AND status = 'revoked'
+       ORDER BY ancestor_id`,
+      assetId,
+    ).toArray();
   }
 
   private verifiedAssetAncestorKind(
@@ -6406,6 +6507,57 @@ function lineageDecisionLifecycleAt(
       head.appeal_deadline_at !== null && nowMs > head.appeal_deadline_at
     ? "expired"
     : head.lifecycle;
+}
+
+function assetLineageStatusWire(
+  assetId: string,
+  creationVerified: boolean,
+  openRevocations: ReadonlyArray<{
+    ancestor_id: string;
+    ancestor_kind: "origin" | "transfer" | "current_head";
+    revision: number;
+    status: "eligible" | "revoked";
+    last_decision_id: string;
+    reason: string;
+    lifecycle: LineageDecisionLifecycle;
+    appeal_deadline_at: number | null;
+    finalized_at: number | null;
+    updated_at: number;
+  }>,
+  nowMs: number,
+) {
+  const lineageCases = openRevocations.map((head) => ({
+    ancestor_id: head.ancestor_id,
+    ancestor_kind: head.ancestor_kind,
+    revision: head.revision,
+    decision_id: head.last_decision_id,
+    reason_code: head.reason,
+    lifecycle: lineageDecisionLifecycleAt(head, nowMs),
+    appeal_deadline_at_ms: head.appeal_deadline_at,
+    finalized_at_ms: head.finalized_at,
+    updated_at_ms: head.updated_at,
+  }));
+  const settlementStatus = !creationVerified
+    ? "provisional" as const
+    : lineageCases.length === 0
+    ? "finalized" as const
+    : lineageCases.some((lineageCase) =>
+        lineageCase.lifecycle === "appeal_open"
+      )
+    ? "quarantined" as const
+    : "expired" as const;
+  return {
+    ok: true,
+    asset_id: assetId,
+    eligibility: !creationVerified
+      ? "unverified" as const
+      : openRevocations.length === 0
+      ? "eligible" as const
+      : "revoked" as const,
+    settlement_status: settlementStatus,
+    open_revocations: openRevocations.length,
+    lineage_cases: lineageCases,
+  };
 }
 
 async function checkpointWitnessSourceBucket(
@@ -7014,6 +7166,12 @@ function jsonResponse(value: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
+}
+
+function jsonNoStoreResponse(value: unknown, status = 200): Response {
+  const response = jsonResponse(value, status);
+  response.headers.set("cache-control", "no-store");
+  return response;
 }
 
 function jsonError(error: string, status: number): Response {

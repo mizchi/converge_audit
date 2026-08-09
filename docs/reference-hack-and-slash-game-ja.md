@@ -151,7 +151,7 @@ POST /v1/pve/:unit/game-item-verifications
   1分30件へ制限する。これにより最大約29秒分のbackfillとitem精算を一burstで行える。これはabuse低減であり、
   account identity、Sybil耐性、巨大NATの公平性は保証しない。
 - browserはreceiptのasset、owner、owner public key、checkpointを送信requestと再照合し、全て一致した場合だけitemを
-  `authority verified`へ変える。失敗時はprovisionalのまま再試行できる。
+  `finalized`へ変える。失敗時はprovisionalのまま再試行できる。
 
 epoch 0より後のsegmentは開始stateをclientから信用しない。authorityが直前epochでreplay生成して保存した
 stateとstate digestをparentとして使う。parentが未検証なら409で拒否する。browserは高価値itemを拾った時点で、
@@ -202,6 +202,12 @@ active listingと署名をSQLiteへ
 冪等保存する。同じ出品の再送は決定的Ed25519署名と同じlisting IDで`duplicate`へ収束し、receipt偽造、
 seller不一致、receiptだけを盗んだ第三者の署名、同一assetの競合listingはfail-closedになる。UIは成功後に
 `common · market listed`と`出品を取り消す`へ遷移する。
+
+lineage revokeで出品が拒否された場合、応答中の`lineage_settlement`から
+`common · quarantined · appeal open`へ移し、出品ボタンを「監査状態を再確認」へ置き換える。
+再確認は単一assetの`GET /v1/pve/:unit/game-asset-lineage-status?asset_id=...`だけを送り、期限切れは
+`common · expired · listing blocked`として引き続きfail-closedにする。appeal受理後に`finalized`が返れば
+出品操作を再び許可する。通常時のinventory pollingは行わない。
 
 current ownerはactive listingを次で取り消す。
 

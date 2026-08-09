@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GameItemVerificationRequest } from "../game/authority/item-verification";
 import {
+  requestGameAssetLineageStatus,
   requestGameCheckpointVerification,
   requestGameItemTransfer,
   requestGameItemVerification,
@@ -32,6 +33,70 @@ const request = {
 } as unknown as GameItemVerificationRequest;
 
 describe("browser authority client", () => {
+  it("maps the authority lineage settlement status for one asset", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      asset_id: "loot-1",
+      eligibility: "revoked",
+      settlement_status: "quarantined",
+      open_revocations: 1,
+      lineage_cases: [{
+        ancestor_id: "a".repeat(64),
+        ancestor_kind: "origin",
+        revision: 1,
+        decision_id: "d".repeat(64),
+        reason_code: "origin_checkpoint_challenge_upheld",
+        lifecycle: "appeal_open",
+        appeal_deadline_at_ms: 5000,
+        finalized_at_ms: null,
+        updated_at_ms: 1234,
+      }],
+    }), { status: 200 }));
+
+    await expect(requestGameAssetLineageStatus(
+      fetcher,
+      "reference:local-player:4661:run-1",
+      "loot-1",
+    )).resolves.toEqual({
+      ok: true,
+      status: {
+        assetId: "loot-1",
+        eligibility: "revoked",
+        settlementStatus: "quarantined",
+        openRevocations: 1,
+        lineageCases: [{
+          ancestorId: "a".repeat(64),
+          ancestorKind: "origin",
+          revision: 1,
+          decisionId: "d".repeat(64),
+          reasonCode: "origin_checkpoint_challenge_upheld",
+          lifecycle: "appeal_open",
+          appealDeadlineAtMs: 5000,
+          finalizedAtMs: null,
+          updatedAtMs: 1234,
+        }],
+      },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      "/v1/pve/reference%3Alocal-player%3A4661%3Arun-1/game-asset-lineage-status?asset_id=loot-1",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("rejects a contradictory lineage settlement response", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      asset_id: "loot-1",
+      eligibility: "eligible",
+      settlement_status: "quarantined",
+      open_revocations: 0,
+      lineage_cases: [],
+    }), { status: 200 }));
+
+    await expect(requestGameAssetLineageStatus(fetcher, "unit-1", "loot-1"))
+      .resolves.toEqual({ ok: false, reason: "invalid_response" });
+  });
+
   it("submits a dual-signed transfer and binds the returned owner head", async () => {
     const transferRequest = {
       assetId: "loot-1",
@@ -152,6 +217,54 @@ describe("browser authority client", () => {
       "/v1/pve/reference%3Alocal-player%3A4661%3Arun-1/game-market-listings",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("keeps a lineage quarantine structured when listing is refused", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      allowed: false,
+      decision: "asset_lineage_revoked",
+      asset_id: "loot-1",
+      open_revocations: 1,
+      lineage_settlement: {
+        ok: true,
+        asset_id: "loot-1",
+        eligibility: "revoked",
+        settlement_status: "expired",
+        open_revocations: 1,
+        lineage_cases: [{
+          ancestor_id: "a".repeat(64),
+          ancestor_kind: "origin",
+          revision: 1,
+          decision_id: "d".repeat(64),
+          reason_code: "appeal_window_elapsed",
+          lifecycle: "expired",
+          appeal_deadline_at_ms: 5000,
+          finalized_at_ms: null,
+          updated_at_ms: 1234,
+        }],
+      },
+    }), { status: 403 }));
+
+    await expect(requestGameMarketListing(fetcher, "unit-1", {
+      assetId: "loot-1",
+      sellerId: "local-player",
+      authorityReceiptId: "a".repeat(64),
+      ownerPublicKey: "c".repeat(64),
+      ownerVersion: 0,
+      ownerHeadId: "f".repeat(64),
+      listingNonce: "9".repeat(64),
+      ownerSignature: "e".repeat(128),
+    })).resolves.toMatchObject({
+      ok: false,
+      reason: "listing_refused",
+      decision: "asset_lineage_revoked",
+      lineageStatus: {
+        assetId: "loot-1",
+        settlementStatus: "expired",
+        openRevocations: 1,
+      },
+    });
   });
 
   it("cancels only the exact listing and owner head", async () => {

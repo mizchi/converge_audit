@@ -310,6 +310,10 @@ production端末runtime・実credentialへの統合とpersistent socket fanout�
 
 - `AUD-UX-001`（MUST）: movement、VFX、hit marker、回避feedbackをmacro checkpoint待ちで停止しない。
 - `AUD-UX-002`（MUST）: display state、provisional result、economic finalityを別stateとして表現する。
+
+  状態: reference browserはitemを`provisional | finalized | quarantined | expired`として表示し、
+  後二者ではmarketplace操作を状態再確認へ置き換える。常時pollingせず、出品拒否応答と明示的な
+  単一asset readだけを使う経路まで`Tested locally`。
 - `AUD-UX-003`（SHOULD）: telegraph、projectile travel、charge/release、parry window、capture/hold、seed固定waveのように、検証可能な時間窓を面白さとして見せる。
 - `AUD-UX-004`（SHOULD）: rollbackは見た目の位置補正より、rank、報酬、取引可能化、appeal状態へ主に適用する。
 - `AUD-UX-005`（MUST）: clientだけが知るhidden stateや1-frame判定から、第三者検証なしに不可逆assetを生成しない。

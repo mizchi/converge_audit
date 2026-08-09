@@ -36,7 +36,8 @@ active listingをtransaction内でquarantineする。appeal後もquarantine済�
 
 UI変更は[VLMKit](https://mizchi.github.io/vlmkit/)向けの観測JSON、要求、locator制約を`specs/`に保存し、
 Playwrightで実ブラウザをgateする。LLM providerを設定した上で`pnpm ui:plan`、`pnpm ui:generate`を実行し、
-通常の回帰試験は`pnpm test:e2e`で再現できる。
+lineage状態UIは`pnpm ui:lineage-plan`、`pnpm ui:lineage-generate`、通常の回帰試験は
+`pnpm test:e2e`で再現できる。
 
 lineage decisionの管理API contractは次のとおり。`expected_revision`はancestorごとのCASで、初回は0、
 成功ごとに1進む。同じcanonical requestは同じ`decision_id`となり`duplicate`、古いrevisionは
@@ -82,6 +83,39 @@ arbiter、無署名・不正署名・期限切れcertificateは拒否する。AP
 `LINEAGE_ARBITER_ROSTER`へ`{"id":{"scheme":"...","public_key":"..."}}`として設定し、
 clock skew許容は`LINEAGE_DECISION_MAX_CLOCK_SKEW_MS`（未指定時5000 ms）で設定する。
 
+browser/marketplaceは単一assetの現在状態を次で取得できる。未検証assetは`provisional`、検証済みで
+未解決revokeがなければ`finalized`、期限内のrevokeがあれば`quarantined`、全revokeのappeal期限が
+過ぎていれば`expired`となる。`expired`も利用許可ではなくfail-closedである。
+
+```http
+GET /v1/pve/:unit/game-asset-lineage-status?asset_id=<asset-id>
+
+{
+  "ok": true,
+  "asset_id": "...",
+  "eligibility": "revoked",
+  "settlement_status": "quarantined",
+  "open_revocations": 1,
+  "lineage_cases": [{
+    "ancestor_id": "...",
+    "ancestor_kind": "origin",
+    "revision": 1,
+    "decision_id": "...",
+    "reason_code": "checkpoint_challenge_upheld",
+    "lifecycle": "appeal_open",
+    "appeal_deadline_at_ms": 1786003600000,
+    "finalized_at_ms": null,
+    "updated_at_ms": 1786000000000
+  }]
+}
+```
+
+出品拒否も同じ値を`lineage_settlement`へ埋め込むため、取消検知のための追加readは不要である。
+UIは常時pollingせず、隔離後の明示的な「監査状態を再確認」だけでこのGETを呼ぶ。
+responseとbrowser requestは`no-store`で、appeal後の回復を古いHTTP cacheで隠さない。
+画面表示は最後に観測した状態であり、その後のrevoke通知を保証するものではない。安全境界は常に
+出品時のauthority再検査で、staleな`finalized`表示からmarketplaceへ迂回することはできない。
+
 open-worldの汎用inventoryは、同じCAS contractを次のendpointで使う。
 
 ```http
@@ -110,6 +144,9 @@ Content-Type: application/json
   "authentication": { "scheme": "...", "arbiter_id": "...", "signature": "..." }
 }
 ```
+
+現在状態は管理境界内の
+`GET /v1/open/:unit/asset-lineage-status?asset_id=<asset-id>`でも同じwire contractを返す。
 
 汎用側はverified originと現在の認証済みinventory headだけを裁定可能な祖先とする。未解決headを
 `(asset_id, status)` indexで数え、1件でもあればmarket listingと次headへの更新を拒否する。compact
@@ -335,7 +372,8 @@ Static Assetsのgame shellと`run_worker_first`対象の`/health`が共存する
 epoch 0からのreplay、保存済みparent stateによる後続epoch、parent欠落、DO eviction後の復元、item receipt、
 receipt偽造・seller不一致・owner署名不正のlisting拒否、二者署名transfer、stale owner拒否、listing冪等性、
 署名済みcancel、cancel後transfer、取消済みnonceのreplay拒否、新nonceでの再出品を確認し、Playwrightで
-provisional、backfill、verified、listed、canceling、再出品可能状態のUI遷移を実ブラウザ検査する。
+provisional、backfill、finalized、listed、canceling、quarantined、expired、appeal後の再出品可能状態を
+実ブラウザ検査する。
 
 ローカルbenchmarkは二つのterminalで実行する。
 

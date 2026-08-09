@@ -45,7 +45,7 @@ test("checkpoint に束縛された item だけが authority 検証を完了す�
   await expect(item).toBeVisible();
   const marketListing = page.getByRole("button", { name: "マーケットへ出品" });
   await expect(marketListing).toBeEnabled();
-  await expect(page.getByText("common · authority verified")).toBeVisible();
+  await expect(page.getByText("common · finalized")).toBeVisible();
   await expect(page.getByText(/authority verified loot-v1:/)).toBeVisible();
   await expect(page.getByText("loot picked up (provisional)")).toBeVisible();
 
@@ -61,7 +61,7 @@ test("checkpoint に束縛された item だけが authority 検証を完了す�
   releaseCancellation();
   await expect(page.getByRole("button", { name: "マーケットへ出品" }))
     .toBeEnabled();
-  await expect(page.getByText("common · authority verified")).toBeVisible();
+  await expect(page.getByText("common · finalized")).toBeVisible();
   await expect(page.getByText(/market canceled loot-v1:/)).toBeVisible();
 });
 

@@ -46,7 +46,7 @@
     "testIds": [],
     "texts": [
       "ember-blade",
-      "common · authority verified",
+      "common · finalized",
       "authority verified loot-v1:1235:enemy-0:30:0:5af78368",
       "loot picked up (provisional)"
     ]
@@ -93,7 +93,7 @@
     "testIds": [],
     "texts": [
       "ember-blade",
-      "common · authority verified",
+      "common · finalized",
       "market canceled loot-v1:1235:enemy-0:30:0:5af78368"
     ]
   }

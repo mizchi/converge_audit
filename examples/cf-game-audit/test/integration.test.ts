@@ -999,6 +999,20 @@ describe.sequential("Cloudflare game audit shard", () => {
   it("quarantines descendant listings until an origin revocation is appealed", async () => {
     const unit = `reference-game-revocation-${crypto.randomUUID()}`;
     const itemRequest = referenceGameItemRequest(unit);
+    const lineageStatus = () => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-status?asset_id=${encodeURIComponent(itemRequest.asset_id)}`,
+    );
+    const provisionalStatus = await lineageStatus();
+    expect(provisionalStatus.status).toBe(200);
+    expect(provisionalStatus.headers.get("cache-control")).toBe("no-store");
+    await expect(provisionalStatus.json()).resolves.toEqual({
+      ok: true,
+      asset_id: itemRequest.asset_id,
+      eligibility: "unverified",
+      settlement_status: "provisional",
+      open_revocations: 0,
+      lineage_cases: [],
+    });
     const verified = await SELF.fetch(
       `https://example.test/v1/pve/${unit}/game-item-verifications`,
       {
@@ -1015,6 +1029,14 @@ describe.sequential("Cloudflare game audit shard", () => {
         owner_head_id: string;
       };
     };
+    const finalizedStatus = await lineageStatus();
+    expect(finalizedStatus.status).toBe(200);
+    await expect(finalizedStatus.json()).resolves.toMatchObject({
+      eligibility: "eligible",
+      settlement_status: "finalized",
+      open_revocations: 0,
+      lineage_cases: [],
+    });
     const transferBoundary = {
       assetId: itemRequest.asset_id,
       authorityReceiptId: verifiedBody.receipt.authority_receipt_id,
@@ -1169,11 +1191,30 @@ describe.sequential("Cloudflare game audit shard", () => {
       lifecycle: "appeal_open",
       quarantined_listings: 1,
     });
+    const quarantinedStatus = await lineageStatus();
+    expect(quarantinedStatus.status).toBe(200);
+    await expect(quarantinedStatus.json()).resolves.toMatchObject({
+      eligibility: "revoked",
+      settlement_status: "quarantined",
+      open_revocations: 1,
+      lineage_cases: [{
+        ancestor_id: transferBoundary.authorityReceiptId,
+        ancestor_kind: "origin",
+        revision: 1,
+        decision_id: revokedDecision.decision_id,
+        lifecycle: "appeal_open",
+      }],
+    });
     const denied = await list(listingRequest);
     expect(denied.status).toBe(403);
     await expect(denied.json()).resolves.toMatchObject({
       allowed: false,
       decision: "asset_lineage_revoked",
+      lineage_settlement: {
+        eligibility: "revoked",
+        settlement_status: "quarantined",
+        open_revocations: 1,
+      },
     });
     const deniedTransfer = await SELF.fetch(
       `https://example.test/v1/pve/${unit}/game-item-transfers`,
@@ -1212,6 +1253,13 @@ describe.sequential("Cloudflare game audit shard", () => {
     });
 
     await evictAuditShard("pve", unit);
+
+    const persistedStatus = await lineageStatus();
+    expect(persistedStatus.status).toBe(200);
+    await expect(persistedStatus.json()).resolves.toMatchObject({
+      settlement_status: "quarantined",
+      open_revocations: 2,
+    });
 
     const restored = await decide(signedLineageDecision("reference-game", unit, {
       asset_id: itemRequest.asset_id,
@@ -1334,6 +1382,17 @@ describe.sequential("Cloudflare game audit shard", () => {
       decision_id: string;
     };
     await new Promise((resolve) => setTimeout(resolve, 150));
+    const expiredStatus = await lineageStatus();
+    expect(expiredStatus.status).toBe(200);
+    await expect(expiredStatus.json()).resolves.toMatchObject({
+      eligibility: "revoked",
+      settlement_status: "expired",
+      open_revocations: 1,
+      lineage_cases: [{
+        ancestor_id: transferredBody.transfer.transfer_id,
+        lifecycle: "expired",
+      }],
+    });
     const lateAppeal = await decide(signedLineageDecision(
       "reference-game",
       unit,
@@ -3576,6 +3635,25 @@ describe.sequential("Cloudflare game audit shard", () => {
           body: JSON.stringify(decision),
         },
       );
+    const lineageStatus = (authenticated = true) => SELF.fetch(
+      `https://example.test/v1/open/${unit}/asset-lineage-status?asset_id=${encodeURIComponent(replay.asset_id)}`,
+      {
+        headers: authenticated
+          ? { authorization: "Bearer test-admin-token" }
+          : {},
+      },
+    );
+    expect((await lineageStatus(false)).status).toBe(401);
+    const finalizedLineage = await lineageStatus();
+    expect(finalizedLineage.status).toBe(200);
+    expect(finalizedLineage.headers.get("cache-control")).toBe("no-store");
+    await expect(finalizedLineage.json()).resolves.toMatchObject({
+      asset_id: replay.asset_id,
+      eligibility: "eligible",
+      settlement_status: "finalized",
+      open_revocations: 0,
+      lineage_cases: [],
+    });
     const originRevocation = signedLineageDecision("verified-asset", unit, {
       asset_id: replay.asset_id,
       ancestor_id: replay.asset_id,
@@ -3606,6 +3684,17 @@ describe.sequential("Cloudflare game audit shard", () => {
       lineage_status: "revoked",
       open_revocations: 1,
     });
+    const quarantinedLineage = await lineageStatus();
+    expect(quarantinedLineage.status).toBe(200);
+    await expect(quarantinedLineage.json()).resolves.toMatchObject({
+      eligibility: "revoked",
+      settlement_status: "quarantined",
+      open_revocations: 1,
+      lineage_cases: [{
+        ancestor_id: transferEvent,
+        lifecycle: "appeal_open",
+      }],
+    });
     const blockedByTransfer = await SELF.fetch(
       `https://example.test/v1/open/${unit}/market-listing`,
       {
@@ -3621,6 +3710,10 @@ describe.sequential("Cloudflare game audit shard", () => {
     await expect(blockedByTransfer.json()).resolves.toMatchObject({
       decision: "asset_lineage_revoked",
       open_revocations: 1,
+      lineage_settlement: {
+        eligibility: "revoked",
+        settlement_status: "quarantined",
+      },
     });
     const appealedTransfer = await decideLineage(signedLineageDecision(
       "verified-asset",
@@ -3640,6 +3733,14 @@ describe.sequential("Cloudflare game audit shard", () => {
       ancestor_kind: "transfer",
       lineage_status: "eligible",
       open_revocations: 0,
+    });
+    const restoredLineage = await lineageStatus();
+    expect(restoredLineage.status).toBe(200);
+    await expect(restoredLineage.json()).resolves.toMatchObject({
+      eligibility: "eligible",
+      settlement_status: "finalized",
+      open_revocations: 0,
+      lineage_cases: [],
     });
     expect((await decideLineage(originRevocation, false)).status).toBe(401);
     const oldHead = await decideLineage(signedLineageDecision(

@@ -24,10 +24,12 @@ import {
 } from "./audit/device-key";
 import { moonBitAuditDigest } from "./audit/moonbit";
 import {
+  requestGameAssetLineageStatus,
   requestGameCheckpointVerification,
   requestGameItemVerification,
   requestGameMarketListingCancellation,
   requestGameMarketListing,
+  type GameAssetLineageStatus,
   type RequestGameCheckpointVerificationResult,
   type RequestGameItemVerificationResult,
 } from "./audit/authority-client";
@@ -144,6 +146,8 @@ const pendingMarketListings = new Set<string>();
 const failedMarketListings = new Map<string, string>();
 const listedItems = new Map<string, string>();
 const listingNonces = new Map<string, string>();
+const lineageStatuses = new Map<string, GameAssetLineageStatus>();
+const pendingLineageStatusRequests = new Set<string>();
 const pendingMarketCancellations = new Set<string>();
 const failedMarketCancellations = new Map<string, string>();
 let verificationGeneration = 0;
@@ -368,6 +372,8 @@ restartButton.addEventListener("click", () => {
   failedMarketListings.clear();
   listedItems.clear();
   listingNonces.clear();
+  lineageStatuses.clear();
+  pendingLineageStatusRequests.clear();
   pendingMarketCancellations.clear();
   failedMarketCancellations.clear();
   previousState = state;
@@ -485,6 +491,13 @@ async function verifyItemWithBackfill(
   auditJournal = acknowledged.state;
   await acknowledgePlayerLocalCheckpoint(result.receipt.checkpointDigest);
   failedItemVerifications.delete(assetId);
+  lineageStatuses.set(assetId, {
+    assetId,
+    eligibility: "eligible",
+    settlementStatus: "finalized",
+    openRevocations: 0,
+    lineageCases: [],
+  });
   addEventLine(
     `authority verified ${assetId} (${result.receipt.authorityReceiptId.slice(0, 10)}…)`,
   );
@@ -588,6 +601,9 @@ function scheduleMarketListing(item: InventoryItem): void {
         ? result.decision
         : result.reason;
       failedMarketListings.set(item.assetId, reason);
+      if (result.reason === "listing_refused" && result.lineageStatus) {
+        lineageStatuses.set(item.assetId, result.lineageStatus);
+      }
       if (result.reason === "listing_refused" &&
         result.decision === "listing_canceled") {
         listingNonces.delete(item.assetId);
@@ -597,9 +613,50 @@ function scheduleMarketListing(item: InventoryItem): void {
       return;
     }
     listedItems.set(item.assetId, result.listing.listingId);
+    lineageStatuses.set(item.assetId, {
+      assetId: item.assetId,
+      eligibility: "eligible",
+      settlementStatus: "finalized",
+      openRevocations: 0,
+      lineageCases: [],
+    });
     failedMarketListings.delete(item.assetId);
     addEventLine(
       `market listed ${item.assetId} (${result.listing.listingId.slice(0, 10)}…)`,
+    );
+    updateInterface();
+  });
+}
+
+function scheduleLineageStatusRefresh(item: InventoryItem): void {
+  if (
+    item.audit.status !== "verified" ||
+    pendingLineageStatusRequests.has(item.assetId)
+  ) return;
+  const generation = verificationGeneration;
+  pendingLineageStatusRequests.add(item.assetId);
+  updateInterface();
+  void requestGameAssetLineageStatus(
+    fetch,
+    verificationUnit(state),
+    item.assetId,
+  ).then((result) => {
+    if (generation !== verificationGeneration) return;
+    pendingLineageStatusRequests.delete(item.assetId);
+    if (!result.ok) {
+      const reason = result.reason === "authority_refused"
+        ? result.error
+        : result.reason;
+      addEventLine(`lineage status failed: ${reason}`);
+      updateInterface();
+      return;
+    }
+    lineageStatuses.set(item.assetId, result.status);
+    if (result.status.settlementStatus === "finalized") {
+      failedMarketListings.delete(item.assetId);
+    }
+    addEventLine(
+      `lineage status ${item.assetId}: ${result.status.settlementStatus}`,
     );
     updateInterface();
   });
@@ -721,10 +778,17 @@ function renderInventory(items: InventoryItem[]): void {
     name.append(itemType, itemPower);
     const meta = document.createElement("div");
     meta.className = "item-meta";
-    meta.textContent = listedItems.has(item.assetId)
+    const settlement = lineageStatuses.get(item.assetId)?.settlementStatus ??
+      (item.audit.status === "verified" ? "finalized" : "provisional");
+    card.classList.add(`settlement-${settlement}`);
+    meta.textContent = settlement === "quarantined"
+      ? `${item.rarity} · quarantined · appeal open`
+      : settlement === "expired"
+      ? `${item.rarity} · expired · listing blocked`
+      : listedItems.has(item.assetId)
       ? `${item.rarity} · market listed`
-      : item.audit.status === "verified"
-      ? `${item.rarity} · authority verified`
+      : settlement === "finalized"
+      ? `${item.rarity} · finalized`
       : `${item.rarity} · provisional`;
     const listing = document.createElement("button");
     listing.type = "button";
@@ -735,10 +799,18 @@ function renderInventory(items: InventoryItem[]): void {
     const listed = listedItems.has(item.assetId);
     const cancellationPending = pendingMarketCancellations.has(item.assetId);
     const cancellationFailed = failedMarketCancellations.has(item.assetId);
+    const lineageStatusPending = pendingLineageStatusRequests.has(item.assetId);
+    const lineageBlocked = settlement === "quarantined" ||
+      settlement === "expired";
     listing.disabled = cancellationPending || marketPending ||
+      lineageStatusPending ||
       (!listed && !eligibility.allowed && !failed);
     listing.textContent = cancellationPending
       ? "取消中"
+      : lineageStatusPending
+      ? "状態確認中"
+      : lineageBlocked
+      ? "監査状態を再確認"
       : listed
       ? cancellationFailed ? "取消再試行" : "出品を取り消す"
       : marketPending
@@ -748,7 +820,11 @@ function renderInventory(items: InventoryItem[]): void {
       : failed
       ? "検証再試行"
       : "監査待ち";
-    if (listed && !cancellationPending) {
+    if (lineageBlocked && !lineageStatusPending) {
+      listing.addEventListener("click", () => {
+        scheduleLineageStatusRefresh(item);
+      });
+    } else if (listed && !cancellationPending) {
       listing.addEventListener("click", () => {
         scheduleMarketListingCancellation(item);
       });

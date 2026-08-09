@@ -162,6 +162,9 @@ ancestor headはSQLiteへ残り、未解決revocationは`(asset_id, status)` ind
 listingの`quarantined`化は同じtransactionで行い、appeal後も旧nonceは復活させない。provisional
 revokeは`appeal_open`とdeadlineを保存し、eligible appealは直前decision ID、次revision、期限内、
 finalized時刻の全一致を要求する。期限切れは自動restoreせず`expired`としてfail-closedを維持する。
+公開read `GET /v1/pve/:unit/game-asset-lineage-status?asset_id=...`は、この永続headを
+`provisional | finalized | quarantined | expired`へ射影し、現在の未解決caseとappeal deadlineを返す。
+listing拒否にも同じ射影を埋め込むので、browserは常時pollingせず、隔離後の明示的な再確認時だけreadする。
 
 汎用側ではまず`POST /v1/open/:unit/asset-lineage-proofs`が、authority署名owner-key binding、
 sender/recipient二重署名、exact parent/version、累積`lineage_root`、current checkpoint membershipを
@@ -176,6 +179,7 @@ verified originは`ancestor_id = asset_id`、登録済み中間transferは`sourc
 指定する。未解決decisionは`verified_item_creations.lineage_status`へ集約し、1件でもあればproof省略の
 listing、proof付きlisting、次inventory headへの更新をすべて拒否する。originとcurrent headを別々に
 revokeした場合は、両方がappealされるまで再許可しない。decision head/historyは別tableへ保存する。
+管理token付き`GET /v1/open/:unit/asset-lineage-status?asset_id=...`も同じ射影を返す。
 
 このcompact listing verifierはtransfer event列をbundleに含めず、manifest-bound `n-f` witnessが
 同じinventory transitionをreplayしたというByzantine fault assumptionを使う。したがって通常出品の

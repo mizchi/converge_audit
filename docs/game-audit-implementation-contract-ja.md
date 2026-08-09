@@ -415,7 +415,7 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | player-local authenticated event DB | 共通host contract + Node 24 SQLite / IndexedDB relation、event/equivocation/checkpoint/head/closure/outbox/ACK履歴、retention anchor、active/resolved evidence hold、source別evidence inbox cursor/poll job、lease/attempt fencing、revision CAS、起動時全image検証 | Node/IndexedDB Reference Implemented + Tested / mobile SQLiteはPending |
 | seal + local head + checkpoint outboxのatomic transaction | opaque planから公開write-setを導出し、player-local Node SQLite、browser IndexedDB、Cloudflare SQLiteで一括適用、player-local adapterは共通4 fault rollback | Tested locally / mobile SQLiteはPending |
 | player-local evidence prefix pruning/poll | MoonBit一段guard、appeal floor、protected/equivocation pin、durable active/resolved evidence hold、署名済みhash-chain hold envelope、source cursorとのatomic apply、bounded single-page polling、durable poll schedule/lease/attempt fencing/backoff/restart回復/operational terminal、ACK済みprefix、durable anchor、Node SQLite/IndexedDB rollback | Proven predicate/auth/hash-chain/page/schedule gate + Tested locally / holdからlineage caseの自動起票はPending |
-| lineage case裁定 | scheme別署名verifier、arbiter roster、canonical statement、revision CAS、provisional revoke、時間制appeal、finalized/expired、ancestor別decision history | Proven admission + Quint model checked + Worker SQLite Tested locally / production key rotationはPending |
+| lineage case裁定 | scheme別署名verifier、arbiter roster、canonical statement、revision CAS、provisional revoke、時間制appeal、finalized/expired、ancestor別decision history、単一asset status readとUX射影 | Proven admission + Quint model checked + Worker SQLite / browser Tested locally / production key rotationはPending |
 | authority boundary/initial headの事前provision | 管理API → destination DO、source側provision ledger、未設定receiver拒否 | Tested locally |
 | Queue jobのsource outbox認証 | receiver mutation前のsource DO exact-match | Tested locally |
 | producer署名 + provision済みwitness quorum | `src/audit/delivery_auth`のopaque capability、実Ed25519 Worker bridge、source/receiver二重gate | Proven gate + Tested locally |
@@ -562,7 +562,7 @@ source独立性や全地域SLAと同一視してはならない。
 | machine result | MoonBit/Why3で外部certificate admissionの4 goalを含む176 goalを証明した。Quint/TLCは正常model 795 msで反例なし、authentication/certificate time/revision/appeal target/deadlineの5 broken modelで意図した反例を検出した。workerdは無署名、unknown arbiter、期限切れcertificate、wrong lineage、stale revision、期限外appeal、exact duplicate、複数revoke、DO eviction後のappealを検査した |
 | domain wording | certificate期限は署名付き命令の受理期限、appeal deadlineは既存revokeを覆せる期限である。期限切れrevokeはcheat確定でも自動restoreでもなく、asset利用を止めた`expired` caseになる |
 | decision | 暗号方式は`scheme -> verifier` registry、identityは環境provision rosterへ分離する。decision IDはcanonical statement digest、署名とarbiter metadataをhistoryへ保存する。eligible appealは直前decision IDを明示し、quarantine済みlisting nonceを復活させない |
-| lock | `lineage-decision-certificate.ts`、`asset_lineage_certificate_allowed`、`LineageAppeal*.qnt`、両lineage decision endpoint、SQLite head/history migration、Worker 98 tests |
+| lock | `lineage-decision-certificate.ts`、`asset_lineage_certificate_allowed`、`LineageAppeal*.qnt`、両lineage decision/status endpoint、SQLite head/history migration、Worker 101 tests、Playwright 4状態回復test |
 
 | 項目 | 内容 |
 | --- | --- |
