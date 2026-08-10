@@ -1,8 +1,9 @@
 import type { CheckpointDeliveryJob } from "./checkpoint-runtime";
+import type { AuditCryptoBackend } from "../../player-local-runtime/crypto-backend";
+import { verifyCheckpointDeliveryAuthenticationDual } from "./checkpoint-delivery-crypto";
 import {
   classifyAnchorHead,
   sameCheckpointDeliveryAuthenticationPolicy,
-  verifyCheckpointDeliveryAuthenticationSync,
   type CheckpointAckDecision,
   type CheckpointDeliveryAuthenticationPolicy,
   type CheckpointDeliveryAuthenticationVerification,
@@ -163,22 +164,27 @@ export class CheckpointReceiverStore {
     });
   }
 
-  authenticate(
+  async authenticate(
     runtime: LoadedCheckpointRuntime,
     job: CheckpointDeliveryJob,
-  ): CheckpointReceiverAuthenticationResult {
+    backend: AuditCryptoBackend,
+  ): Promise<CheckpointReceiverAuthenticationResult> {
     const policy = this.authenticationPolicy();
     if (!this.config() || !policy) return { decision: "not_configured" };
-    const verification = verifyCheckpointDeliveryAuthenticationSync(runtime, {
-      boundary: job.boundary,
-      destinationId: job.destination_id,
-      epoch: job.epoch,
-      previousCheckpoint: job.previous_checkpoint,
-      checkpointDigest: job.checkpoint_digest,
-      canonicalEnvelope: job.canonical_envelope,
-      policy,
-      authentication: job.authentication,
-    });
+    const verification = await verifyCheckpointDeliveryAuthenticationDual(
+      runtime,
+      {
+        boundary: job.boundary,
+        destinationId: job.destination_id,
+        epoch: job.epoch,
+        previousCheckpoint: job.previous_checkpoint,
+        checkpointDigest: job.checkpoint_digest,
+        canonicalEnvelope: job.canonical_envelope,
+        policy,
+        authentication: job.authentication,
+      },
+      backend,
+    );
     if (!verification.ok) return { decision: "refused", verification };
     return {
       decision: "authenticated",

@@ -136,7 +136,8 @@ baselineなので、全地域SLAや異なるsource間の公平性は未保証で
 
 prototypeのprotocol骨格は通ったが、production完成ではない。優先順は次のとおり。
 
-1. 監査済み暗号backend、private-key custody、zone/epoch委任key、rotation。
+1. 配送以外のWorker経路を含む監査済み暗号backend、authority private-key custody、zone/epoch委任key、rotation。
+   browser custodyとcheckpoint配送の標準WebCrypto + MoonBit dual verificationまでは実装済み。
 2. transparency headとwitness certificateのpersistent remote socket、端末credential、fork alert。
    pure bounded fanout/retry/multi-peer response選択と、SQLite lease + bounded HTTP loopbackは実装済み。
 3. observer signing storeとmobile SQLiteへのproduction persistence、暗号化at-rest、外部裁定システム接続。

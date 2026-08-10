@@ -79,7 +79,8 @@ provisionalであり、監査不成立なら最後のACK地点までinventory li
 - sealed segmentのleafはroot生成後も保持し、challenge時のproof/replayに備える。
 - game stateとjournalを一つのsnapshotとしてIndexedDBへ保存する。保存は完全なmicro境界だけで行い、
   reload時はevent root、checkpoint chain、最終state digestを再計算してから復帰する。
-- browserはrunごとに32-byte seedからEd25519 owner keyを生成し、別のIndexedDB storeへ保存する。公開鍵は
+- browserはrunごとに標準WebCryptoでnon-extractable Ed25519 owner keyを生成し、`CryptoKey` handleを
+  別のIndexedDB storeへ保存する。公開鍵は
   genesis digestへ含めるため、item精算直前に別鍵へ差し替えた自己整合ログは元のcheckpoint chainと一致しない。
 - micro未満の未保存tickはreload時に失われる。初期cadenceでは最大29 tick、約0.97秒である。
 
@@ -148,7 +149,8 @@ POST /v1/pve/:unit/game-item-verifications
 - replayで実際に生成されたassetだけに、unit・checkpoint・asset・owner・epochへ束縛した
   `authority_receipt_id`を発行する。
 - `owner_signature`はunit・player・seed・checkpoint・asset・genesis束縛済み公開鍵のcanonical digestへ署名する。
-  Workerは高価なsegment replayより先にMoonBit Ed25519 bridgeでproof-of-possessionを検査する。
+  clientは標準WebCrypto signerを使う。Workerは高価なsegment replayより先にMoonBit Ed25519 bridgeで
+  proof-of-possessionを検査しており、この受信側は標準backendへの未移行経路である。
 - receiptはDurable Object SQLiteへasset単位で保存する。同じrequestは`duplicate`として同じreceiptへ
   収束し、競合する再登録は409になる。receiptとauthority保存済みparent stateにも公開鍵を保存し、後続epochの
   鍵変更は拒否する。
@@ -241,8 +243,9 @@ version 0だけでなく、二者署名transfer後のownerも出品でき、旧o
 同じcanonical write-setへ拘束してから、汎用multi-asset endpointへ渡す必要がある。reference checkpoint/item
 receiptはこのゲーム固有のauthority replay結果であり、汎用peer witness
 quorumの代用ではない。owner keyは自己主権run identityを証明するが、`seller_id`を課金accountや現実の人物へ
-結び付けるものではない。reference実装はexport可能seedをIndexedDBへ置き、未監査の`experimental_crypto`を使う。
-productionでは認証済みaccountへの鍵登録、OS keystoreのnon-exportable key、鍵回復・rotation・失効を別途実装する。
+結び付けるものではない。reference実装のowner署名はnon-extractable標準WebCrypto鍵へ移行済みだが、
+他のcheckpoint/journal暗号経路には未監査`experimental_crypto`が残る。productionでは認証済みaccountへの
+鍵登録、OS keystore/secure enclaveへの昇格、鍵回復・rotation・失効を別途実装する。
 
 ## Cloudflare配置
 

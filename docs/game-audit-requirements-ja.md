@@ -362,8 +362,12 @@ macro間隔よりquorumが遅くても、collectionをpipelineできればcheckp
 状態: FNV/mockと`experimental_crypto` SHA-256/Ed25519接続は`Implemented + Tested`だが未監査。
 key ID/version、署名時点validity、effective revocation、rotation後の公開鍵history検証、
 player/authority wire custodyのreference contractは`Implemented + Proven/Model checked + Tested`。
-監査済みbackend、non-extractable player key、Cloudflare/端末DB migrationは未接続なので、
-production security gate全体は`Pending`。詳細は
+標準WebCrypto backend、非同期key-bound署名検証、non-extractable player key、IndexedDB restartと
+旧seed migrationは`Tested locally + browser E2E`。Workerのcheckpoint配送認証はMoonBit canonical bytesに対する
+標準WebCrypto + MoonBit dual verifierへ接続済みで、witness collection開始と各approvalにもunder-quorumを
+正常に扱うpartial capabilityを要求する。producer/witness署名生成とpeer clientも交換可能な非同期signer、
+標準WebCrypto、送信前producer再検証へ接続済みである。他のWorker hash/verifierは未監査backendのままである。
+production profileでは全route/Queueを拒否するため、production security gate全体は`Partial`。詳細は
 [鍵ライフサイクル契約](./key-lifecycle-ja.md)を参照する。
 
 ## 10. 受入条件

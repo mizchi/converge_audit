@@ -84,6 +84,8 @@ p95/p99 5.901 msだった。同runの7,112-byte open-world replayはQueue待ち�
 接続した。PvP 20 collectionsそれぞれで、hostile sourceからinvalid approvalを8件送り、client指定の
 内部bucketを毎回変えても9件目が429になることを確認した。その直後、別sourceから3つのprovision済み
 witness seedで個別に署名・送信し、20/20で3/4 quorumとsealが成立した。
+これは2026-08-05時点の履歴値である。現行`bench:witness`はdelivery producer/witnessを
+non-extractable標準WebCrypto鍵で署名するため、同条件の再測定値とは分けて扱う。
 
 | 経路 | samples | mean | p50 | p95 | max |
 | --- | ---: | ---: | ---: | ---: | ---: |

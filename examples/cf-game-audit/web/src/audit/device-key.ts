@@ -3,8 +3,26 @@ import {
   audit_browser_ed25519_sign,
 } from "../../../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
 import type { GameOwnerSigner } from "../../../game/authority/owner-authentication";
+import type {
+  AsyncAuditSigner,
+  StandardWebCryptoBackend,
+  WebCryptoSigningKeyMaterial,
+} from "../../../../player-local-runtime/crypto-backend";
 
 export interface ReferenceGameDeviceKey extends GameOwnerSigner {}
+export interface ProductionReferenceGameDeviceKey extends AsyncAuditSigner {}
+
+export interface ProductionDeviceKeyStore {
+  loadDeviceKeyHandle(
+    runKey: string,
+  ): Promise<WebCryptoSigningKeyMaterial | undefined>;
+  saveDeviceKeyHandle(
+    runKey: string,
+    material: WebCryptoSigningKeyMaterial,
+  ): Promise<void>;
+  loadDeviceSeed(runKey: string): Promise<string | undefined>;
+  removeDeviceSeed(runKey: string): Promise<void>;
+}
 
 const experimentalSeeds = new WeakMap<ReferenceGameDeviceKey, string>();
 
@@ -57,4 +75,38 @@ export function experimentalExportDeviceSeedForPersistence(
   const seed = experimentalSeeds.get(key);
   if (!seed) throw new Error("unknown reference-game device key");
   return seed;
+}
+
+/**
+ * Load the non-extractable production key, migrate the legacy seed once, or
+ * generate a new key. The seed is deleted only after the CryptoKey handle has
+ * been durably stored.
+ */
+export async function loadOrCreateProductionDeviceKey(
+  store: ProductionDeviceKeyStore,
+  runKey: string,
+  backend: StandardWebCryptoBackend,
+): Promise<ProductionReferenceGameDeviceKey> {
+  const stored = await store.loadDeviceKeyHandle(runKey);
+  if (stored) {
+    const legacySeed = await store.loadDeviceSeed(runKey);
+    if (legacySeed !== undefined) await store.removeDeviceSeed(runKey);
+    return backend.restoreSigningKey(stored);
+  }
+
+  const legacySeed = await store.loadDeviceSeed(runKey);
+  const prepared = legacySeed === undefined
+    ? await backend.generateSigningKey()
+    : await backend.importLegacySeed(
+      legacySeed,
+      audit_browser_ed25519_public_key(legacySeed),
+    );
+  await store.saveDeviceKeyHandle(runKey, prepared.material);
+  if (legacySeed !== undefined) await store.removeDeviceSeed(runKey);
+
+  // Re-read through the same decoder used after restart. A storage adapter may
+  // clone the CryptoKey handle and must not silently rewrite its metadata.
+  const persisted = await store.loadDeviceKeyHandle(runKey);
+  if (!persisted) throw new Error("device-key handle was not persisted");
+  return backend.restoreSigningKey(persisted);
 }

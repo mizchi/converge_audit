@@ -261,13 +261,19 @@ expected snapshotのCASと全write-setを一transactionで行わなければな�
   canonical bytes、created orderまで一致することを認証する。
 - 同一trust domainでは認証済みinternal RPCを使ってよい。敵対的peer transportではproducer signature、
   roster/quorum capabilityを検証し、同じ認証済みdelivery境界へ変換する。
+- canonical statement/approvalはMoonBit contractだけがserializeし、Workerはそのexact bytesを標準WebCryptoと
+  既存MoonBit verifierで二重検証する。両者が同じproducer/quorum capabilityへ到達した場合だけmutationを許す。
 - unknown、改ざん、未認証jobはreceiver history/head/fork evidenceを一切変更しない。
 
 ### IMPL-COLLECT-001: remote witness collection
 
 - collection開始時にexact delivery statement、producer署名、provision済みpolicy、deadlineをdurableに固定する。
+  producer-only bundleは標準WebCryptoとMoonBitのpartial dual verifierが発行したexact-bound capabilityを要求する。
 - witness approval endpointは管理tokenではなく署名を認証情報とし、unknown collection、非roster、
-  statement/key/digest/signature不一致を永続状態へ入れない。
+  statement/key/digest/signature不一致をcollection/approval/conflict状態へ入れない。`under_quorum`は
+  不正ではなく収集中を表すため、両verifierが一致したpartial capabilityなら受理する。
+- source rate-windowはDoS防御状態なので暗号拒否されたattemptも計数する。これはapproval/equivocation
+  evidenceの受理とは区別する。
 - exact duplicateは承認数を増やさない。同じwitnessの異なる応答は、競合応答自体の署名検証に成功した
   場合だけequivocation evidenceとして保存する。
 - distinct roster approvalが必要数へ達した時だけ`ready`へ一方向遷移する。`ready`後のbundleは凍結する。
@@ -419,9 +425,9 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | case resolution source relay | case起票時の署名済みplacement、arbiter certificate付きdurable resolution notice、sourceによるcertificate再検証とnext-cursor再署名、exact case/reference/resolutionを検査するWorker inbox、player-local bounded pollerによるhold解除 | MoonBit/Why3 gate + Quint normal/broken model + Worker/IndexedDB Tested locally / source workerの自動schedule・lease・credentialはPending |
 | authority boundary/initial headの事前provision | 管理API → destination DO、source側provision ledger、未設定receiver拒否 | Tested locally |
 | Queue jobのsource outbox認証 | receiver mutation前のsource DO exact-match | Tested locally |
-| producer署名 + provision済みwitness quorum | `src/audit/delivery_auth`のopaque capability、実Ed25519 Worker bridge、source/receiver二重gate | Proven gate + Tested locally |
-| versioned key lifecycle | key ID/version/purpose/scope/public keyを含むcanonical statement、署名時点validity/effective revocation、provision時履歴compile、O(1) exact lookup、rotation後の過去checkpoint検証、seed非列挙signer/wire custody | MoonBit 5 goals + Quint normal/3 broken + TypeScript実Ed25519 Tested / production backend・DB migration・non-extractable keyはPending |
-| remote witness collection | 公開pull/ローカル署名submit、pure bounded fanout/指数retry/backpressure/複数response選択、SQLite collection、deadline | remote E2E + pure scheduler Tested / socket push・global fair queueはPending |
+| producer署名 + provision済みwitness quorum | `src/audit/delivery_auth`のopaque capability、MoonBit canonical serializer、標準WebCrypto + MoonBit dual verifier、source/receiver二重gate | Proven gate + dual verifier Tested locally |
+| versioned key lifecycle | key ID/version/purpose/scope/public keyを含むcanonical statement、署名時点validity/effective revocation、provision時履歴compile、O(1) exact lookup、rotation後の過去checkpoint検証、同期/非同期共通preflight、WebCrypto非抽出signer、旧seed一方向migration | MoonBit 5 goals + Quint normal/3 broken + MoonBit/WebCrypto共通vector + IndexedDB restart + browser E2E Tested / Worker標準backend・SQL migration・外部custodyはPending |
+| remote witness collection | 公開pull/ローカル署名submit、producer/各approvalの標準WebCrypto + MoonBit partial capability、pure bounded fanout/指数retry/backpressure/複数response選択、SQLite collection、deadline | remote E2E + crypto ingress + pure scheduler Tested / socket push・global fair queueはPending |
 | player-local peer checkpoint fanout | MoonBit JS policy、SQLite route/lease/attempt/backoff/fork quarantine、bounded HTTP POST、restart lease | loopback 7 tests / 実credential・WebSocket/WebTransportはPending |
 | 最古未ACK checkpoint retry worker | direct DO RPC、SQLite lease、DO alarm + pure選択契約 | Tested locally + remote E2E |
 | authority exact-parent + historical duplicate | 専用receiver history/head transaction + generic classifier | Tested locally + remote ACK-loss recovery |
@@ -477,9 +483,9 @@ key lifecycleのwire/storage移行、routine rotationとretroactive revocation�
 | source | `AUD-TRUST-003`と`IMPL-COLLECT-001`はtimeout/under-quorumをcheat確定せず、正直なquorum到達時の活性を条件付きで要求する |
 | implementation observation | 「何らかの応答を公平に処理する」だけではhostile duplicateを処理し続け、未採用の正直な応答を飢餓化できる |
 | model question | foreign/duplicate/timeout下で不正なready/receiver advanceを防ぎ、正直な未採用応答が公平ならeventually readyになるか |
-| machine result | safety 30,720、liveness 19,456 distinct statesで反例なし。弱い公平性ではhostile duplicate starvation反例を検出した |
-| decision | 活性仮定を「未採用の正直な応答が公平に処理される」へ限定する。reference adapterではhashed sourceごとのfixed windowを入れ、global fairnessはproduction要件として残す |
-| lock | `WitnessQuorum.qnt`、producer/roster gateを外す2 broken module、workerd foreign/invalid/duplicate/quorum/expiry/source-isolation test、20-run local flood benchmark |
+| machine result | safety 30,720、liveness 19,456 distinct statesで反例なし。弱い公平性ではhostile duplicate starvation反例を検出した。標準WebCryptoとMoonBitはproducer-only/partial quorumの成功・拒否を一致させ、生成WebCrypto鍵だけでproducer→witness→full quorumを完走した |
+| decision | 活性仮定を「未採用の正直な応答が公平に処理される」へ限定する。正当なunder-quorumにはexact-bound partial capabilityを発行する。peerはproducer bundleを再検証し、注入signerがrosterと一致した場合だけ署名する。reference adapterではhashed sourceごとのfixed windowを入れ、global fairnessはproduction要件として残す。rate-window attemptはapproval受理状態と分離する |
+| lock | `WitnessQuorum.qnt`、producer/roster gateを外す2 broken module、`production-crypto.test.ts`の標準sign/partial capability、`witness-client.test.ts`のretarget/no-POST、workerd invalid producer/foreign/invalid/duplicate/quorum/expiry/source-isolation test、20-run local flood benchmark |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -643,7 +649,8 @@ production adapterは最低限、次を自動検査する。
 12. producer署名改ざん、非roster witness、duplicate witness、under-quorumでsource/receiver stateが変わらない。
 13. collectionのforeign/invalid応答は承認数を増やさず、deadline expiryはcheatにせずsealを拒否する。
 14. 同一送信元がclient指定bucketを変えてもrate limitを回避できず、別送信元の正当quorumは進行する。
-15. peer clientは秘密seedとroster keyが一致しない場合、approvalをnetworkへ送らない。
+15. peer clientはproducer statement/signatureまたは注入signerの公開鍵がrosterと一致しない場合、
+    approvalをnetworkへ送らない。
 16. quorumに必要なpeer approvalを並列fanoutし、収集待ちでrender/inputを停止しない。
 
 回帰入口:

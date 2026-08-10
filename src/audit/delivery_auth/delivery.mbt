@@ -124,7 +124,7 @@ pub fn serialize_checkpoint_delivery_statement(
 }
 
 ///|
-fn serialize_checkpoint_delivery_approval(
+pub fn serialize_checkpoint_delivery_approval(
   statement_digest : @bft.Digest,
   witness_id : String,
 ) -> String {

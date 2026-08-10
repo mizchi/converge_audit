@@ -8,6 +8,9 @@ Node/mobile SQLiteとbrowser IndexedDBが共有するstorage-neutral DTO、非�
 storage-neutralな履歴とkey-bound canonical signatureを提供する。履歴はprovisioning時に一度だけ検査・
 index化し、authorityの署名検証hot pathはexact key lookupをO(1)で行う。rotation/revocation semanticsと
 production custodyの限界は[鍵ライフサイクル契約](../../docs/key-lifecycle-ja.md)に定める。
+`crypto-backend.ts`はhost I/O用の非同期SHA-256/Ed25519 contract、標準WebCrypto adapter、
+experimental/productionのfail-closed admissionを提供する。同期MoonBit adapterとは同じvector suiteで比較し、
+key lifecycleの純粋preflightを同期・非同期検証で共有する。
 
 物理adapterは未認証network payloadからwrite-setを組み立てず、
 `MoonBitCheckpointPolicy.prepareWriteSet`が返したDTOをCAS付きtransactionで適用する。

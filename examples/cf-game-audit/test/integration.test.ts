@@ -2249,6 +2249,47 @@ describe.sequential("Cloudflare game audit shard", () => {
     });
   });
 
+  it("fails closed before health/routes when production selects experimental crypto", async () => {
+    const auditEnv = env as unknown as AuditEnv;
+    const response = await worker.fetch(
+      new Request("https://example.test/health"),
+      {
+        AUDIT_SHARD: auditEnv.AUDIT_SHARD,
+        REPLAY_QUEUE: auditEnv.REPLAY_QUEUE,
+        ADMIN_TOKEN: "test-admin-token",
+        WITNESS_SOURCE_BUCKET_KEY: "test-source-bucket-key-000000000000",
+        AUDIT_RUNTIME_PROFILE: "production",
+        AUDIT_CRYPTO_BACKEND: "experimental-moonbit-sha256-ed25519-v1",
+      } as AuditEnv,
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "production_crypto_backend_refused",
+      reason: "production_backend_required",
+    });
+  });
+
+  it("does not let configuration claim an unconnected standard Worker backend", async () => {
+    const auditEnv = env as unknown as AuditEnv;
+    const response = await worker.fetch(
+      new Request("https://example.test/health"),
+      {
+        AUDIT_SHARD: auditEnv.AUDIT_SHARD,
+        REPLAY_QUEUE: auditEnv.REPLAY_QUEUE,
+        ADMIN_TOKEN: "test-admin-token",
+        WITNESS_SOURCE_BUCKET_KEY: "test-source-bucket-key-000000000000",
+        AUDIT_RUNTIME_PROFILE: "production",
+        AUDIT_CRYPTO_BACKEND: "standard-webcrypto-sha256-ed25519-v1",
+      } as AuditEnv,
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "production_crypto_backend_refused",
+      reason: "configured_backend_not_connected",
+    });
+  });
+
   it("fails closed when reference-game source bucketing has no server secret", async () => {
     const auditEnv = env as unknown as AuditEnv;
     const response = await worker.fetch(
@@ -2553,6 +2594,30 @@ describe.sequential("Cloudflare game audit shard", () => {
       statement.canonical_envelope,
       3,
     );
+    const deadlineAt = Date.now() + 60_000;
+    const invalidProducerStart = await SELF.fetch(
+      `https://example.test/v1/${mode}/${unit}/checkpoint-witness-collections`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-admin-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...statement,
+          deadline_at: deadlineAt,
+          producer_authentication: {
+            ...producerOnly.authentication,
+            producer_signature: "00".repeat(64),
+          },
+        }),
+      },
+    );
+    expect(invalidProducerStart.status).toBe(409);
+    await expect(invalidProducerStart.json()).resolves.toMatchObject({
+      decision: "refused",
+      reason: "invalid_producer_signature",
+    });
     const started = await SELF.fetch(
       `https://example.test/v1/${mode}/${unit}/checkpoint-witness-collections`,
       {
@@ -2563,7 +2628,7 @@ describe.sequential("Cloudflare game audit shard", () => {
         },
         body: JSON.stringify({
           ...statement,
-          deadline_at: Date.now() + 60_000,
+          deadline_at: deadlineAt,
           producer_authentication: producerOnly.authentication,
         }),
       },
@@ -2839,10 +2904,13 @@ describe.sequential("Cloudflare game audit shard", () => {
       error: "checkpoint_witness_source_rate_limited",
     });
 
-    for (const [index, approval] of complete.authentication.approvals.entries()) {
-      const response = await submitFrom("198.51.100.20", approval);
-      expect(response.status).toBe(index === 2 ? 201 : 202);
-    }
+    const honestResponses = await Promise.all(
+      complete.authentication.approvals.map((approval) =>
+        submitFrom("198.51.100.20", approval)
+      ),
+    );
+    expect(honestResponses.map((response) => response.status).sort())
+      .toEqual([201, 202, 202]);
     const status = await SELF.fetch(
       `https://example.test/v1/${mode}/${unit}/checkpoint-witness-collections?collection_id=${
         encodeURIComponent(collectionId)

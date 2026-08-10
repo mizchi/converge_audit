@@ -11,6 +11,12 @@ export interface GameOwnerSigner {
   signDigest(digest: string): string;
 }
 
+/** WebCrypto-compatible signer used at browser/Worker I/O boundaries. */
+export interface AsyncGameOwnerSigner {
+  publicKey: string;
+  signDigest(digest: string): Promise<string>;
+}
+
 export interface GameItemOwnerProofBoundary {
   playerId: string;
   seed: number;
@@ -81,6 +87,18 @@ export function signGameItemOwnerProof(
   return signer.signDigest(gameItemOwnerProofDigest(unit, boundary, digest));
 }
 
+export async function signGameItemOwnerProofAsync(
+  unit: string,
+  boundary: GameItemOwnerProofBoundary,
+  digest: GameOwnerDigestAdapter,
+  signer: AsyncGameOwnerSigner,
+): Promise<string> {
+  if (boundary.ownerPublicKey !== signer.publicKey) {
+    throw new Error("item owner proof key does not match signer");
+  }
+  return signer.signDigest(gameItemOwnerProofDigest(unit, boundary, digest));
+}
+
 export function verifyGameItemOwnerProof(
   unit: string,
   boundary: GameItemOwnerProofBoundary,
@@ -126,6 +144,18 @@ export function signGameMarketListingProof(
   digest: GameOwnerDigestAdapter,
   signer: GameOwnerSigner,
 ): string {
+  if (boundary.ownerPublicKey !== signer.publicKey) {
+    throw new Error("market listing proof key does not match signer");
+  }
+  return signer.signDigest(gameMarketListingProofDigest(unit, boundary, digest));
+}
+
+export async function signGameMarketListingProofAsync(
+  unit: string,
+  boundary: GameMarketListingProofBoundary,
+  digest: GameOwnerDigestAdapter,
+  signer: AsyncGameOwnerSigner,
+): Promise<string> {
   if (boundary.ownerPublicKey !== signer.publicKey) {
     throw new Error("market listing proof key does not match signer");
   }
@@ -188,6 +218,20 @@ export function signGameMarketListingCancelProof(
   );
 }
 
+export async function signGameMarketListingCancelProofAsync(
+  unit: string,
+  boundary: GameMarketListingCancelProofBoundary,
+  digest: GameOwnerDigestAdapter,
+  signer: AsyncGameOwnerSigner,
+): Promise<string> {
+  if (boundary.ownerPublicKey !== signer.publicKey) {
+    throw new Error("market listing cancellation key does not match signer");
+  }
+  return signer.signDigest(
+    gameMarketListingCancelProofDigest(unit, boundary, digest),
+  );
+}
+
 export function verifyGameMarketListingCancelProof(
   unit: string,
   boundary: GameMarketListingCancelProofBoundary,
@@ -235,6 +279,21 @@ export function signGameItemTransferProof(
   digest: GameOwnerDigestAdapter,
   signer: GameOwnerSigner,
 ): string {
+  if (
+    signer.publicKey !== boundary.fromOwnerPublicKey &&
+    signer.publicKey !== boundary.toOwnerPublicKey
+  ) {
+    throw new Error("item transfer signer is not a transfer participant");
+  }
+  return signer.signDigest(gameItemTransferProofDigest(unit, boundary, digest));
+}
+
+export async function signGameItemTransferProofAsync(
+  unit: string,
+  boundary: GameItemTransferProofBoundary,
+  digest: GameOwnerDigestAdapter,
+  signer: AsyncGameOwnerSigner,
+): Promise<string> {
   if (
     signer.publicKey !== boundary.fromOwnerPublicKey &&
     signer.publicKey !== boundary.toOwnerPublicKey

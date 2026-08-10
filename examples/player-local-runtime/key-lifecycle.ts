@@ -62,16 +62,34 @@ export interface KeyBoundSigner {
   signDigest(digest: string): string;
 }
 
+export interface AsyncKeyBoundSigner {
+  readonly scheme: string;
+  readonly publicKey: string;
+  signDigest(digest: string): Promise<string>;
+}
+
 export interface KeyLifecycleDigestAdapter {
   hashString(value: string): string;
+}
+
+export interface AsyncKeyLifecycleDigestAdapter {
+  hashString(value: string): Promise<string>;
 }
 
 export interface KeyLifecycleSignatureVerifier {
   verify(publicKey: string, digest: string, signature: string): boolean;
 }
 
+export interface AsyncKeyLifecycleSignatureVerifier {
+  verify(publicKey: string, digest: string, signature: string): Promise<boolean>;
+}
+
 export type KeyLifecycleVerifierRegistry = Readonly<
   Record<string, KeyLifecycleSignatureVerifier>
+>;
+
+export type AsyncKeyLifecycleVerifierRegistry = Readonly<
+  Record<string, AsyncKeyLifecycleSignatureVerifier>
 >;
 
 export type VerificationKeyHistoryValidation =
@@ -136,14 +154,13 @@ export function canonicalKeyBoundSignatureStatement(
   ]);
 }
 
-export function signKeyBoundStatement(input: {
+function prepareUnsignedKeyBoundStatement(input: {
   key: VerificationKeyRecord;
   unitId: string;
   statementDigest: string;
   issuedAtMs: number;
-  signer: KeyBoundSigner;
-  digest: KeyLifecycleDigestAdapter;
-}): KeyBoundAuthentication {
+  signer: { readonly scheme: string; readonly publicKey: string };
+}): Omit<KeyBoundAuthentication, "signature"> {
   if (!validKeyRecord(input.key)) throw new Error("invalid verification key record");
   if (!boundedText(input.unitId, 256) || !boundedText(input.statementDigest, 4_096)) {
     throw new Error("invalid key-bound statement");
@@ -156,7 +173,7 @@ export function signKeyBoundStatement(input: {
   }
   const timeRefusal = issuanceTimeRefusal(input.key, input.issuedAtMs);
   if (timeRefusal) throw new Error(timeRefusal);
-  const unsigned: Omit<KeyBoundAuthentication, "signature"> = {
+  return {
     version: 1,
     purpose: input.key.purpose,
     scopeId: input.key.scopeId,
@@ -169,6 +186,17 @@ export function signKeyBoundStatement(input: {
     statementDigest: input.statementDigest,
     issuedAtMs: input.issuedAtMs,
   };
+}
+
+export function signKeyBoundStatement(input: {
+  key: VerificationKeyRecord;
+  unitId: string;
+  statementDigest: string;
+  issuedAtMs: number;
+  signer: KeyBoundSigner;
+  digest: KeyLifecycleDigestAdapter;
+}): KeyBoundAuthentication {
+  const unsigned = prepareUnsignedKeyBoundStatement(input);
   const signature = input.signer.signDigest(
     input.digest.hashString(canonicalKeyBoundSignatureStatement(unsigned)),
   );
@@ -176,21 +204,42 @@ export function signKeyBoundStatement(input: {
   return Object.freeze({ ...unsigned, signature });
 }
 
-export function verifyKeyBoundStatement(
+export async function signKeyBoundStatementAsync(input: {
+  key: VerificationKeyRecord;
+  unitId: string;
+  statementDigest: string;
+  issuedAtMs: number;
+  signer: AsyncKeyBoundSigner;
+  digest: AsyncKeyLifecycleDigestAdapter;
+}): Promise<KeyBoundAuthentication> {
+  const unsigned = prepareUnsignedKeyBoundStatement(input);
+  const signature = await input.signer.signDigest(
+    await input.digest.hashString(canonicalKeyBoundSignatureStatement(unsigned)),
+  );
+  if (!boundedText(signature, 16_384)) throw new Error("signing failed");
+  return Object.freeze({ ...unsigned, signature });
+}
+
+interface KeyBoundVerificationContext {
+  purpose: string;
+  scopeId: string;
+  unitId: string;
+  subjectId: string;
+  statementDigest: string;
+  nowMs: number;
+  maxClockSkewMs: number;
+  history: CompiledVerificationKeyHistory;
+}
+
+type KeyBoundVerificationPreflight =
+  | { ok: true; key: VerificationKeyRecord }
+  | Extract<KeyBoundVerification, { ok: false }>;
+
+function preflightKeyBoundStatement(
   authentication: KeyBoundAuthentication,
-  options: {
-    purpose: string;
-    scopeId: string;
-    unitId: string;
-    subjectId: string;
-    statementDigest: string;
-    nowMs: number;
-    maxClockSkewMs: number;
-    history: CompiledVerificationKeyHistory;
-    digest: KeyLifecycleDigestAdapter;
-    verifiers: KeyLifecycleVerifierRegistry;
-  },
-): KeyBoundVerification {
+  options: KeyBoundVerificationContext,
+  schemeSupported: (scheme: string) => boolean,
+): KeyBoundVerificationPreflight {
   if (!validAuthentication(authentication)) {
     return { ok: false, reason: "invalid_authentication" };
   }
@@ -231,12 +280,65 @@ export function verifyKeyBoundStatement(
   }
   const timeRefusal = issuanceTimeRefusal(key, authentication.issuedAtMs);
   if (timeRefusal) return { ok: false, reason: timeRefusal };
+  if (!schemeSupported(authentication.scheme)) {
+    return { ok: false, reason: "unsupported_scheme" };
+  }
+  return { ok: true, key };
+}
+
+export function verifyKeyBoundStatement(
+  authentication: KeyBoundAuthentication,
+  options: KeyBoundVerificationContext & {
+    digest: KeyLifecycleDigestAdapter;
+    verifiers: KeyLifecycleVerifierRegistry;
+  },
+): KeyBoundVerification {
+  const preflight = preflightKeyBoundStatement(
+    authentication,
+    options,
+    (scheme) => options.verifiers[scheme] !== undefined,
+  );
+  if (!preflight.ok) return preflight;
   const verifier = options.verifiers[authentication.scheme];
-  if (!verifier) return { ok: false, reason: "unsupported_scheme" };
   const digest = options.digest.hashString(
     canonicalKeyBoundSignatureStatement(authentication),
   );
-  if (!verifier.verify(key.publicKey, digest, authentication.signature)) {
+  if (!verifier.verify(
+    preflight.key.publicKey,
+    digest,
+    authentication.signature,
+  )) {
+    return { ok: false, reason: "invalid_signature" };
+  }
+  return {
+    ok: true,
+    keyId: authentication.keyId,
+    keyVersion: authentication.keyVersion,
+  };
+}
+
+export async function verifyKeyBoundStatementAsync(
+  authentication: KeyBoundAuthentication,
+  options: KeyBoundVerificationContext & {
+    digest: AsyncKeyLifecycleDigestAdapter;
+    verifiers: AsyncKeyLifecycleVerifierRegistry;
+  },
+): Promise<KeyBoundVerification> {
+  const preflight = preflightKeyBoundStatement(
+    authentication,
+    options,
+    (scheme) => options.verifiers[scheme] !== undefined,
+  );
+  if (!preflight.ok) return preflight;
+  const verifier = options.verifiers[authentication.scheme];
+  const digest = await options.digest.hashString(
+    canonicalKeyBoundSignatureStatement(authentication),
+  );
+  if (!await verifier.verify(
+    preflight.key.publicKey,
+    digest,
+    authentication.signature,
+  )) {
     return { ok: false, reason: "invalid_signature" };
   }
   return {

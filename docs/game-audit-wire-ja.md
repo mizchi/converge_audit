@@ -156,8 +156,10 @@ sourceが決定するlookup keyであり、単独では認証情報ではない�
 公開POSTはcollection IDと1件の署名approvalだけを運ぶ。sourceは保存済みstatementへapprovalを再結合して
 MoonBit verifierを通す。collection開始deadlineは現在時刻より後かつ最大24時間、IDは1,024文字、
 roster/approvalは各32件までに制限する。ready collectionからsealする際も、seal requestのexact
-statementと再照合する。peer clientは公開policyのroster keyとローカルseed由来keyを照合し、seedを
-authorityへ送らず1 approvalだけをPOSTする。Cloudflare referenceは`CF-Connecting-IP`のraw値を保存せず、
+statementと再照合する。peer clientはproducer-only bundleを標準WebCrypto + MoonBitで再検証し、公開policyの
+roster keyと注入された非同期signerの公開鍵を照合して1 approvalだけをPOSTする。秘密鍵handleは
+authorityへ送らない。CLIのseed入力はnon-extractable WebCrypto keyへimportする移行adapterだけに隔離する。
+Cloudflare referenceは`CF-Connecting-IP`のraw値を保存せず、
 server secret付きHMAC-SHA-256 bucketへ変換してcollectionごとに1秒8件へ制限する。client指定の内部bucketは
 入口で除去する。このrate metadataは署名対象ではなくtransport admissionであり、NAT/botnet間の公平性を
 保証しない。

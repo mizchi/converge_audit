@@ -346,8 +346,13 @@ headerは入口で除去するため、ある送信元のinvalid floodが別buck
 
 開始は`POST .../checkpoint-witness-collections`、取得は同pathのGET `?collection_id=...`、
 応答は`POST .../checkpoint-witness-approvals`へ`collection_id`と1件の`approval`を送る。
-実験用peer clientは公開GET後にroster key、deadline、collection状態を検査し、秘密seedをローカルの
-MoonBit Ed25519 bridgeだけへ渡して署名する。seedは引数でなく環境変数から与える。
+Workerはcollection開始時のproducer-only bundleと各approvalを、MoonBit canonical bytesに対する
+標準WebCrypto + MoonBit partial dual gateへ通す。正当な`under_quorum`は収集中として受理するが、
+署名不正やretargetはcollection/approval/conflictへ永続化しない。hostile requestを抑制する
+source rate-windowだけは、暗号拒否されたattemptも意図的に計数する。
+peer client本体は交換可能な`AsyncAuditSigner`と`AuditCryptoBackend`を受け取り、公開GET後にproducer署名を
+標準WebCrypto + MoonBitで再検証し、roster key、deadline、collection状態が一致した場合だけローカル署名する。
+悪意あるendpointがstatementをretargetしてもapprovalを送信しない。
 
 ```sh
 AUDIT_BASE_URL=http://127.0.0.1:8787 \
@@ -355,8 +360,9 @@ AUDIT_WITNESS_SEED_HEX=<32-byte lower-hex seed> \
 pnpm witness -- pvp <unit> <collection-id> <witness-id>
 ```
 
-このbridgeは`experimental_crypto`を使う未監査のreferenceであり、authority Worker routeへseedを
-送るAPIではない。本番では端末keystore/HSMと監査済み署名backendへ置換する。
+このCLIだけは移行用に環境変数seedを受け取り、そのprocess内でnon-extractable WebCrypto keyへimportする
+compatibility adapterである。署名自体は標準WebCryptoを使い、authority Worker routeへseedを送らない。
+本番ではこのadapterを使わず、ブラウザIndexedDB key handle、OS keystore、HSM/KMSから同じsigner contractを渡す。
 
 Quintのwitness protocolとの対応は、決定的なITF traceを実Ed25519 MoonBit認証gateへ再生して
 検査できる。intruder、不正署名、under-quorum、3 distinct approval、receiver gateを順に通す。
@@ -518,6 +524,8 @@ benchmarkの既定値は、各modeについて64 head逐次投入、同一next h
 inventory head更新を1回行い、その後のmarketplace readも測る。
 `bench:witness`は各runで不正送信元を8件拒否・9件目429にした後、別送信元のpeer client 3件で
 quorumを作り、collection referenceからsealする。run数は`AUDIT_WITNESS_BENCH_RUNS`で変更できる。
+現行benchmarkはprocessごとに生成したnon-extractable WebCrypto producer/witness鍵でdeliveryを署名し、
+Workerの標準WebCrypto + MoonBit dual verifierへ通す。
 remoteの単一clientでは送信元を分離できないため、`single-egress`は9並行burstを最大3回送り、
 429の`Retry-After`後に正当approvalを送る。`parallel`は実peer fanoutと同様に3 approvalを並行送信する。
 出力の`clean_seal_path`は敵対burstを除くcollection開始、quorum wall、sealのrun単位合計である。
@@ -707,9 +715,14 @@ artifact:
 - open-world plan/sealの外部log inclusionは接続済み。log headのremote witness/fanoutは未接続。
 - local workerd値はCloudflare global networkのlatency/CPU billing値ではない。remote値も
   東京の単一clientからbest-effort hintを付けた各20-sample runであり、全地域の代表値ではない。
-- `experimental_crypto`は未監査であり、本番暗号backendではない。
-- reference gameのrun鍵seedはplayer-local IndexedDBへ保存する実験用custodyである。本番ではaccountへ登録した
-  non-exportable keystore key、回復、rotation、失効へ置換する。
+- browser referenceのrun鍵は標準WebCrypto Ed25519のnon-extractable `CryptoKey`としてIndexedDBへ保存し、
+  reload後も同じ公開鍵を復元する。既存seedはhandle保存後に削除する一方向migrationを行う。
+- Workerのcheckpoint配送認証はMoonBit canonical serializer、標準WebCrypto SHA-256/Ed25519、既存MoonBit
+  verifierのdual gateをsource seal前とauthority mutation前に通す。他のWorker hash/verifierはまだ未監査
+  `experimental_crypto`であるため、`AUDIT_RUNTIME_PROFILE=production`では全route/Queueをfail-closedにし、
+  設定だけで未接続backendをproduction扱いできない。
+- non-extractable software keyはXSS/端末侵害を防ぐ証明ではない。account登録、回復、rotation、失効、
+  OS keystore/secure enclaveへの昇格は引き続きdeployment責務である。
 - mode固有bundleの期待checkpointは現在、管理tokenで認証した要求に固定したdigestである。
   current-owner proof、per-asset monotonic head、reference PvEのorigin/transfer ancestry revocation、
   汎用open-world inventoryのorigin/current-head revocationは実装済み。汎用側の中間transfer lineage proof、

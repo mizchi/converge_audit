@@ -7,22 +7,25 @@ import {
 } from "../../game/audit/journal";
 import {
   buildGameCheckpointVerificationRequest,
-  authenticateGameItemVerificationRequest,
+  authenticateGameItemVerificationRequestAsync,
   buildGameItemVerificationRequest,
+  type UnsignedGameItemVerificationRequest,
   type GameItemVerificationRequest,
 } from "../../game/authority/item-verification";
 import {
-  signGameMarketListingCancelProof,
-  signGameMarketListingProof,
+  signGameMarketListingCancelProofAsync,
+  signGameMarketListingProofAsync,
 } from "../../game/authority/owner-authentication";
 import { IndexedDbRunSnapshotStore } from "./audit/indexeddb";
 import { BrowserPlayerLocalCheckpointRuntime } from "./audit/player-local-checkpoint-runtime";
 import {
-  deviceKeyFromSeedHex,
-  experimentalExportDeviceSeedForPersistence,
-  generateDeviceKey,
-  type ReferenceGameDeviceKey,
+  loadOrCreateProductionDeviceKey,
+  type ProductionReferenceGameDeviceKey,
 } from "./audit/device-key";
+import {
+  createStandardWebCryptoBackend,
+  cryptoRuntimeAdmission,
+} from "../../../player-local-runtime/crypto-backend";
 import { moonBitAuditDigest } from "./audit/moonbit";
 import {
   requestGameAssetLineageStatus,
@@ -60,6 +63,16 @@ const movementKeys = new Set([
 ]);
 const pressed = new Set<string>();
 const snapshotStore = new IndexedDbRunSnapshotStore();
+const productionCryptoBackend = createStandardWebCryptoBackend(crypto);
+const productionCryptoAdmission = cryptoRuntimeAdmission(
+  "production",
+  productionCryptoBackend.descriptor,
+);
+if (!productionCryptoAdmission.ok) {
+  throw new Error(
+    `production crypto refused: ${productionCryptoAdmission.reason}`,
+  );
+}
 let persistenceQueue = Promise.resolve();
 let localCheckpointRuntime:
   | Promise<BrowserPlayerLocalCheckpointRuntime>
@@ -135,7 +148,7 @@ function newAuditJournal(
   }, moonBitAuditDigest);
 }
 
-let deviceKey: ReferenceGameDeviceKey;
+let deviceKey: ProductionReferenceGameDeviceKey;
 let auditJournal: GameAuditJournalState;
 let previousState = state;
 let accumulated = 0;
@@ -155,8 +168,8 @@ let verificationGeneration = 0;
 let authorityVerificationQueue = Promise.resolve();
 seedInput.value = String(state.seed);
 
-function runStorageKey(game: GameState): string {
-  return `audit-survivors-v2:${game.player.id}:${game.seed}:${runId}`;
+function runStorageKey(game: GameState, selectedRunId = runId): string {
+  return `audit-survivors-v2:${game.player.id}:${game.seed}:${selectedRunId}`;
 }
 
 function reportPersistenceFailure(error: unknown): void {
@@ -349,22 +362,38 @@ window.addEventListener("keyup", (event) => pressed.delete(event.code));
 window.addEventListener("blur", () => pressed.clear());
 
 restartButton.addEventListener("click", () => {
+  void restartGame();
+});
+
+async function restartGame(): Promise<void> {
+  restartButton.disabled = true;
   const requestedSeed = Number(seedInput.value);
   const seed = Number.isSafeInteger(requestedSeed) ? requestedSeed : 0x1234;
-  runId = crypto.randomUUID();
+  const nextRunId = crypto.randomUUID();
+  const nextState = createInitialGame({ seed, playerId: "local-player" });
+  const key = runStorageKey(nextState, nextRunId);
+  let nextDeviceKey: ProductionReferenceGameDeviceKey;
+  try {
+    nextDeviceKey = await loadOrCreateProductionDeviceKey(
+      snapshotStore,
+      key,
+      productionCryptoBackend,
+    );
+  } catch (error) {
+    reportPersistenceFailure(error);
+    restartButton.disabled = false;
+    updateInterface();
+    return;
+  }
+  runId = nextRunId;
   const url = new URL(location.href);
   url.searchParams.set("seed", String(seed >>> 0));
   url.searchParams.set("run", runId);
   history.replaceState(null, "", url);
-  state = createInitialGame({ seed, playerId: "local-player" });
-  deviceKey = generateDeviceKey();
+  state = nextState;
+  deviceKey = nextDeviceKey;
   auditJournal = newAuditJournal(state, deviceKey.publicKey);
-  const key = runStorageKey(state);
   replacePlayerLocalRuntime(key, state, auditJournal);
-  const seedHex = experimentalExportDeviceSeedForPersistence(deviceKey);
-  persistenceQueue = persistenceQueue
-    .then(() => snapshotStore.saveDeviceSeed(key, seedHex))
-    .catch(reportPersistenceFailure);
   verificationGeneration += 1;
   authorityVerificationQueue = Promise.resolve();
   pendingItemVerifications.clear();
@@ -380,8 +409,9 @@ restartButton.addEventListener("click", () => {
   previousState = state;
   accumulated = 0;
   eventLines.length = 0;
+  restartButton.disabled = false;
   updateInterface();
-});
+}
 
 function inputAxis(negative: string[], positive: string[]): -1 | 0 | 1 {
   const backward = negative.some((key) => pressed.has(key));
@@ -513,15 +543,9 @@ function scheduleItemVerification(assetId: string): void {
   ) {
     return;
   }
-  let request;
+  let unsignedRequest: UnsignedGameItemVerificationRequest;
   try {
-    const unit = verificationUnit(state);
-    request = authenticateGameItemVerificationRequest(
-      unit,
-      buildGameItemVerificationRequest(auditJournal, assetId),
-      moonBitAuditDigest,
-      deviceKey,
-    );
+    unsignedRequest = buildGameItemVerificationRequest(auditJournal, assetId);
   } catch {
     // A drop can be picked up before its 30-event segment is sealed. The next
     // checkpoint callback retries it without turning normal pending time into
@@ -538,7 +562,15 @@ function scheduleItemVerification(assetId: string): void {
   requestAnimationFrame(() => {
     if (generation !== verificationGeneration) return;
     authorityVerificationQueue = authorityVerificationQueue
-      .then(() => verifyItemWithBackfill(assetId, request, unit, generation))
+      .then(async () => {
+        const request = await authenticateGameItemVerificationRequestAsync(
+          unit,
+          unsignedRequest,
+          moonBitAuditDigest,
+          deviceKey,
+        );
+        await verifyItemWithBackfill(assetId, request, unit, generation);
+      })
       .catch((error: unknown) => {
         if (generation !== verificationGeneration) return;
         const reason = error instanceof Error ? error.message : String(error);
@@ -569,21 +601,7 @@ function scheduleMarketListing(item: InventoryItem): void {
   const listingNonce = listingNonces.get(item.assetId) ??
     randomListingNonce();
   listingNonces.set(item.assetId, listingNonce);
-  const ownerSignature = signGameMarketListingProof(
-    unit,
-    {
-      assetId: item.assetId,
-      sellerId: item.ownerId,
-      authorityReceiptId: item.audit.authorityReceiptId,
-      ownerPublicKey: deviceKey.publicKey,
-      ownerVersion: item.audit.ownerVersion,
-      ownerHeadId: item.audit.ownerHeadId,
-      listingNonce,
-    },
-    moonBitAuditDigest,
-    deviceKey,
-  );
-  void requestGameMarketListing(fetch, unit, {
+  const boundary = {
     assetId: item.assetId,
     sellerId: item.ownerId,
     authorityReceiptId: item.audit.authorityReceiptId,
@@ -591,8 +609,17 @@ function scheduleMarketListing(item: InventoryItem): void {
     ownerVersion: item.audit.ownerVersion,
     ownerHeadId: item.audit.ownerHeadId,
     listingNonce,
-    ownerSignature,
-  }).then((result) => {
+  };
+  void signGameMarketListingProofAsync(
+    unit,
+    boundary,
+    moonBitAuditDigest,
+    deviceKey,
+  ).then((ownerSignature) => requestGameMarketListing(
+    fetch,
+    unit,
+    { ...boundary, ownerSignature },
+  )).then((result) => {
     if (generation !== verificationGeneration) return;
     pendingMarketListings.delete(item.assetId);
     if (!result.ok) {
@@ -625,6 +652,13 @@ function scheduleMarketListing(item: InventoryItem): void {
     addEventLine(
       `market listed ${item.assetId} (${result.listing.listingId.slice(0, 10)}…)`,
     );
+    updateInterface();
+  }).catch((error: unknown) => {
+    if (generation !== verificationGeneration) return;
+    pendingMarketListings.delete(item.assetId);
+    const reason = error instanceof Error ? error.message : String(error);
+    failedMarketListings.set(item.assetId, reason);
+    addEventLine(`market listing failed: ${reason}`);
     updateInterface();
   });
 }
@@ -696,16 +730,16 @@ function scheduleMarketListingCancellation(item: InventoryItem): void {
     ownerHeadId: item.audit.ownerHeadId,
     listingNonce,
   };
-  const cancelSignature = signGameMarketListingCancelProof(
+  void signGameMarketListingCancelProofAsync(
     unit,
     boundary,
     moonBitAuditDigest,
     deviceKey,
-  );
-  void requestGameMarketListingCancellation(fetch, unit, {
-    ...boundary,
-    cancelSignature,
-  }).then((result) => {
+  ).then((cancelSignature) => requestGameMarketListingCancellation(
+    fetch,
+    unit,
+    { ...boundary, cancelSignature },
+  )).then((result) => {
     if (generation !== verificationGeneration) return;
     pendingMarketCancellations.delete(item.assetId);
     if (!result.ok) {
@@ -725,6 +759,13 @@ function scheduleMarketListingCancellation(item: InventoryItem): void {
     addEventLine(
       `market canceled ${item.assetId} (${result.listing.listingId.slice(0, 10)}…)`,
     );
+    updateInterface();
+  }).catch((error: unknown) => {
+    if (generation !== verificationGeneration) return;
+    pendingMarketCancellations.delete(item.assetId);
+    const reason = error instanceof Error ? error.message : String(error);
+    failedMarketCancellations.set(item.assetId, reason);
+    addEventLine(`market cancellation failed: ${reason}`);
     updateInterface();
   });
 }
@@ -978,19 +1019,15 @@ async function start(): Promise<void> {
   restartButton.disabled = true;
   const storageKey = runStorageKey(state);
   try {
-    const storedSeed = await snapshotStore.loadDeviceSeed(storageKey);
-    deviceKey = storedSeed === undefined
-      ? generateDeviceKey()
-      : deviceKeyFromSeedHex(storedSeed);
-    if (storedSeed === undefined) {
-      await snapshotStore.saveDeviceSeed(
-        storageKey,
-        experimentalExportDeviceSeedForPersistence(deviceKey),
-      );
-    }
+    deviceKey = await loadOrCreateProductionDeviceKey(
+      snapshotStore,
+      storageKey,
+      productionCryptoBackend,
+    );
   } catch (error) {
     reportPersistenceFailure(error);
-    deviceKey = generateDeviceKey();
+    auditStatusElement.textContent = "crypto unavailable (fail-closed)";
+    return;
   }
   auditJournal = newAuditJournal(state, deviceKey.publicKey);
   try {

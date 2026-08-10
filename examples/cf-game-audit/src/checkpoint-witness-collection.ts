@@ -4,10 +4,15 @@ import {
   verifyCheckpointDeliveryAuthenticationSync,
   type CheckpointDeliveryApproval,
   type CheckpointDeliveryAuthentication,
+  type CheckpointDeliveryAuthenticationInput,
   type CheckpointDeliveryAuthenticationPolicy,
   type CheckpointRuntimeBoundary,
   type LoadedCheckpointRuntime,
 } from "./moonbit";
+import {
+  checkpointDeliveryPartialAuthenticationMatches,
+  type PartiallyAuthenticatedCheckpointDelivery,
+} from "./checkpoint-delivery-crypto";
 
 export interface CheckpointWitnessStatement {
   boundary: CheckpointRuntimeBoundary;
@@ -201,12 +206,22 @@ export class CheckpointWitnessCollectionStore {
     input: CheckpointWitnessCollectionStart,
     policy: CheckpointDeliveryAuthenticationPolicy,
     now: number,
+    authentication: PartiallyAuthenticatedCheckpointDelivery,
   ): CheckpointWitnessCollectionStartResult {
     if (
       input.producer_authentication.approvals.length !== 0 ||
       input.deadline_at <= now ||
       !Number.isSafeInteger(input.deadline_at)
     ) return { decision: "refused", reason: "invalid_collection_start" };
+    if (!checkpointDeliveryPartialAuthenticationMatches(
+      authentication,
+      deliveryInput(input.statement, policy, input.producer_authentication),
+    )) {
+      return {
+        decision: "refused",
+        reason: "producer_authentication_not_prevalidated",
+      };
+    }
     const verification = verifyDelivery(
       runtime,
       input.statement,
@@ -262,11 +277,22 @@ export class CheckpointWitnessCollectionStore {
     approval: CheckpointDeliveryApproval,
     policy: CheckpointDeliveryAuthenticationPolicy,
     now: number,
+    authentication: PartiallyAuthenticatedCheckpointDelivery,
   ): CheckpointWitnessApprovalResult {
     return this.storage.transactionSync(() => {
       const row = this.row(collectionId);
       if (!row) return { decision: "unknown" };
       const approvalCount = this.approvalRows(collectionId).length;
+      if (!checkpointDeliveryPartialAuthenticationMatches(
+        authentication,
+        this.submissionInput(row, approval, policy),
+      )) {
+        return {
+          decision: "refused",
+          reason: "witness_approval_not_prevalidated",
+          approval_count: approvalCount,
+        };
+      }
       if (row.status === "expired" ||
         (row.status === "collecting" && now >= row.deadline_at)) {
         if (row.status === "collecting") {
@@ -389,6 +415,22 @@ export class CheckpointWitnessCollectionStore {
     });
   }
 
+  submissionAuthenticationInput(
+    collectionId: string,
+    approval: CheckpointDeliveryApproval,
+    policy: CheckpointDeliveryAuthenticationPolicy,
+  ): {
+    input: CheckpointDeliveryAuthenticationInput;
+    approval_count: number;
+  } | undefined {
+    const row = this.row(collectionId);
+    if (!row) return undefined;
+    return {
+      input: this.submissionInput(row, approval, policy),
+      approval_count: this.approvalRows(collectionId).length,
+    };
+  }
+
   readyAuthentication(
     runtime: LoadedCheckpointRuntime,
     collectionId: string,
@@ -471,6 +513,21 @@ export class CheckpointWitnessCollectionStore {
        WHERE collection_id = ? ORDER BY witness_id ASC`,
       collectionId,
     ).toArray();
+  }
+
+  private submissionInput(
+    row: CollectionRow,
+    approval: CheckpointDeliveryApproval,
+    policy: CheckpointDeliveryAuthenticationPolicy,
+  ): CheckpointDeliveryAuthenticationInput {
+    return deliveryInput(
+      statementFromRow(row),
+      policy,
+      {
+        ...producerAuthenticationFromRow(row),
+        approvals: [approval],
+      },
+    );
   }
 
   private approvalRow(
@@ -562,7 +619,18 @@ function verifyDelivery(
   policy: CheckpointDeliveryAuthenticationPolicy,
   authentication: CheckpointDeliveryAuthentication,
 ) {
-  return verifyCheckpointDeliveryAuthenticationSync(runtime, {
+  return verifyCheckpointDeliveryAuthenticationSync(
+    runtime,
+    deliveryInput(statement, policy, authentication),
+  );
+}
+
+function deliveryInput(
+  statement: CheckpointWitnessStatement,
+  policy: CheckpointDeliveryAuthenticationPolicy,
+  authentication: CheckpointDeliveryAuthentication,
+): CheckpointDeliveryAuthenticationInput {
+  return {
     boundary: statement.boundary,
     destinationId: statement.destination_id,
     epoch: statement.epoch,
@@ -571,5 +639,5 @@ function verifyDelivery(
     canonicalEnvelope: statement.canonical_envelope,
     policy,
     authentication,
-  });
+  };
 }

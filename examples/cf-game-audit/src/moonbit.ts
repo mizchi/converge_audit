@@ -84,6 +84,17 @@ export type CheckpointDeliveryAuthenticationVerification =
   | { ok: true; producer_id: string; approval_count: number }
   | { ok: false; error: string };
 
+export interface CheckpointDeliveryAuthenticationInput {
+  boundary: CheckpointRuntimeBoundary;
+  destinationId: string;
+  epoch: number;
+  previousCheckpoint: string;
+  checkpointDigest: string;
+  canonicalEnvelope: string;
+  policy: CheckpointDeliveryAuthenticationPolicy;
+  authentication: CheckpointDeliveryAuthentication;
+}
+
 export type ExperimentalCheckpointDeliveryApprovalSigning =
   | { ok: true; approval: CheckpointDeliveryApproval }
   | { ok: false; error: string };
@@ -480,16 +491,7 @@ export async function signExperimentalCheckpointDeliveryApproval(input: {
 
 export function verifyCheckpointDeliveryAuthenticationSync(
   runtime: LoadedCheckpointRuntime,
-  input: {
-  boundary: CheckpointRuntimeBoundary;
-  destinationId: string;
-  epoch: number;
-  previousCheckpoint: string;
-  checkpointDigest: string;
-  canonicalEnvelope: string;
-  policy: CheckpointDeliveryAuthenticationPolicy;
-  authentication: CheckpointDeliveryAuthentication;
-  },
+  input: CheckpointDeliveryAuthenticationInput,
 ): CheckpointDeliveryAuthenticationVerification {
   if (runtime !== loadedCheckpointRuntimeCapability || !auditModule) {
     throw new Error("MoonBit checkpoint runtime must be loaded before authentication");
@@ -523,6 +525,49 @@ export function verifyCheckpointDeliveryAuthenticationSync(
       authentication.approvals.map((approval) => approval.signature),
     ),
   ) as CheckpointDeliveryAuthenticationVerification;
+}
+
+export function serializeCheckpointDeliveryStatementSync(
+  runtime: LoadedCheckpointRuntime,
+  input: Omit<
+    CheckpointDeliveryAuthenticationInput,
+    "policy" | "authentication"
+  >,
+): string {
+  if (runtime !== loadedCheckpointRuntimeCapability || !auditModule) {
+    throw new Error(
+      "MoonBit checkpoint runtime must be loaded before serialization",
+    );
+  }
+  const { boundary } = input;
+  return auditModule.audit_serialize_checkpoint_delivery_statement(
+    boundary.protocol_version,
+    boundary.purpose,
+    boundary.manifest_digest,
+    boundary.scope_id,
+    boundary.unit_id,
+    input.destinationId,
+    input.epoch,
+    input.previousCheckpoint,
+    input.checkpointDigest,
+    input.canonicalEnvelope,
+  );
+}
+
+export function serializeCheckpointDeliveryApprovalSync(
+  runtime: LoadedCheckpointRuntime,
+  statementDigest: string,
+  witnessId: string,
+): string {
+  if (runtime !== loadedCheckpointRuntimeCapability || !auditModule) {
+    throw new Error(
+      "MoonBit checkpoint runtime must be loaded before serialization",
+    );
+  }
+  return auditModule.audit_serialize_checkpoint_delivery_approval(
+    statementDigest,
+    witnessId,
+  );
 }
 
 export function prepareCheckpointSealSync(

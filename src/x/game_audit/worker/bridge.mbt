@@ -83,6 +83,43 @@ fn worker_checkpoint_delivery_statement(
 }
 
 ///|
+/// Serialize the exact destination-specific statement bytes defined by the
+/// MoonBit delivery-authentication contract. WebCrypto callers hash these
+/// bytes instead of maintaining an independent TypeScript encoding.
+pub fn audit_serialize_checkpoint_delivery_statement(
+  protocol_version : Int,
+  purpose : String,
+  manifest_digest : String,
+  scope_id : String,
+  unit_id : String,
+  destination_id : String,
+  epoch : Int,
+  previous_checkpoint : String,
+  checkpoint_digest : String,
+  canonical_envelope : String,
+) -> String {
+  @checkpoint_delivery.serialize_checkpoint_delivery_statement(
+    worker_checkpoint_delivery_statement(
+      protocol_version, purpose, manifest_digest, scope_id, unit_id, destination_id,
+      epoch, previous_checkpoint, checkpoint_digest, canonical_envelope,
+    ),
+  )
+}
+
+///|
+/// Serialize a witness approval with the same framing used by the MoonBit
+/// verifier.
+pub fn audit_serialize_checkpoint_delivery_approval(
+  statement_digest : String,
+  witness_id : String,
+) -> String {
+  @checkpoint_delivery.serialize_checkpoint_delivery_approval(
+    @bft.Digest(statement_digest),
+    witness_id,
+  )
+}
+
+///|
 fn worker_checkpoint_delivery_refusal_code(
   refusal : @checkpoint_delivery.DeliveryAuthenticationRefusal,
 ) -> String {

@@ -1,10 +1,20 @@
 import {
-  signExperimentalCheckpointDeliveryApproval,
+  loadCheckpointRuntime,
   type CheckpointDeliveryApproval,
   type CheckpointDeliveryAuthentication,
   type CheckpointDeliveryAuthenticationPolicy,
   type CheckpointRuntimeBoundary,
 } from "./moonbit";
+import {
+  signCheckpointDeliveryApprovalStandard,
+  verifyCheckpointDeliveryAuthenticationPartialDual,
+} from "./checkpoint-delivery-crypto";
+import {
+  createStandardWebCryptoBackend,
+  type AsyncAuditSigner,
+  type AuditCryptoBackend,
+  type StandardWebCryptoBackend,
+} from "../../player-local-runtime/crypto-backend";
 import type { AuditMode } from "./contracts";
 
 export type { AuditMode } from "./contracts";
@@ -36,9 +46,18 @@ export interface ApproveCheckpointWitnessCollectionInput {
   unit: string;
   collectionId: string;
   witnessId: string;
-  witnessSeedHex: string;
+  signer: AsyncAuditSigner;
+  cryptoBackend: AuditCryptoBackend;
   fetchImpl?: typeof fetch;
   now?: () => number;
+}
+
+export interface LegacySeedCheckpointWitnessCollectionInput extends Omit<
+  ApproveCheckpointWitnessCollectionInput,
+  "signer" | "cryptoBackend"
+> {
+  witnessSeedHex: string;
+  cryptoBackend?: StandardWebCryptoBackend;
 }
 
 export interface CheckpointWitnessSubmission {
@@ -80,7 +99,8 @@ export async function fetchCheckpointWitnessCollection(input: {
 export async function signCheckpointWitnessApproval(input: {
   collection: PublicCheckpointWitnessCollection;
   witnessId: string;
-  witnessSeedHex: string;
+  signer: AsyncAuditSigner;
+  cryptoBackend: AuditCryptoBackend;
   now?: () => number;
 }): Promise<CheckpointDeliveryApproval> {
   const now = (input.now ?? Date.now)();
@@ -97,18 +117,38 @@ export async function signCheckpointWitnessApproval(input: {
     (witness) => witness.witness_id === input.witnessId,
   );
   if (!rosterEntry) throw new Error("unknown_checkpoint_witness");
-  const signed = await signExperimentalCheckpointDeliveryApproval({
-    witnessSeedHex: input.witnessSeedHex,
-    witnessId: input.witnessId,
-    statementDigest: input.collection.producer_authentication.statement_digest,
-  });
-  if (!signed.ok) {
-    throw new Error(`checkpoint_witness_signing_failed:${signed.error}`);
+  if (input.signer.publicKey !== rosterEntry.witness_key) {
+    throw new Error("witness_signer_does_not_match_roster");
   }
-  if (signed.approval.witness_key !== rosterEntry.witness_key) {
-    throw new Error("witness_seed_does_not_match_roster");
+  const runtime = await loadCheckpointRuntime();
+  const statement = input.collection.statement;
+  const producerVerification =
+    await verifyCheckpointDeliveryAuthenticationPartialDual(
+      runtime,
+      {
+        boundary: statement.boundary,
+        destinationId: statement.destination_id,
+        epoch: statement.epoch,
+        previousCheckpoint: statement.previous_checkpoint,
+        checkpointDigest: statement.checkpoint_digest,
+        canonicalEnvelope: statement.canonical_envelope,
+        policy: input.collection.authentication_policy,
+        authentication: input.collection.producer_authentication,
+      },
+      input.cryptoBackend,
+    );
+  if (!producerVerification.ok) {
+    throw new Error(
+      `invalid_checkpoint_witness_producer_authentication:${producerVerification.error}`,
+    );
   }
-  return signed.approval;
+  return signCheckpointDeliveryApprovalStandard(
+    runtime,
+    input.collection.producer_authentication.statement_digest,
+    input.witnessId,
+    input.signer,
+    input.cryptoBackend,
+  );
 }
 
 export async function submitCheckpointWitnessApproval(input: {
@@ -160,7 +200,42 @@ export async function approveCheckpointWitnessCollection(
   const approval = await signCheckpointWitnessApproval({
     collection,
     witnessId: input.witnessId,
-    witnessSeedHex: input.witnessSeedHex,
+    signer: input.signer,
+    cryptoBackend: input.cryptoBackend,
+    now: input.now,
+  });
+  return submitCheckpointWitnessApproval({ ...input, approval });
+}
+
+/**
+ * Compatibility adapter for CLI/bench callers that have not provisioned an
+ * OS keystore yet. Signing still uses a non-extractable WebCrypto key in this
+ * process; only this adapter accepts the legacy seed.
+ */
+export async function approveCheckpointWitnessCollectionWithLegacySeed(
+  input: LegacySeedCheckpointWitnessCollectionInput,
+): Promise<CheckpointWitnessSubmission> {
+  const collection = await fetchCheckpointWitnessCollection(input);
+  const rosterEntry = collection.authentication_policy.witnesses.find(
+    (witness) => witness.witness_id === input.witnessId,
+  );
+  if (!rosterEntry) throw new Error("unknown_checkpoint_witness");
+  const cryptoBackend = input.cryptoBackend ??
+    createStandardWebCryptoBackend(crypto);
+  let signer: AsyncAuditSigner;
+  try {
+    signer = (await cryptoBackend.importLegacySeed(
+      input.witnessSeedHex,
+      rosterEntry.witness_key,
+    )).signer;
+  } catch {
+    throw new Error("witness_seed_does_not_match_roster");
+  }
+  const approval = await signCheckpointWitnessApproval({
+    collection,
+    witnessId: input.witnessId,
+    signer,
+    cryptoBackend,
     now: input.now,
   });
   return submitCheckpointWitnessApproval({ ...input, approval });

@@ -10,8 +10,11 @@ routine rotation後も、authorityは署名時点で有効だった公開鍵reco
 `issued_at_ms >= revoked_at_ms`の署名を拒否する。侵害発覚時は`revoked_at_ms`を過去へ設定できるため、
 影響範囲が不明なら鍵の開始時刻まで戻し、その期間のcheckpointを再監査する。
 
-この契約は鍵選択とadmissionを実装・形式化したものであり、監査済みproduction暗号backendを
-接続したという主張ではない。現在の`experimental_crypto`は引き続き実測用である。
+この契約は鍵選択とadmissionを実装・形式化したものである。標準WebCryptoのSHA-256/Ed25519
+非同期backend、non-extractable browser signer、IndexedDB `CryptoKey` handle保存に加え、
+Workerのcheckpoint配送認証は標準WebCryptoと既存MoonBit verifierの二重検証へ接続済みである。
+ただし他のWorker hash/verifierは引き続き`experimental_crypto`である。従ってend-to-endの
+production暗号を接続したという主張ではなく、production profileのWorkerはfail-closedになる。
 
 ## 1. 汎用契約とgame固有policyの境界
 
@@ -32,6 +35,7 @@ cryptoperiod、rotation間隔、revocation判断、過去公開鍵の保持期�
 | --- | --- |
 | `src/audit/key_lifecycle` | MoonBitの純粋admission classifierとWhy3 lemma |
 | `examples/player-local-runtime/key-lifecycle.ts` | storage/crypto非依存のwire型、canonical statement、履歴compile、署名・検証reference |
+| `examples/player-local-runtime/crypto-backend.ts` | 非同期backend contract、標準WebCrypto adapter、production admission gate |
 | `formal/quint/KeyLifecycle.qnt` | rotation、履歴保持、effective revocation、admissionの有限状態機械 |
 | `examples/cf-game-audit/test/key-lifecycle.test.ts` | 実Ed25519 adapterでのcheckpoint digest bindingとcustody境界test |
 
@@ -167,13 +171,14 @@ private keyを受け取らない。Worker自身がauthority署名を行うdeploy
 bindingとして区別している（[Workers Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)）。
 可能ならraw secret文字列より、秘密をWorker codeへ露出しないservice/HSM capabilityを優先する。
 
-player-local referenceのsigner objectは`publicKey`と`signDigest`だけを公開し、seedをenumerable propertyや
-authentication JSONへ含めない。現状はgame再開用に明示的な
-`experimentalExportDeviceSeedForPersistence`でexport可能seedをIndexedDBへ保存するため、これは
-JavaScript application内の誤送信を減らす境界であって、端末侵害やXSSに対するproduction custodyではない。
+player-local referenceのproduction signer objectは`scheme`、`publicKey`、非同期`signDigest`だけを公開し、
+秘密鍵は`extractable=false`、usage=`["sign"]`の`CryptoKey`としてIndexedDBへstructured cloneする。
+旧runのseedはJWK importでnon-extractable handleへ一方向migrationし、handleのdurable保存と
+private/public一致検査が成功した後に旧seedを削除する。実験用の
+`experimentalExportDeviceSeedForPersistence`は互換test用に残るがbrowser mainからは呼ばない。
 
-production browser pathは、private `CryptoKey`を`extractable=false`かつusage=`["sign"]`で生成し、
-公開鍵だけをexportする。WebCryptoの`CryptoKey`はextractableとusagesを明示的に持つ
+このbrowser pathはprivate `CryptoKey`を`extractable=false`かつusage=`["sign"]`で生成し、
+公開鍵だけをraw exportする。WebCryptoの`CryptoKey`はextractableとusagesを明示的に持つ
 （[W3C Web Cryptography Level 2](https://www.w3.org/TR/WebCryptoAPI/)）。Cloudflare WorkersのWebCryptoは
 標準Ed25519のsign/verify/generate/import/exportをサポートする
 （[Cloudflare Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/)）。
@@ -208,12 +213,17 @@ aimbot、roster管理者の悪意、暗号実装のconstant-time性、端末at-r
 | expected claim | routine rotation後も旧checkpointを検証でき、key substitutionや失効境界以後の署名は受理しない |
 | implementation observation | 旧delivery policyは公開鍵をcurrent設定へ直接埋め、version/history/署名時刻を持たなかった。browser signerはseedを公開propertyに持っていた |
 | model question | exact key binding、署名時点validity、effective revocation、旧公開鍵historyのどれが必要か |
-| tool | MoonBit proof/Why3、Quint/TLC、Vitest + MoonBit Ed25519 adapter |
-| machine result | MoonBit 5 proof goals、Quint正常model反例なし、3 broken modelでbinding/validity/revocation反例、正常6 + history deletion 1 scenario、TypeScript 7 lifecycle/custody tests |
+| tool | MoonBit proof/Why3、Quint/TLC、Vitest + MoonBit/標準WebCrypto Ed25519 adapter。backend選択は時間遷移を持たない有限predicateなので新しいQuint modelではなくhost regression tableで固定 |
+| machine result | MoonBit 5 proof goals、Quint正常model反例なし、3 broken modelでbinding/validity/revocation反例、正常6 + history deletion 1 scenario、同期/非同期共通preflight、WebCrypto/MoonBit共通vector、標準producer/witness署名生成、peer clientのretarget拒否、checkpoint配送とwitness ingressの標準/MoonBit二重検証、production gate、IndexedDB restart/migration、browser E2Eをtest |
 | witness | version bindingを外すとV2署名をV1として受理、validityを外すとV1終了境界の署名を受理、revocationを外すとeffective boundary上の署名を受理。旧recordを削除するとrotation後の正当なV1 checkpointを検証不能 |
 | domain wording | 鍵を更新しても過去の正当な戦利品を失効させない。一方、侵害期間に作られたcheckpointは後からmarketplaceで止められる |
 | decision | validityはverification timeでなくsigned issuance timeに適用する。revocationはretroactiveに設定可能なeffective boundaryとし、公開鍵historyを証拠保持期間中archiveする |
-| lock | `moon test/prove src/audit/key_lifecycle`、`just quint-scenarios`、`just quint-check`、`just quint-counterexamples`、`key-lifecycle.test.ts` |
+| lock | `moon test/prove src/audit/key_lifecycle`、`just quint-scenarios`、`just quint-check`、`just quint-counterexamples`、`key-lifecycle.test.ts`、`production-crypto.test.ts`、`device-key-custody.node-test.ts`、Playwright E2E |
 
-未解決なのは、監査済みproduction backendの選定、non-extractable player keyの実接続、上記SQL relationの
-Cloudflare/端末DB migration、authority署名鍵の外部custody、timestamp trustである。従ってIssue #9全体は未完了である。
+checkpoint配送は、MoonBitが生成するcanonical bytesを標準WebCryptoでhash/signature検証した後、既存MoonBit
+verifierも同じopaque capabilityへ到達した場合だけwitness collection、source seal、receiver mutationへ進む。
+producer/witness署名生成も同じMoonBit serializerと交換可能な非同期signerを使い、生成署名を送信前に自己検証する。
+収集中の正当な`under_quorum`にはexact-bound partial capabilityを発行する。未解決なのは、
+配送以外のWorker同期hash/verifierの標準backend化、上記SQL relationのCloudflare/端末DB migration、
+authority署名鍵の外部custody、timestamp trust、backend/providerの運用監査である。
+browser custodyだけを根拠にIssue #9全体を完了扱いしてはならない。

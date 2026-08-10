@@ -4,8 +4,12 @@ import {
 } from "../../../_build/js/release/build/x/game_audit/worker/worker.js";
 import {
   approveCheckpointWitnessCollection,
+  approveCheckpointWitnessCollectionWithLegacySeed,
   type PublicCheckpointWitnessCollection,
 } from "../src/witness-client";
+import {
+  createStandardWebCryptoBackend,
+} from "../../player-local-runtime/crypto-backend";
 
 const PRODUCER_SEED =
   "000102030405060708090a0b0c0d0e0f" +
@@ -17,6 +21,7 @@ const WITNESS_SEEDS = [
     "707172737475767778797a7b7c7d7e7f",
 ];
 const WITNESS_IDS = ["witness-a", "witness-b"];
+const standardBackend = createStandardWebCryptoBackend(crypto);
 
 function collectionFixture(): {
   collection: PublicCheckpointWitnessCollection;
@@ -83,6 +88,35 @@ function collectionFixture(): {
 }
 
 describe("checkpoint witness client", () => {
+  it("keeps the CLI seed adapter on standard WebCrypto signing", async () => {
+    const { collection, expectedApproval } = collectionFixture();
+    let submitted: unknown;
+    const fetchImpl = async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const request = new Request(input, init);
+      if (request.method === "GET") return Response.json(collection);
+      submitted = await request.json();
+      return Response.json({ ok: true }, { status: 202 });
+    };
+
+    await approveCheckpointWitnessCollectionWithLegacySeed({
+      baseUrl: "https://audit.example",
+      mode: "pvp",
+      unit: "peer-client",
+      collectionId: collection.collection_id,
+      witnessId: WITNESS_IDS[0],
+      witnessSeedHex: WITNESS_SEEDS[0],
+      cryptoBackend: standardBackend,
+      fetchImpl,
+    });
+    expect(submitted).toEqual({
+      collection_id: collection.collection_id,
+      approval: expectedApproval,
+    });
+  });
+
   it("fetches the public collection, signs locally, and submits only the approval", async () => {
     const { collection, expectedApproval } = collectionFixture();
     let submitted: unknown;
@@ -105,7 +139,11 @@ describe("checkpoint witness client", () => {
       unit: "peer-client",
       collectionId: collection.collection_id,
       witnessId: WITNESS_IDS[0],
-      witnessSeedHex: WITNESS_SEEDS[0],
+      signer: (await standardBackend.importLegacySeed(
+        WITNESS_SEEDS[0],
+        expectedApproval.witness_key,
+      )).signer,
+      cryptoBackend: standardBackend,
       fetchImpl,
     });
 
@@ -121,7 +159,7 @@ describe("checkpoint witness client", () => {
     });
   });
 
-  it("rejects a seed that does not match the provisioned witness before POST", async () => {
+  it("rejects a signer that does not match the provisioned witness before POST", async () => {
     const { collection } = collectionFixture();
     let postCount = 0;
     const fetchImpl = async (
@@ -140,9 +178,52 @@ describe("checkpoint witness client", () => {
       unit: "peer-client",
       collectionId: collection.collection_id,
       witnessId: WITNESS_IDS[1],
-      witnessSeedHex: WITNESS_SEEDS[0],
+      signer: (await standardBackend.importLegacySeed(
+        WITNESS_SEEDS[0],
+        collection.authentication_policy.witnesses[0].witness_key,
+      )).signer,
+      cryptoBackend: standardBackend,
       fetchImpl,
-    })).rejects.toThrow("witness_seed_does_not_match_roster");
+    })).rejects.toThrow("witness_signer_does_not_match_roster");
+    expect(postCount).toBe(0);
+  });
+
+  it("rejects a retargeted collection before signing or POST", async () => {
+    const { collection, expectedApproval } = collectionFixture();
+    let postCount = 0;
+    const fetchImpl = async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const request = new Request(input, init);
+      if (request.method === "GET") {
+        return Response.json({
+          ...collection,
+          statement: {
+            ...collection.statement,
+            destination_id: "authority-retargeted",
+          },
+        });
+      }
+      postCount += 1;
+      return Response.json({ ok: true }, { status: 202 });
+    };
+
+    await expect(approveCheckpointWitnessCollection({
+      baseUrl: "https://audit.example",
+      mode: "pvp",
+      unit: "peer-client",
+      collectionId: collection.collection_id,
+      witnessId: WITNESS_IDS[0],
+      signer: (await standardBackend.importLegacySeed(
+        WITNESS_SEEDS[0],
+        expectedApproval.witness_key,
+      )).signer,
+      cryptoBackend: standardBackend,
+      fetchImpl,
+    })).rejects.toThrow(
+      "invalid_checkpoint_witness_producer_authentication:statement_digest_mismatch",
+    );
     expect(postCount).toBe(0);
   });
 });

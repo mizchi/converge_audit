@@ -4,6 +4,13 @@ import {
   type AuditMode,
   type PublicCheckpointWitnessCollection,
 } from "../src/witness-client";
+import { loadCheckpointRuntime } from "../src/moonbit";
+import {
+  signCheckpointDeliveryAuthenticationStandard,
+} from "../src/checkpoint-delivery-crypto";
+import {
+  createStandardWebCryptoBackend,
+} from "../../player-local-runtime/crypto-backend";
 import {
   cleanWitnessAuthorityPathMs,
   cleanWitnessSealPathMs,
@@ -88,19 +95,17 @@ const ACK_POLL_INTERVAL_MS = positiveInteger(
 const PRODUCER_SEED =
   "000102030405060708090a0b0c0d0e0f" +
   "101112131415161718191a1b1c1d1e1f";
-const WITNESS_SEEDS = [
-  "404142434445464748494a4b4c4d4e4f" +
-    "505152535455565758595a5b5c5d5e5f",
-  "606162636465666768696a6b6c6d6e6f" +
-    "707172737475767778797a7b7c7d7e7f",
-  "808182838485868788898a8b8c8d8e8f" +
-    "909192939495969798999a9b9c9d9e9f",
-  "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf" +
-    "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
-];
-const WITNESS_IDS = WITNESS_SEEDS.map((_, index) => `checkpoint-witness-${index}`);
+const WITNESS_IDS = Array.from(
+  { length: 4 },
+  (_, index) => `checkpoint-witness-${index}`,
+);
 const HOSTILE_SOURCE = "192.0.2.10";
 const VALID_SOURCE = "198.51.100.20";
+const standardCryptoBackend = createStandardWebCryptoBackend(crypto);
+const deliveryProducerKey = await standardCryptoBackend.generateSigningKey();
+const deliveryWitnessKeys = await Promise.all(
+  WITNESS_IDS.map(() => standardCryptoBackend.generateSigningKey()),
+);
 
 const measurements: RunMeasurement[] = [];
 for (let run = 0; run < RUNS; run++) measurements.push(await measureRun(run));
@@ -112,7 +117,7 @@ console.log(JSON.stringify({
   mode: MODE,
   location_hint: LOCATION_HINT,
   runs: RUNS,
-  crypto: "experimental_sha256_ed25519_unaudited",
+  crypto: "standard_webcrypto_delivery_signing_and_worker_dual_verification",
   source_bucketing: "server_secret_hmac_sha256",
   statistics: {
     percentile_method: "nearest_rank",
@@ -227,7 +232,7 @@ async function measureRun(run: number): Promise<RunMeasurement> {
     checkpoint_digest: `checkpoint-${nonce}`,
     canonical_envelope: `canonical-envelope-${nonce}`,
   };
-  const producerOnly = deliveryFixture(MODE, unit, statement, 0);
+  const producerOnly = await deliveryFixture(MODE, unit, statement);
   await expectStatus(
     "checkpoint configure",
     postJson(`/v1/${MODE}/${unit}/checkpoint-configure`, {
@@ -270,7 +275,8 @@ async function measureRun(run: number): Promise<RunMeasurement> {
   const validApproval = await signCheckpointWitnessApproval({
     collection,
     witnessId: WITNESS_IDS[0],
-    witnessSeedHex: WITNESS_SEEDS[0],
+    signer: deliveryWitnessKeys[0].signer,
+    cryptoBackend: standardCryptoBackend,
   });
   const invalidApproval = { ...validApproval, witness_id: "mallory" };
 
@@ -341,7 +347,8 @@ async function measureRun(run: number): Promise<RunMeasurement> {
       unit,
       collectionId: collection.collection_id,
       witnessId: WITNESS_IDS[index],
-      witnessSeedHex: WITNESS_SEEDS[index],
+      signer: deliveryWitnessKeys[index].signer,
+      cryptoBackend: standardCryptoBackend,
       ...(SOURCE_MODE === "synthetic-headers"
         ? { fetchImpl: sourcedFetch(VALID_SOURCE) }
         : {}),
@@ -456,7 +463,7 @@ async function waitForCheckpointAuthorityAck(
   );
 }
 
-function deliveryFixture(
+async function deliveryFixture(
   mode: AuditMode,
   unit: string,
   statement: {
@@ -466,26 +473,39 @@ function deliveryFixture(
     checkpoint_digest: string;
     canonical_envelope: string;
   },
-  approvalCount: number,
-): DeliveryFixture {
-  return JSON.parse(audit.audit_benchmark_make_checkpoint_delivery_authentication(
-    PRODUCER_SEED,
-    "checkpoint-producer",
-    WITNESS_SEEDS,
-    WITNESS_IDS,
-    3,
-    approvalCount,
-    1,
-    "checkpoint-v1",
-    "manifest-1",
-    `cf:${mode}:${unit}`,
-    unit,
-    statement.destination_id,
-    statement.epoch,
-    statement.previous_checkpoint,
-    statement.checkpoint_digest,
-    statement.canonical_envelope,
-  )) as DeliveryFixture;
+): Promise<DeliveryFixture> {
+  const boundary = {
+    protocol_version: 1,
+    purpose: "checkpoint-v1",
+    manifest_digest: "manifest-1",
+    scope_id: `cf:${mode}:${unit}`,
+    unit_id: unit,
+  };
+  const policy: DeliveryFixture["policy"] = {
+    producer_id: "checkpoint-producer",
+    producer_key: deliveryProducerKey.signer.publicKey,
+    witnesses: WITNESS_IDS.map((witnessId, index) => ({
+      witness_id: witnessId,
+      witness_key: deliveryWitnessKeys[index].signer.publicKey,
+    })),
+    required_approvals: 3,
+  };
+  const runtime = await loadCheckpointRuntime();
+  const authentication = await signCheckpointDeliveryAuthenticationStandard(
+    runtime,
+    {
+      boundary,
+      destinationId: statement.destination_id,
+      epoch: statement.epoch,
+      previousCheckpoint: statement.previous_checkpoint,
+      checkpointDigest: statement.checkpoint_digest,
+      canonicalEnvelope: statement.canonical_envelope,
+    },
+    policy.producer_id,
+    deliveryProducerKey.signer,
+    standardCryptoBackend,
+  );
+  return { ok: true, policy, authentication };
 }
 
 function sourcedFetch(source: string): typeof fetch {

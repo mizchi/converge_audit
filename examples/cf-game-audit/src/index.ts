@@ -87,7 +87,6 @@ import {
   verifyOpenWorldPveReplayBundle,
   verifyPveReplayBundle,
   verifyPvpReplayBundle,
-  verifyCheckpointDeliveryAuthenticationSync,
   type AnchorHeadDecision,
   type CentralReplayArtifactDecision,
   type CheckpointDeliveryAuthentication,
@@ -97,6 +96,17 @@ import {
   type ExpectedInventoryCheckpointAsset,
   type VerifiedItemCreation,
 } from "./moonbit";
+import {
+  verifyCheckpointDeliveryAuthenticationDual,
+  verifyCheckpointDeliveryAuthenticationPartialDual,
+} from "./checkpoint-delivery-crypto";
+import {
+  EXPERIMENTAL_MOONBIT_BACKEND_ID,
+  createStandardWebCryptoBackend,
+  cryptoRuntimeAdmission,
+  type AuditCryptoBackendDescriptor,
+  type CryptoRuntimeProfile,
+} from "../../player-local-runtime/crypto-backend";
 
 export interface Env {
   AUDIT_SHARD: DurableObjectNamespace<GameAuditShard>;
@@ -106,6 +116,8 @@ export interface Env {
   LINEAGE_ARBITER_ROSTER?: string;
   LINEAGE_DECISION_MAX_CLOCK_SKEW_MS?: string;
   EVIDENCE_HOLD_SOURCE_ROSTER?: string;
+  AUDIT_RUNTIME_PROFILE?: CryptoRuntimeProfile;
+  AUDIT_CRYPTO_BACKEND?: string;
 }
 
 export type { CheckpointDeliveryJob } from "./checkpoint-runtime";
@@ -552,9 +564,57 @@ const EXPLICIT_REPLAY_REASONS: Record<AuditMode, ReadonlySet<ReplayReason>> = {
 };
 let witnessSourceBucketKeySecret: string | undefined;
 let witnessSourceBucketKeyPromise: Promise<CryptoKey> | undefined;
+const ACTIVE_WORKER_CRYPTO_BACKEND: AuditCryptoBackendDescriptor =
+  Object.freeze({
+    id: EXPERIMENTAL_MOONBIT_BACKEND_ID,
+    assurance: "experimental",
+    hashScheme: "sha256-v1",
+    signatureScheme: "ed25519-v1",
+  });
+const standardCheckpointDeliveryCryptoBackend =
+  createStandardWebCryptoBackend(crypto);
+
+function workerCryptoAdmission(env: Env):
+  | { ok: true }
+  | {
+    ok: false;
+    reason:
+      | "invalid_runtime_profile"
+      | "configured_backend_not_connected"
+      | "production_backend_required"
+      | "backend_not_allowlisted";
+  } {
+  const profile = env.AUDIT_RUNTIME_PROFILE ?? "development";
+  if (
+    profile !== "development" && profile !== "test" &&
+    profile !== "production"
+  ) {
+    return { ok: false, reason: "invalid_runtime_profile" };
+  }
+  if (
+    env.AUDIT_CRYPTO_BACKEND !== undefined &&
+    env.AUDIT_CRYPTO_BACKEND !== ACTIVE_WORKER_CRYPTO_BACKEND.id
+  ) {
+    return { ok: false, reason: "configured_backend_not_connected" };
+  }
+  return cryptoRuntimeAdmission(profile, ACTIVE_WORKER_CRYPTO_BACKEND);
+}
+
+function workerCryptoRefusalResponse(env: Env): Response | undefined {
+  const admission = workerCryptoAdmission(env);
+  return admission.ok
+    ? undefined
+    : jsonResponse({
+      ok: false,
+      error: "production_crypto_backend_refused",
+      reason: admission.reason,
+    }, 503);
+}
 
 const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const cryptoRefusal = workerCryptoRefusalResponse(env);
+    if (cryptoRefusal) return cryptoRefusal;
     const url = new URL(request.url);
     if (url.pathname === "/health") {
       return jsonResponse({ ok: true, service: "converge-game-audit" });
@@ -622,6 +682,15 @@ const worker = {
     env: Env,
     _ctx: ExecutionContext,
   ): Promise<void> {
+    const cryptoAdmission = workerCryptoAdmission(env);
+    if (!cryptoAdmission.ok) {
+      console.error(JSON.stringify({
+        event: "audit_queue_crypto_refused",
+        reason: cryptoAdmission.reason,
+      }));
+      for (const message of batch.messages) message.retry();
+      return;
+    }
     for (const message of batch.messages) {
       logAuditQueueMessageShape(batch.queue, message.body);
       const decoded = decodeAuditQueueBody(message.body);
@@ -1416,6 +1485,8 @@ export class GameAuditShard extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
+    const cryptoRefusal = workerCryptoRefusalResponse(this.auditEnv);
+    if (cryptoRefusal) return cryptoRefusal;
     const url = new URL(request.url);
     const mode = request.headers.get("x-audit-mode");
     const unit = request.headers.get("x-audit-unit");
@@ -1528,6 +1599,14 @@ export class GameAuditShard extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    const cryptoAdmission = workerCryptoAdmission(this.auditEnv);
+    if (!cryptoAdmission.ok) {
+      console.error(JSON.stringify({
+        event: "audit_alarm_crypto_refused",
+        reason: cryptoAdmission.reason,
+      }));
+      return;
+    }
     const pending = this.ctx.storage.sql.exec<ReplayOutboxRow>(
       `SELECT idempotency_key, reason, epoch, digest, status, attempts,
               checkpoint_digest, created_at, queued_at, delivered_at,
@@ -1943,22 +2022,49 @@ export class GameAuditShard extends DurableObject<Env> {
       !isCheckpointDeliveryAuthentication(producerAuthentication)
     ) return jsonError("invalid_checkpoint_witness_collection", 400);
     const runtimeCapability = await loadCheckpointRuntime();
+    const statement: CheckpointWitnessStatement = {
+      boundary: checkpointBoundaryFromConfig(runtimeConfig),
+      destination_id: destinationId,
+      epoch,
+      previous_checkpoint: previousCheckpoint,
+      checkpoint_digest: checkpointDigest,
+      canonical_envelope: canonicalEnvelope,
+    };
+    const producerVerification =
+      await verifyCheckpointDeliveryAuthenticationPartialDual(
+        runtimeCapability,
+        {
+          boundary: statement.boundary,
+          destinationId: statement.destination_id,
+          epoch: statement.epoch,
+          previousCheckpoint: statement.previous_checkpoint,
+          checkpointDigest: statement.checkpoint_digest,
+          canonicalEnvelope: statement.canonical_envelope,
+          policy,
+          authentication: producerAuthentication,
+        },
+        standardCheckpointDeliveryCryptoBackend,
+      );
+    if (!producerVerification.ok) {
+      return jsonResponse(
+        {
+          ok: false,
+          decision: "refused",
+          reason: producerVerification.error,
+        },
+        409,
+      );
+    }
     const result = this.checkpointWitnessCollections.start(
       runtimeCapability,
       {
-        statement: {
-          boundary: checkpointBoundaryFromConfig(runtimeConfig),
-          destination_id: destinationId,
-          epoch,
-          previous_checkpoint: previousCheckpoint,
-          checkpoint_digest: checkpointDigest,
-          canonical_envelope: canonicalEnvelope,
-        },
+        statement,
         producer_authentication: producerAuthentication,
         deadline_at: deadlineAt,
       },
       policy,
       now,
+      producerVerification.capability,
     );
     if (result.decision === "conflict") {
       return jsonError("checkpoint_witness_collection_conflict", 409);
@@ -2038,12 +2144,32 @@ export class GameAuditShard extends DurableObject<Env> {
       return response;
     }
     const runtimeCapability = await loadCheckpointRuntime();
+    const candidate = this.checkpointWitnessCollections
+      .submissionAuthenticationInput(collectionId, approval, policy);
+    if (!candidate) {
+      return jsonError("checkpoint_witness_collection_not_found", 404);
+    }
+    const approvalVerification =
+      await verifyCheckpointDeliveryAuthenticationPartialDual(
+        runtimeCapability,
+        candidate.input,
+        standardCheckpointDeliveryCryptoBackend,
+      );
+    if (!approvalVerification.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "refused",
+        reason: approvalVerification.error,
+        approval_count: candidate.approval_count,
+      }, 409);
+    }
     const result = this.checkpointWitnessCollections.submit(
       runtimeCapability,
       collectionId,
       approval,
       policy,
       now,
+      approvalVerification.capability,
     );
     if (result.decision === "unknown") {
       return jsonError("checkpoint_witness_collection_not_found", 404);
@@ -2171,7 +2297,7 @@ export class GameAuditShard extends DurableObject<Env> {
       }
     }
     for (const value of effectiveAuthentications) {
-      const verification = verifyCheckpointDeliveryAuthenticationSync(
+      const verification = await verifyCheckpointDeliveryAuthenticationDual(
         runtimeCapability,
         {
         boundary,
@@ -2183,6 +2309,7 @@ export class GameAuditShard extends DurableObject<Env> {
         policy,
         authentication: value.authentication,
         },
+        standardCheckpointDeliveryCryptoBackend,
       );
       if (!verification.ok) {
         return jsonResponse(
@@ -2269,9 +2396,10 @@ export class GameAuditShard extends DurableObject<Env> {
       return jsonError("invalid_checkpoint_delivery", 400);
     }
     const runtimeCapability = await loadCheckpointRuntime();
-    const authentication = this.checkpointReceiver.authenticate(
+    const authentication = await this.checkpointReceiver.authenticate(
       runtimeCapability,
       body.value,
+      standardCheckpointDeliveryCryptoBackend,
     );
     if (authentication.decision === "not_configured") {
       return jsonError("checkpoint_receiver_not_configured", 409);

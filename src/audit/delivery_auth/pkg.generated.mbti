@@ -10,6 +10,8 @@ import {
 // Values
 pub fn open_authenticated_checkpoint_delivery(&@converge_audit.Hasher, &@converge_audit.Verifier, DeliveryAuthenticationPolicy, SignedCheckpointDelivery, Array[SignedCheckpointDeliveryApproval]) -> DeliveryAuthenticationResult
 
+pub fn serialize_checkpoint_delivery_approval(@converge_audit.Digest, String) -> String
+
 pub fn serialize_checkpoint_delivery_statement(CheckpointDeliveryStatement) -> String
 
 pub fn sign_checkpoint_delivery(&@converge_audit.Hasher, &@converge_audit.Signer, String, CheckpointDeliveryStatement) -> SignedCheckpointDelivery

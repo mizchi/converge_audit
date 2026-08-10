@@ -18,6 +18,8 @@ import {
 } from "./asset-ownership";
 import {
   signGameItemOwnerProof,
+  signGameItemOwnerProofAsync,
+  type AsyncGameOwnerSigner,
   verifyGameItemOwnerProof,
   type GameOwnerSignatureVerifier,
   type GameOwnerSigner,
@@ -268,6 +270,27 @@ export function authenticateGameItemVerificationRequest(
   signer: GameOwnerSigner,
 ): GameItemVerificationRequest {
   const owner_signature = signGameItemOwnerProof(
+    unit,
+    {
+      playerId: request.player_id,
+      seed: request.seed,
+      checkpointDigest: request.checkpoint.checkpoint_digest,
+      assetId: request.asset_id,
+      ownerPublicKey: request.owner_public_key,
+    },
+    digest,
+    signer,
+  );
+  return { ...request, owner_signature };
+}
+
+export async function authenticateGameItemVerificationRequestAsync(
+  unit: string,
+  request: UnsignedGameItemVerificationRequest,
+  digest: AuditDigestAdapter,
+  signer: AsyncGameOwnerSigner,
+): Promise<GameItemVerificationRequest> {
+  const owner_signature = await signGameItemOwnerProofAsync(
     unit,
     {
       playerId: request.player_id,

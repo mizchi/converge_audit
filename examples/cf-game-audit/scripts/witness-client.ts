@@ -1,5 +1,5 @@
 import {
-  approveCheckpointWitnessCollection,
+  approveCheckpointWitnessCollectionWithLegacySeed,
   type AuditMode,
 } from "../src/witness-client";
 
@@ -17,7 +17,7 @@ if (!witnessSeedHex) {
 }
 
 const started = performance.now();
-const result = await approveCheckpointWitnessCollection({
+const result = await approveCheckpointWitnessCollectionWithLegacySeed({
   baseUrl,
   mode: modeValue,
   unit,
