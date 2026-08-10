@@ -30,11 +30,51 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 }
 
 ///|
-fn hash_leaf(hasher : &@bft.Hasher, payload : String) -> @bft.Digest {
+/// Canonical preimage for one Merkle leaf hash.
+pub fn canonical_leaf_payload(payload : String) -> String {
   let buffer = StringBuilder::new()
   append_field(buffer, "merkle-leaf-v1")
   append_field(buffer, payload)
-  hasher.hash_string(buffer.to_string())
+  buffer.to_string()
+}
+
+///|
+/// Canonical preimage for one internal Merkle node hash.
+pub fn canonical_node_payload(
+  left : @bft.Digest,
+  right : @bft.Digest,
+) -> String {
+  let buffer = StringBuilder::new()
+  append_field(buffer, "merkle-node-v1")
+  append_field(buffer, left.0)
+  append_field(buffer, right.0)
+  buffer.to_string()
+}
+
+///|
+/// Canonical preimage for an empty Merkle tree content hash.
+pub fn canonical_empty_payload() -> String {
+  let buffer = StringBuilder::new()
+  append_field(buffer, "merkle-empty-v1")
+  buffer.to_string()
+}
+
+///|
+/// Canonical preimage binding a content root to its exact leaf count.
+pub fn canonical_root_payload(
+  leaf_count : Int,
+  content_root : @bft.Digest,
+) -> String {
+  let buffer = StringBuilder::new()
+  append_field(buffer, "merkle-root-v1")
+  append_field(buffer, leaf_count.to_string())
+  append_field(buffer, content_root.0)
+  buffer.to_string()
+}
+
+///|
+fn hash_leaf(hasher : &@bft.Hasher, payload : String) -> @bft.Digest {
+  hasher.hash_string(canonical_leaf_payload(payload))
 }
 
 ///|
@@ -43,18 +83,12 @@ fn hash_node(
   left : @bft.Digest,
   right : @bft.Digest,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
-  append_field(buffer, "merkle-node-v1")
-  append_field(buffer, left.0)
-  append_field(buffer, right.0)
-  hasher.hash_string(buffer.to_string())
+  hasher.hash_string(canonical_node_payload(left, right))
 }
 
 ///|
 fn hash_empty(hasher : &@bft.Hasher) -> @bft.Digest {
-  let buffer = StringBuilder::new()
-  append_field(buffer, "merkle-empty-v1")
-  hasher.hash_string(buffer.to_string())
+  hasher.hash_string(canonical_empty_payload())
 }
 
 ///|
@@ -63,11 +97,7 @@ fn hash_root(
   leaf_count : Int,
   content_root : @bft.Digest,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
-  append_field(buffer, "merkle-root-v1")
-  append_field(buffer, leaf_count.to_string())
-  append_field(buffer, content_root.0)
-  hasher.hash_string(buffer.to_string())
+  hasher.hash_string(canonical_root_payload(leaf_count, content_root))
 }
 
 ///|

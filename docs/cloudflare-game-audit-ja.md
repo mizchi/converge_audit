@@ -444,7 +444,9 @@ pnpm bench:witness
 | Cloudflare apac-ne hintでcheckpoint/Queue/inventoryのend-to-end値を得られる | 64-head×3 mode remote benchmark | Measured once |
 | remote peerからmode policyどおりquorumを収集する | 公開pull、端末ローカル署名submit、durable collection、deadline、collection-backed seal、HMAC-source fixed window、全mode apac-ne + PvP wnam/weur各20 run | 全mode remote E2E、outbound push・global fairnessはPending |
 | checkpoint outboxを配送しACKで完了する | direct DO RPC、lease/alarm retry、historical Duplicate ACK | Tested locally + remote 20/20、本番ACK-loss回復を観測 |
-| reference item/transfer/listing/cancelのowner proofを標準暗号で受理する | browser WebCrypto SHA-256/Ed25519 + Worker WebCrypto/MoonBit dual verifier + workerd integration | Tested locally。game checkpoint/journal暗号は移行対象に残る |
+| reference item/transfer/listing/cancelのowner proofを標準暗号で受理する | browser WebCrypto SHA-256/Ed25519 + Worker WebCrypto/MoonBit dual verifier + workerd integration | Tested locally |
+| reference checkpoint/journalを標準暗号でも検証する | MoonBit canonical Merkle preimage + level-parallel WebCrypto + single game replay dual commitment + browser pre-persist gate | Tested locally。remote再計測はPending |
+| reference receipt/head/transfer/listing/checkpoint receipt IDを標準暗号でも検証する | canonical sync/async ID adapter + Worker pre-transaction/pre-response dual gate + broken-backend negative control | Tested locally。remote再計測はPending |
 | production cryptoである | unaudited experimental adapter | Unmet |
 
 checkpoint transportはinternal DO RPCを通常の認証済みchannelとして扱い、Queue consumerを

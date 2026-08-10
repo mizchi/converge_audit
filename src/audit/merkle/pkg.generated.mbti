@@ -7,6 +7,14 @@ import {
 }
 
 // Values
+pub fn canonical_empty_payload() -> String
+
+pub fn canonical_leaf_payload(String) -> String
+
+pub fn canonical_node_payload(@converge_audit.Digest, @converge_audit.Digest) -> String
+
+pub fn canonical_root_payload(Int, @converge_audit.Digest) -> String
+
 pub fn verify_inclusion(&@converge_audit.Hasher, String, @converge_audit.Digest, MerkleProof) -> Bool
 
 // Errors

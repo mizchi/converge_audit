@@ -1,6 +1,7 @@
 import {
   gameItemTransferProofDigest,
   verifyGameItemTransferProof,
+  type AsyncGameOwnerDigestAdapter,
   type GameItemTransferProofBoundary,
   type GameOwnerDigestAdapter,
   type GameOwnerSignatureVerifier,
@@ -78,6 +79,22 @@ export function canonicalGameAssetOwnershipHead(
   ]);
 }
 
+export function gameAssetOwnershipHeadId(
+  unit: string,
+  head: Omit<GameAssetOwnershipHead, "headId">,
+  digest: GameOwnerDigestAdapter,
+): string {
+  return digest.hashString(canonicalGameAssetOwnershipHead(unit, head));
+}
+
+export function gameAssetOwnershipHeadIdAsync(
+  unit: string,
+  head: Omit<GameAssetOwnershipHead, "headId">,
+  digest: AsyncGameOwnerDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalGameAssetOwnershipHead(unit, head));
+}
+
 function ownershipHeadWithId(
   unit: string,
   head: Omit<GameAssetOwnershipHead, "headId">,
@@ -85,7 +102,7 @@ function ownershipHeadWithId(
 ): GameAssetOwnershipHead {
   return {
     ...head,
-    headId: digest.hashString(canonicalGameAssetOwnershipHead(unit, head)),
+    headId: gameAssetOwnershipHeadId(unit, head, digest),
   };
 }
 

@@ -3,7 +3,11 @@ import {
   audit_browser_ed25519_public_key,
   audit_browser_ed25519_sign,
   audit_browser_ed25519_verify,
+  audit_browser_merkle_empty_payload,
+  audit_browser_merkle_leaf_payload,
+  audit_browser_merkle_node_payload,
   audit_browser_merkle_root,
+  audit_browser_merkle_root_payload,
   audit_browser_sha256,
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
 import {
@@ -17,13 +21,18 @@ import {
   authenticateGameItemVerificationRequest,
   buildGameCheckpointVerificationRequest,
   buildGameItemVerificationRequest,
+  gameCheckpointAuthorityReceiptId,
+  gameCheckpointAuthorityReceiptIdAsync,
+  gameItemAuthorityReceiptIdAsync,
   verifyGameCheckpoint,
+  verifyGameCheckpointDual,
   verifyGameItemCreation,
   verifyGameItemCreationOwnerProofAsync,
   type GameItemVerificationRequest,
 } from "../game/authority/item-verification";
 import { advanceGame, createInitialGame } from "../game/kernel";
 import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypto-backend";
+import { createAsyncAuditDigestAdapter } from "../../player-local-runtime/merkle-digest";
 
 const digest: AuditDigestAdapter = {
   hashString: audit_browser_sha256,
@@ -140,6 +149,32 @@ function resign(request: GameItemVerificationRequest): void {
 }
 
 describe("high-value item authority replay", () => {
+  it("requires standard WebCrypto and MoonBit checkpoint commitments to agree", async () => {
+    const standardBackend = createStandardWebCryptoBackend(crypto);
+    const standardDigest = createAsyncAuditDigestAdapter(standardBackend, {
+      leaf: audit_browser_merkle_leaf_payload,
+      node: audit_browser_merkle_node_payload,
+      empty: audit_browser_merkle_empty_payload,
+      root: audit_browser_merkle_root_payload,
+    });
+    const { request } = droppedRun();
+
+    const verified = await verifyGameCheckpointDual(
+      request,
+      digest,
+      standardDigest,
+    );
+    expect(verified.ok).toBe(true);
+    await expect(verifyGameCheckpointDual(
+      request,
+      digest,
+      {
+        hashString: async () => "0".repeat(64),
+        merkleRoot: async () => "0".repeat(64),
+      },
+    )).resolves.toEqual({ ok: false, reason: "checkpoint_mismatch" });
+  });
+
   it("preflights the wire request with standard WebCrypto before replay", async () => {
     const standard = createStandardWebCryptoBackend(crypto);
     const { request } = droppedRun();
@@ -282,6 +317,46 @@ describe("high-value item authority replay", () => {
       inventoryEpoch: 0,
     });
     expect(verified.receipt.authorityReceiptId).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("derives the authority receipt identically with WebCrypto", async () => {
+    const standard = createStandardWebCryptoBackend(crypto);
+    const { request } = droppedRun();
+    const verified = verifyGameItemCreation(
+      "encounter-1",
+      request,
+      digest,
+      signatureVerifier,
+    );
+    if (!verified.ok) throw new Error(verified.reason);
+
+    await expect(gameItemAuthorityReceiptIdAsync(
+      "encounter-1",
+      verified.receipt,
+      standard,
+    )).resolves.toBe(verified.receipt.authorityReceiptId);
+  });
+
+  it("derives the checkpoint receipt identically with WebCrypto", async () => {
+    const standard = createStandardWebCryptoBackend(crypto);
+    const { request } = droppedRun();
+    const identity = {
+      playerId: request.player_id,
+      seed: request.seed,
+      epoch: request.checkpoint.epoch,
+      checkpointDigest: request.checkpoint.checkpoint_digest,
+    };
+    const moonBitId = gameCheckpointAuthorityReceiptId(
+      "encounter-1",
+      identity,
+      digest,
+    );
+
+    await expect(gameCheckpointAuthorityReceiptIdAsync(
+      "encounter-1",
+      identity,
+      standard,
+    )).resolves.toBe(moonBitId);
   });
 
   it("rejects a self-recommitted leaf whose claimed drop differs from replay", () => {

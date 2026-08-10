@@ -7,10 +7,12 @@ import {
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
 import {
   createInitialGameAssetOwnershipHead,
+  gameAssetOwnershipHeadIdAsync,
   verifyAndApplyGameItemTransfer,
   type GameItemTransferRequest,
 } from "../game/authority/asset-ownership";
 import { gameItemTransferProofDigest } from "../game/authority/owner-authentication";
+import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypto-backend";
 
 const senderSeed =
   "000102030405060708090a0b0c0d0e0f" +
@@ -55,6 +57,44 @@ function signedTransfer(
 }
 
 describe("reference game asset ownership head", () => {
+  it("derives the same ownership heads with WebCrypto and MoonBit", async () => {
+    const standard = createStandardWebCryptoBackend(crypto);
+    const initial = createInitialGameAssetOwnershipHead(unit, origin, digest);
+
+    await expect(gameAssetOwnershipHeadIdAsync(
+      unit,
+      initial,
+      standard,
+    )).resolves.toBe(initial.headId);
+    const transferred = verifyAndApplyGameItemTransfer(
+      unit,
+      initial,
+      signedTransfer(),
+      digest,
+      verifier,
+    );
+    expect(transferred.ok).toBe(true);
+    if (!transferred.ok) throw new Error(transferred.reason);
+    await expect(gameAssetOwnershipHeadIdAsync(
+      unit,
+      transferred.head,
+      standard,
+    )).resolves.toBe(transferred.head.headId);
+  });
+
+  it("detects an incompatible asynchronous ownership-head backend", async () => {
+    const initial = createInitialGameAssetOwnershipHead(unit, origin, digest);
+    const incompatible = {
+      hashString: async (_value: string) => "0".repeat(64),
+    };
+
+    await expect(gameAssetOwnershipHeadIdAsync(
+      unit,
+      initial,
+      incompatible,
+    )).resolves.not.toBe(initial.headId);
+  });
+
   it("derives a deterministic version-zero head from the authority receipt", () => {
     const first = createInitialGameAssetOwnershipHead(unit, origin, digest);
     const second = createInitialGameAssetOwnershipHead(unit, origin, digest);

@@ -73,8 +73,10 @@ provisionalであり、監査不成立なら最後のACK地点までinventory li
 - 1 tickを入力とcanonical effect集合からなる一つのleafにする。
 - 30 leafを`mizchi/converge_audit/audit/merkle`のMerkle rootへ畳み込み、最終game state digestと前checkpointを
   micro checkpoint envelopeへ束縛する。
-- SHA-256とMerkle framingはTypeScriptへ複製せず、`src/x/game_audit/browser_bridge`からMoonBit実装を
-  browser bundleへ直接linkする。
+- Merkle leaf/node/rootの長さ付きdomain separationはTypeScriptへ複製せず、`src/audit/merkle`がcanonical
+  preimageを定義する。リアルタイム生成はMoonBit SHA-256を使い、sealed checkpointはIndexedDB保存前に同じ
+  preimageを標準WebCryptoで再計算する。30 leafではleaf 30 + internal node 30 + root 1の計61 hashを、
+  levelごとに並列化して処理する。
 - drop effectに含まれるasset IDを、そのtickを含むmicro checkpointへ明示的に束縛する。
 - sealed segmentのleafはroot生成後も保持し、challenge時のproof/replayに備える。
 - game stateとjournalを一つのsnapshotとしてIndexedDBへ保存する。保存は完全なmicro境界だけで行い、
@@ -83,7 +85,10 @@ provisionalであり、監査不成立なら最後のACK地点までinventory li
   別のIndexedDB storeへ保存する。公開鍵は
   genesis digestへ含めるため、item精算直前に別鍵へ差し替えた自己整合ログは元のcheckpoint chainと一致しない。
 - item精算、transfer、listing、cancelのowner proofはcanonical文のSHA-256とEd25519署名を標準WebCryptoで
-  生成する。game event leaf、checkpoint、Merkle rootは引き続きMoonBit実装を使う。
+  生成する。game event leaf、checkpoint、Merkle rootはMoonBitで同期生成した後、保存・authority受理境界で
+  標準WebCryptoとの一致を要求する。
+- origin item receipt、初期/移転後ownership head、transfer ID、listing ID、checkpoint receiptも、MoonBit側と
+  標準WebCrypto側で同じcanonical文から同じIDへ到達した場合だけSQLite更新またはauthority応答へ進む。
 - micro未満の未保存tickはreload時に失われる。初期cadenceでは最大29 tick、約0.97秒である。
 
 IndexedDBは端末故障や改造clientに対する信頼根拠ではない。ここで保証するのはローカルcrash時の一貫した
@@ -147,9 +152,11 @@ POST /v1/pve/:unit/game-item-verifications
 - client申告のeffectを信頼せず、canonical leafから入力だけを取り出す。epoch 0はtick 1から、後続epochは
   authority保存済みparent stateから共有kernelを再実行する。
 - 再生成したeffect payload、tickごとのasset ID、Merkle root、最終state digest、genesis、checkpoint
-  envelope/digestを完全一致で検査する。
+  envelope/digestを完全一致で検査する。game kernelのreplayは一度だけ行い、その結果に対して標準WebCryptoと
+  MoonBit SHA-256/Merkleの両方が同じcommitmentへ到達した場合だけSQLiteへ保存する。
 - replayで実際に生成されたassetだけに、unit・checkpoint・asset・owner・epochへ束縛した
-  `authority_receipt_id`を発行する。
+  `authority_receipt_id`を発行する。receipt IDとversion 0 ownership headは標準WebCryptoでも再計算し、両方が
+  MoonBit側のIDと一致した後にだけ同じSQLite transactionへ渡す。
 - `owner_signature`はunit・player・seed・checkpoint・asset・genesis束縛済み公開鍵のcanonical digestへ署名する。
   clientは標準WebCryptoでSHA-256と署名を行う。Workerは高価なsegment replayより先に標準WebCryptoで
   proof-of-possessionを検査し、同じcanonical digestをMoonBit Ed25519 bridgeでも再検証する。両方を通過した
@@ -190,7 +197,7 @@ transfer文はunit、origin receipt、直前head、両owner identity/key、連�
 新ownerが同意しないitemの押し付けを拒否する。`next_version == previous_version + 1`かつ保存済みheadとの完全一致
 だけが、append-only transfer履歴の追加とper-asset head更新を同じSQLite transactionで行える。同じ二者署名の
 再送は同じtransfer IDへ収束し、stale headやversion gapは409になる。両者の署名は標準WebCryptoとMoonBit
-bridgeの二重検証を通過してからtransactionへ渡す。
+bridgeの二重検証を通過し、保存済みhead、transfer ID、次head IDも両backendで一致してからtransactionへ渡す。
 
 active listing中のtransferは、listingを古いownerのまま残さないため`asset_listed`で拒否する。正当なcancelを
 保存した後だけtransfer gateが再び開く。
@@ -210,7 +217,8 @@ DOは保存済みitem receiptとasset、authority receipt ID、最新のper-asse
 その後、unit・asset・seller・receipt・公開鍵・owner version・owner head ID・listing nonceに対する
 `owner_signature`を標準WebCryptoとMoonBit bridgeの両方で検証し、
 active listingと署名をSQLiteへ
-冪等保存する。同じ出品の再送は決定的Ed25519署名と同じlisting IDで`duplicate`へ収束し、receipt偽造、
+冪等保存する。listing IDも同じcanonical境界を両backendでhashし、一致したIDだけを保存する。同じ出品の再送は
+決定的Ed25519署名と同じlisting IDで`duplicate`へ収束し、receipt偽造、
 seller不一致、receiptだけを盗んだ第三者の署名、同一assetの競合listingはfail-closedになる。UIは成功後に
 `common · market listed`と`出品を取り消す`へ遷移する。
 
@@ -231,7 +239,7 @@ POST /v1/pve/:unit/game-market-listing-cancellations
 
 cancel署名はunit、listing ID、asset、seller、origin receipt、出品時のowner key/version/headとnonceを
 canonical化し、標準WebCryptoとMoonBit bridgeの両方で検証する。DOはactive listingと現在owner headの
-両方を完全一致で照合し、同じSQLite行を
+両方を完全一致で照合し、保存済みlisting IDを両backendで再導出してから、同じSQLite行を
 `canceled`へ遷移させる。取消履歴は削除せず、同じnonceから導いたlisting IDは再出品に利用できない。
 一方、新しい256-bit nonceなら同じowner headでも別listing IDとして再出品できる。その後の二者署名transferも
 新しいowner version/headを作るため、新ownerは別listing IDで出品できる。
@@ -249,8 +257,10 @@ version 0だけでなく、二者署名transfer後のownerも出品でき、旧o
 receiptはこのゲーム固有のauthority replay結果であり、汎用peer witness
 quorumの代用ではない。owner keyは自己主権run identityを証明するが、`seller_id`を課金accountや現実の人物へ
 結び付けるものではない。reference実装のowner proof生成とWorker受信は標準WebCryptoへ移行し、移行時の
-差分検出のためMoonBit verifierも併用している。一方、game checkpoint/journalのhash・Merkle・replayなどには
-未監査`experimental_crypto`が残る。productionでは認証済みaccountへの
+差分検出のためMoonBit verifierも併用している。reference checkpoint/journalもsealed保存とWorker受理時に
+標準WebCryptoとMoonBitの一致を要求する。reference固有のreceipt/head/transfer/listing/checkpoint receipt IDも
+SQLite更新・authority応答前に両backendの一致を要求する。一方、同期生成側の`experimental_crypto`と汎用
+open-world lineage proof/裁定certificateのhash・署名検証経路は未移行である。productionでは認証済みaccountへの
 鍵登録、OS keystore/secure enclaveへの昇格、鍵回復・rotation・失効を別途実装する。
 
 ## Cloudflare配置

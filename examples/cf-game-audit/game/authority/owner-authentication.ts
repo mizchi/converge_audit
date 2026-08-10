@@ -183,6 +183,39 @@ export function gameMarketListingProofDigestAsync(
   return digest.hashString(canonicalGameMarketListingProof(unit, boundary));
 }
 
+export function canonicalGameMarketListing(
+  unit: string,
+  boundary: GameMarketListingProofBoundary,
+): string {
+  return JSON.stringify([
+    "audit-survivors-market-listing-v3",
+    unit,
+    boundary.assetId,
+    boundary.sellerId,
+    boundary.authorityReceiptId,
+    boundary.ownerPublicKey,
+    boundary.ownerVersion,
+    boundary.ownerHeadId,
+    boundary.listingNonce,
+  ]);
+}
+
+export function gameMarketListingId(
+  unit: string,
+  boundary: GameMarketListingProofBoundary,
+  digest: GameOwnerDigestAdapter,
+): string {
+  return digest.hashString(canonicalGameMarketListing(unit, boundary));
+}
+
+export function gameMarketListingIdAsync(
+  unit: string,
+  boundary: GameMarketListingProofBoundary,
+  digest: AsyncGameOwnerDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalGameMarketListing(unit, boundary));
+}
+
 export function signGameMarketListingProof(
   unit: string,
   boundary: GameMarketListingProofBoundary,

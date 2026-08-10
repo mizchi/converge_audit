@@ -12,6 +12,9 @@ import {
   signGameMarketListingProofAsync,
   gameItemOwnerProofDigest,
   gameItemTransferProofDigest,
+  gameItemTransferProofDigestAsync,
+  gameMarketListingId,
+  gameMarketListingIdAsync,
   gameMarketListingCancelProofDigest,
   gameMarketListingProofDigest,
   verifyGameItemOwnerProofAsync,
@@ -98,6 +101,17 @@ describe("reference game owner authentication", () => {
       standard,
       signer,
     );
+
+    await expect(gameItemTransferProofDigestAsync(
+      "run-1",
+      transfer,
+      standard,
+    )).resolves.toBe(gameItemTransferProofDigest("run-1", transfer, digest));
+    await expect(gameMarketListingIdAsync(
+      "run-1",
+      listing,
+      standard,
+    )).resolves.toBe(gameMarketListingId("run-1", listing, digest));
 
     await expect(verifyGameItemOwnerProofAsync(
       "run-1",

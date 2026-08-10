@@ -12,6 +12,10 @@ options(
       "exports": [
         "audit_browser_sha256",
         "audit_browser_merkle_root",
+        "audit_browser_merkle_leaf_payload",
+        "audit_browser_merkle_node_payload",
+        "audit_browser_merkle_empty_payload",
+        "audit_browser_merkle_root_payload",
         "audit_browser_ed25519_public_key",
         "audit_browser_ed25519_sign",
         "audit_browser_ed25519_verify",

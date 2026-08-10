@@ -9,6 +9,7 @@ import {
   buildGameCheckpointVerificationRequest,
   authenticateGameItemVerificationRequestAsync,
   buildGameItemVerificationRequest,
+  verifyGameCheckpointCommitmentsAsync,
   type UnsignedGameItemVerificationRequest,
   type GameItemVerificationRequest,
 } from "../../game/authority/item-verification";
@@ -26,7 +27,8 @@ import {
   createStandardWebCryptoBackend,
   cryptoRuntimeAdmission,
 } from "../../../player-local-runtime/crypto-backend";
-import { moonBitAuditDigest } from "./audit/moonbit";
+import { createAsyncAuditDigestAdapter } from "../../../player-local-runtime/merkle-digest";
+import { moonBitAuditDigest, moonBitMerkleFraming } from "./audit/moonbit";
 import {
   requestGameAssetLineageStatus,
   requestGameCheckpointVerification,
@@ -64,6 +66,10 @@ const movementKeys = new Set([
 const pressed = new Set<string>();
 const snapshotStore = new IndexedDbRunSnapshotStore();
 const productionCryptoBackend = createStandardWebCryptoBackend(crypto);
+const productionAuditDigest = createAsyncAuditDigestAdapter(
+  productionCryptoBackend,
+  moonBitMerkleFraming,
+);
 const productionCryptoAdmission = cryptoRuntimeAdmission(
   "production",
   productionCryptoBackend.descriptor,
@@ -334,6 +340,23 @@ function persistSealedRun(checkpoint: GameMicroCheckpoint): void {
   );
   persistenceQueue = persistenceQueue
     .then(async () => {
+      const request = buildGameCheckpointVerificationRequest(
+        snapshot.audit,
+        checkpoint.epoch,
+      );
+      const standardCommitment = await verifyGameCheckpointCommitmentsAsync(
+        request,
+        snapshot.game,
+        productionAuditDigest,
+        checkpoint.epoch === 0
+          ? undefined
+          : snapshot.audit.checkpoints[checkpoint.epoch - 1].checkpointDigest,
+      );
+      if (!standardCommitment.ok) {
+        throw new Error(
+          `standard checkpoint commitment refused: ${standardCommitment.reason}`,
+        );
+      }
       await snapshotStore.save(key, snapshot);
       const runtime = await localCheckpointRuntime;
       if (!runtime) {

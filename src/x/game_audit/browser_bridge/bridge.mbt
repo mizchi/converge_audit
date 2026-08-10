@@ -14,6 +14,33 @@ pub fn audit_browser_merkle_root(payloads : Array[String]) -> String {
 }
 
 ///|
+/// Expose MoonBit-owned Merkle framing for asynchronous platform hashers.
+pub fn audit_browser_merkle_leaf_payload(payload : String) -> String {
+  @merkle.canonical_leaf_payload(payload)
+}
+
+///|
+pub fn audit_browser_merkle_node_payload(
+  left : String,
+  right : String,
+) -> String {
+  @merkle.canonical_node_payload(@bft.Digest(left), @bft.Digest(right))
+}
+
+///|
+pub fn audit_browser_merkle_empty_payload() -> String {
+  @merkle.canonical_empty_payload()
+}
+
+///|
+pub fn audit_browser_merkle_root_payload(
+  leaf_count : Int,
+  content_root : String,
+) -> String {
+  @merkle.canonical_root_payload(leaf_count, @bft.Digest(content_root))
+}
+
+///|
 /// Derive the lower-hex Ed25519 public key for a 32-byte lower/uppercase hex
 /// seed. Empty string is the JavaScript-boundary refusal value.
 pub fn audit_browser_ed25519_public_key(seed_hex : String) -> String {

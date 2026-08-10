@@ -367,8 +367,11 @@ player/authority wire custodyのreference contractは`Implemented + Proven/Model
 標準WebCrypto + MoonBit dual verifierへ接続済みで、witness collection開始と各approvalにもunder-quorumを
 正常に扱うpartial capabilityを要求する。producer/witness署名生成とpeer clientも交換可能な非同期signer、
 標準WebCrypto、送信前producer再検証へ接続済みである。reference gameのitem精算、transfer、listing、cancelも
-標準WebCryptoでowner proofを生成し、Workerで標準WebCrypto + MoonBit dual verifierを通す。game
-checkpoint/journalのhash・Merkle・replayなど、残るWorker暗号経路は未監査backendのままである。
+標準WebCryptoでowner proofを生成し、Workerで標準WebCrypto + MoonBit dual verifierを通す。reference gameの
+checkpoint/journalはMoonBit所有のMerkle framingを標準WebCryptoへ渡し、browser sealed保存前とWorker replay
+受理時にdual commitmentを要求する。origin receipt、ownership head、transfer、listing、checkpoint receiptの
+派生IDもSQLite更新またはauthority応答前に両backendの一致を要求する。汎用open-world lineage proofと裁定
+certificateなど、残るWorker暗号経路は未監査backendのままである。
 production profileでは全route/Queueを拒否するため、production security gate全体は`Partial`。詳細は
 [鍵ライフサイクル契約](./key-lifecycle-ja.md)を参照する。
 
@@ -446,5 +449,7 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 | witness collection | producer/roster/quorum/expiry/fairnessなしにreadyやreceiver更新へ進まない | Quint/TLC、4 roster + 1 intruder | safety 30,720、liveness 19,456 distinct states、反例なし。2 broken gateは期待どおり反例 | `just formal-check` |
 | witness source isolation | 同一sourceのinvalid floodは別sourceのquorum quotaを消費せず、client指定bucketを信用しない | workerd integration + local 20 run + remote単一egress20 run | HMAC secret欠落時503、local別source quorum 20/20、remote 429回復後quorum 20/20。異なるremote source間公平性は未測定 | `pnpm --dir examples/cf-game-audit bench:witness` |
 | reference owner proof | item精算・二者transfer・listing・cancelは同じcanonical文を標準WebCryptoとMoonBitの両方が受理した場合だけ業務状態を更新する | `AssetOwnership.qnt` auth guard + WebCrypto/MoonBit相互運用test + workerd integration | Model checked + Tested locally。暗号強度そのものは未証明 | `just formal-check` + `pnpm --dir examples/cf-game-audit test` |
+| reference checkpoint commitment | game replayは一度だけ行い、MoonBit所有のMerkle framingを使う標準WebCryptoとMoonBitがevent root/state/genesis/chain/envelope digestで一致した場合だけ保存する | pure async adapter + 0/1/odd/power-of-two/30/Unicode相互運用test + broken-backend negative control + workerd integration | Tested locally。既存replay/finality predicateはMoonBit proof対象、backend等価性と暗号強度は未証明 | `moon test` + `pnpm --dir examples/cf-game-audit test` |
+| reference derived asset identity | origin receiptからownership head、transfer、listingまでのcanonical ID chainとcheckpoint receiptは標準WebCryptoとMoonBitが一致した場合だけSQLite更新またはauthority応答へ進む | pure sync/async ID adapter相互運用test + broken-backend negative control + workerd integration | Tested locally。既存ownership遷移はQuintでmodel checked、backend等価性と暗号強度は未証明 | `just formal-check` + `pnpm --dir examples/cf-game-audit test` |
 | remote checkpoint/witness infrastructure | Worker、direct authority RPC、durable retry、replay Queue、両Secret、公開route | current `a3c07778-037d-40cf-b2e9-5ad55afdec91`、direct 20-run + deferred alarm smoke artifacts | Deployed + authority ACK 20/20、現行version direct/deferred各1/1 | [Cloudflare実測](./cloudflare-game-audit-ja.md) |
 | production crypto | signature/hashが攻撃耐性を持つ | security audit未実施 | unresolved | audited backendなしにproduction claimを禁止 |

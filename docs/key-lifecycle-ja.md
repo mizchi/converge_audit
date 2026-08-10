@@ -14,7 +14,9 @@ routine rotation後も、authorityは署名時点で有効だった公開鍵reco
 非同期backend、non-extractable browser signer、IndexedDB `CryptoKey` handle保存に加え、
 Workerのcheckpoint配送認証は標準WebCryptoと既存MoonBit verifierの二重検証へ接続済みである。
 reference gameのitem精算・transfer・listing・cancelのowner proofも同じ二重検証へ接続済みだが、
-game checkpoint/journalのhash・Merkle・replayなどは引き続き`experimental_crypto`である。従ってend-to-endの
+reference checkpoint/journalもsealed保存とWorker受理時に標準WebCryptoとの一致を要求する。reference固有の
+authority receipt、ownership head、transfer/listing ID、checkpoint receiptも永続化または応答前に両backendの
+一致を要求する。ただし汎用open-world lineage proofや裁定certificateには`experimental_crypto`が残る。従ってend-to-endの
 production暗号を接続したという主張ではなく、production profileのWorkerはfail-closedになる。
 
 ## 1. 汎用契約とgame固有policyの境界
@@ -215,7 +217,7 @@ aimbot、roster管理者の悪意、暗号実装のconstant-time性、端末at-r
 | implementation observation | 旧delivery policyは公開鍵をcurrent設定へ直接埋め、version/history/署名時刻を持たなかった。browser signerはseedを公開propertyに持っていた |
 | model question | exact key binding、署名時点validity、effective revocation、旧公開鍵historyのどれが必要か |
 | tool | MoonBit proof/Why3、Quint/TLC、Vitest + MoonBit/標準WebCrypto Ed25519 adapter。backend選択は時間遷移を持たない有限predicateなので新しいQuint modelではなくhost regression tableで固定 |
-| machine result | MoonBit 5 proof goals、Quint正常model反例なし、3 broken modelでbinding/validity/revocation反例、正常6 + history deletion 1 scenario、同期/非同期共通preflight、WebCrypto/MoonBit共通vector、標準producer/witness署名生成、peer clientのretarget拒否、checkpoint配送・witness ingress・reference owner proofの標準/MoonBit二重検証、production gate、IndexedDB restart/migration、browser E2Eをtest |
+| machine result | MoonBit 5 proof goals、Quint正常model反例なし、3 broken modelでbinding/validity/revocation反例、正常6 + history deletion 1 scenario、同期/非同期共通preflight、WebCrypto/MoonBit共通vector、標準producer/witness署名生成、peer clientのretarget拒否、checkpoint配送・witness ingress・reference owner proof/checkpoint commitment/derived asset identityの標準/MoonBit二重検証、production gate、IndexedDB restart/migration、browser E2Eをtest |
 | witness | version bindingを外すとV2署名をV1として受理、validityを外すとV1終了境界の署名を受理、revocationを外すとeffective boundary上の署名を受理。旧recordを削除するとrotation後の正当なV1 checkpointを検証不能 |
 | domain wording | 鍵を更新しても過去の正当な戦利品を失効させない。一方、侵害期間に作られたcheckpointは後からmarketplaceで止められる |
 | decision | validityはverification timeでなくsigned issuance timeに適用する。revocationはretroactiveに設定可能なeffective boundaryとし、公開鍵historyを証拠保持期間中archiveする |
@@ -225,6 +227,6 @@ checkpoint配送は、MoonBitが生成するcanonical bytesを標準WebCryptoで
 verifierも同じopaque capabilityへ到達した場合だけwitness collection、source seal、receiver mutationへ進む。
 producer/witness署名生成も同じMoonBit serializerと交換可能な非同期signerを使い、生成署名を送信前に自己検証する。
 収集中の正当な`under_quorum`にはexact-bound partial capabilityを発行する。未解決なのは、
-game checkpoint/journalに残るWorker同期hash/verifierの標準backend化、上記SQL relationのCloudflare/端末DB migration、
+汎用open-world lineage proofや裁定certificateに残るWorker同期hash/verifierの標準backend化、上記SQL relationのCloudflare/端末DB migration、
 authority署名鍵の外部custody、timestamp trust、backend/providerの運用監査である。
 browser custodyだけを根拠にIssue #9全体を完了扱いしてはならない。

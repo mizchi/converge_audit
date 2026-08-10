@@ -25,6 +25,7 @@ import { decodeAuditQueueBody } from "./queue-wire";
 import {
   referenceGameDigest,
   referenceGameLineageDecisionVerifiers,
+  referenceGameMerkleFraming,
   referenceGameOwnerVerifier,
 } from "./reference-game";
 import {
@@ -47,9 +48,13 @@ import {
 import type { AuditDigestAdapter } from "../game/audit/journal";
 import {
   decodeGameCheckpointVerificationRequest,
-  verifyGameCheckpoint,
+  gameCheckpointAuthorityReceiptId,
+  gameCheckpointAuthorityReceiptIdAsync,
+  gameItemAuthorityReceiptIdAsync,
+  verifyGameCheckpointDual,
   verifyGameItemCreation,
   verifyGameItemCreationOwnerProofAsync,
+  verifyReplayedGameCheckpointCommitmentsAsync,
   type GameCheckpointVerificationParent,
   type GameCheckpointVerificationRequest,
   type GameItemAuthorityReceipt,
@@ -57,6 +62,9 @@ import {
 import type { GameState } from "../game/kernel";
 import {
   gameItemTransferProofDigest,
+  gameItemTransferProofDigestAsync,
+  gameMarketListingId,
+  gameMarketListingIdAsync,
   verifyGameItemTransferProof,
   verifyGameItemTransferProofAsync,
   verifyGameMarketListingCancelProof,
@@ -66,6 +74,7 @@ import {
 } from "../game/authority/owner-authentication";
 import {
   createInitialGameAssetOwnershipHead,
+  gameAssetOwnershipHeadIdAsync,
   verifyAndApplyGameItemTransfer,
   type GameAssetOwnershipHead,
   type GameItemTransferRequest,
@@ -111,6 +120,7 @@ import {
   type AuditCryptoBackendDescriptor,
   type CryptoRuntimeProfile,
 } from "../../player-local-runtime/crypto-backend";
+import { createAsyncAuditDigestAdapter } from "../../player-local-runtime/merkle-digest";
 
 export interface Env {
   AUDIT_SHARD: DurableObjectNamespace<GameAuditShard>;
@@ -577,6 +587,10 @@ const ACTIVE_WORKER_CRYPTO_BACKEND: AuditCryptoBackendDescriptor =
   });
 const standardWorkerCryptoBackend =
   createStandardWebCryptoBackend(crypto);
+const standardReferenceGameDigest = createAsyncAuditDigestAdapter(
+  standardWorkerCryptoBackend,
+  referenceGameMerkleFraming,
+);
 
 function workerCryptoAdmission(env: Env):
   | { ok: true }
@@ -3324,6 +3338,24 @@ export class GameAuditShard extends DurableObject<Env> {
       : undefined;
   }
 
+  private async referenceGameOwnershipHeadUsesStandardCrypto(
+    unit: string,
+    head: ReferenceGameAssetOwnershipHeadRow,
+  ): Promise<boolean> {
+    return await gameAssetOwnershipHeadIdAsync(
+      unit,
+      {
+        assetId: head.asset_id,
+        authorityReceiptId: head.authority_receipt_id,
+        ownerId: head.owner_id,
+        ownerPublicKey: head.owner_public_key,
+        version: head.owner_version,
+        lastTransferId: head.last_transfer_id,
+      },
+      standardWorkerCryptoBackend,
+    ) === head.owner_head_id;
+  }
+
   private referenceGameVerificationParent(
     request: GameCheckpointVerificationRequest,
   ):
@@ -3439,9 +3471,10 @@ export class GameAuditShard extends DurableObject<Env> {
     if (!decoded) return jsonError("invalid_request", 400);
     const parent = this.referenceGameVerificationParent(decoded);
     if (!parent.ok) return parent.response;
-    const verification = verifyGameCheckpoint(
+    const verification = await verifyGameCheckpointDual(
       decoded,
       referenceGameDigest,
+      standardReferenceGameDigest,
       parent.parent,
     );
     if (!verification.ok) {
@@ -3462,7 +3495,7 @@ export class GameAuditShard extends DurableObject<Env> {
     return jsonResponse({
       ok: true,
       decision,
-      receipt: referenceGameCheckpointReceiptWire(unit, decoded),
+      receipt: await referenceGameCheckpointReceiptWire(unit, decoded),
     }, decision === "verified" ? 201 : 200);
   }
 
@@ -3521,8 +3554,49 @@ export class GameAuditShard extends DurableObject<Env> {
         verification.reason === "invalid_parent_state" ? 500 : 422;
       return jsonResponse({ ok: false, error: verification.reason }, status);
     }
+    const standardCheckpoint =
+      await verifyReplayedGameCheckpointCommitmentsAsync(
+        body.value,
+        verification.state,
+        standardReferenceGameDigest,
+        parent.parent,
+      );
+    if (!standardCheckpoint.ok) {
+      const status = standardCheckpoint.reason === "invalid_request" ? 400 :
+        standardCheckpoint.reason === "unverified_parent" ? 409 :
+        standardCheckpoint.reason === "invalid_parent_state" ? 500 : 422;
+      return jsonResponse({
+        ok: false,
+        error: standardCheckpoint.reason,
+      }, status);
+    }
 
     const { receipt, item } = verification;
+    const [standardReceiptId, standardOwnerHeadId] = await Promise.all([
+      gameItemAuthorityReceiptIdAsync(
+        unit,
+        receipt,
+        standardWorkerCryptoBackend,
+      ),
+      gameAssetOwnershipHeadIdAsync(
+        unit,
+        {
+          assetId: receipt.assetId,
+          authorityReceiptId: receipt.authorityReceiptId,
+          ownerId: receipt.ownerId,
+          ownerPublicKey: receipt.ownerPublicKey,
+          version: receipt.ownerVersion,
+          lastTransferId: receipt.authorityReceiptId,
+        },
+        standardWorkerCryptoBackend,
+      ),
+    ]);
+    if (
+      standardReceiptId !== receipt.authorityReceiptId ||
+      standardOwnerHeadId !== receipt.ownerHeadId
+    ) {
+      return jsonError("reference_game_crypto_mismatch", 500);
+    }
     const now = Date.now();
     const checkpointDecision = this.storeReferenceGameCheckpoint(
       decoded,
@@ -3553,7 +3627,11 @@ export class GameAuditShard extends DurableObject<Env> {
       );
       if (
         !ownershipHead ||
-        ownershipHead.authority_receipt_id !== receipt.authorityReceiptId
+        ownershipHead.authority_receipt_id !== receipt.authorityReceiptId ||
+        !await this.referenceGameOwnershipHeadUsesStandardCrypto(
+          unit,
+          ownershipHead,
+        )
       ) {
         return jsonError("reference_game_owner_head_conflict", 409);
       }
@@ -3748,6 +3826,15 @@ export class GameAuditShard extends DurableObject<Env> {
       transferRequest,
       referenceGameDigest,
     );
+    if (
+      await gameItemTransferProofDigestAsync(
+        unit,
+        transferRequest,
+        standardWorkerCryptoBackend,
+      ) !== transferId
+    ) {
+      return jsonError("reference_game_crypto_mismatch", 500);
+    }
     const existing = this.referenceGameItemTransferAt(transferId);
     if (existing) {
       const current = this.referenceGameOwnershipHeadAt(assetId);
@@ -3773,6 +3860,12 @@ export class GameAuditShard extends DurableObject<Env> {
     if (!currentRow) {
       return jsonError("reference_game_owner_head_unavailable", 409);
     }
+    if (!await this.referenceGameOwnershipHeadUsesStandardCrypto(
+      unit,
+      currentRow,
+    )) {
+      return jsonError("reference_game_crypto_mismatch", 500);
+    }
     const applied = verifyAndApplyGameItemTransfer(
       unit,
       referenceGameOwnershipHeadFromRow(currentRow),
@@ -3793,6 +3886,16 @@ export class GameAuditShard extends DurableObject<Env> {
         decision: applied.reason,
         asset_id: assetId,
       }, status);
+    }
+    if (
+      applied.transferId !== transferId ||
+      await gameAssetOwnershipHeadIdAsync(
+        unit,
+        applied.head,
+        standardWorkerCryptoBackend,
+      ) !== applied.head.headId
+    ) {
+      return jsonError("reference_game_crypto_mismatch", 500);
     }
     const transferredAt = Date.now();
     const transferRow: ReferenceGameItemTransferRow = {
@@ -4002,6 +4105,12 @@ export class GameAuditShard extends DurableObject<Env> {
         seller_id: sellerId,
       }, 409);
     }
+    if (!await this.referenceGameOwnershipHeadUsesStandardCrypto(
+      unit,
+      ownerHead,
+    )) {
+      return jsonError("reference_game_crypto_mismatch", 500);
+    }
     const listingProofBoundary = {
       assetId,
       sellerId,
@@ -4057,17 +4166,20 @@ export class GameAuditShard extends DurableObject<Env> {
         ),
       }, 403);
     }
-    const listingId = referenceGameDigest.hashString(JSON.stringify([
-      "audit-survivors-market-listing-v3",
+    const listingId = gameMarketListingId(
       unit,
-      assetId,
-      sellerId,
-      authorityReceiptId,
-      ownerPublicKey,
-      ownerVersion,
-      ownerHeadId,
-      listingNonce,
-    ]));
+      listingProofBoundary,
+      referenceGameDigest,
+    );
+    if (
+      await gameMarketListingIdAsync(
+        unit,
+        listingProofBoundary,
+        standardWorkerCryptoBackend,
+      ) !== listingId
+    ) {
+      return jsonError("reference_game_crypto_mismatch", 500);
+    }
     const existing = this.ctx.storage.sql.exec<ReferenceGameMarketListingRow>(
       `SELECT listing_id, asset_id, seller_id, authority_receipt_id,
               owner_public_key, owner_signature, owner_version, owner_head_id,
@@ -5347,6 +5459,21 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id: assetId,
       }, 403);
     }
+    const moonBitListingId = gameMarketListingId(
+      unit,
+      cancellationProofBoundary,
+      referenceGameDigest,
+    );
+    if (
+      moonBitListingId !== listingId ||
+      await gameMarketListingIdAsync(
+        unit,
+        cancellationProofBoundary,
+        standardWorkerCryptoBackend,
+      ) !== listingId
+    ) {
+      return jsonError("reference_game_crypto_mismatch", 500);
+    }
     const creation = this.referenceGameItemReceiptAt(assetId);
     if (!creation) {
       return jsonError("reference_game_listing_creation_unavailable", 409);
@@ -5388,6 +5515,12 @@ export class GameAuditShard extends DurableObject<Env> {
         listing_id: listingId,
         asset_id: assetId,
       }, 409);
+    }
+    if (!await this.referenceGameOwnershipHeadUsesStandardCrypto(
+      unit,
+      ownerHead,
+    )) {
+      return jsonError("reference_game_crypto_mismatch", 500);
     }
     const canceledAt = Date.now();
     let canceledListing: ReferenceGameMarketListingRow | undefined;
@@ -7852,21 +7985,35 @@ function referenceGameItemTransferWire(row: ReferenceGameItemTransferRow) {
   };
 }
 
-function referenceGameCheckpointReceiptWire(
+async function referenceGameCheckpointReceiptWire(
   unit: string,
   request: GameCheckpointVerificationRequest,
 ) {
   const checkpoint = request.checkpoint;
+  const identity = {
+    playerId: request.player_id,
+    seed: request.seed,
+    epoch: checkpoint.epoch,
+    checkpointDigest: checkpoint.checkpoint_digest,
+  };
+  const authorityCheckpointReceiptId = gameCheckpointAuthorityReceiptId(
+    unit,
+    identity,
+    referenceGameDigest,
+  );
+  if (
+    await gameCheckpointAuthorityReceiptIdAsync(
+        unit,
+        identity,
+        standardWorkerCryptoBackend,
+      ) !==
+      authorityCheckpointReceiptId
+  ) {
+    throw new Error("reference game checkpoint receipt crypto mismatch");
+  }
   return {
     version: 1,
-    authority_checkpoint_receipt_id: referenceGameDigest.hashString(JSON.stringify([
-      "audit-survivors-authority-checkpoint-receipt-v1",
-      unit,
-      request.player_id,
-      request.seed,
-      checkpoint.epoch,
-      checkpoint.checkpoint_digest,
-    ])),
+    authority_checkpoint_receipt_id: authorityCheckpointReceiptId,
     player_id: request.player_id,
     owner_public_key: request.owner_public_key,
     seed: request.seed,

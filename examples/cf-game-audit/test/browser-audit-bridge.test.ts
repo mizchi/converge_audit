@@ -3,15 +3,46 @@ import {
   audit_browser_ed25519_public_key,
   audit_browser_ed25519_sign,
   audit_browser_ed25519_verify,
+  audit_browser_merkle_empty_payload,
+  audit_browser_merkle_leaf_payload,
+  audit_browser_merkle_node_payload,
+  audit_browser_merkle_root_payload,
   audit_browser_merkle_root,
   audit_browser_sha256,
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
+import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypto-backend";
+import { createAsyncAuditDigestAdapter } from "../../player-local-runtime/merkle-digest";
 import {
   deviceKeyFromSeedHex,
   generateDeviceKey,
 } from "../web/src/audit/device-key";
 
 describe("MoonBit browser audit bridge", () => {
+  it("keeps WebCrypto Merkle roots identical to MoonBit framing", async () => {
+    const standard = createStandardWebCryptoBackend(crypto);
+    const asyncDigest = createAsyncAuditDigestAdapter(standard, {
+      leaf: audit_browser_merkle_leaf_payload,
+      node: audit_browser_merkle_node_payload,
+      empty: audit_browser_merkle_empty_payload,
+      root: audit_browser_merkle_root_payload,
+    });
+    const fixtures: string[][] = [
+      [],
+      ["only"],
+      ["a", "b", "c"],
+      ["ascii", "é", "👾", "four"],
+      ...[2, 4, 5, 7, 8, 15, 16, 30, 31, 32, 33].map((length) =>
+        Array.from({ length }, (_, index) => `leaf-${length}-${index}`)
+      ),
+    ];
+
+    for (const payloads of fixtures) {
+      await expect(asyncDigest.merkleRoot(payloads)).resolves.toBe(
+        audit_browser_merkle_root(payloads),
+      );
+    }
+  });
+
   it("exposes SHA-256 and the generic Merkle implementation to JavaScript", () => {
     expect(audit_browser_sha256("abc")).toBe(
       "ba7816bf8f01cfea414140de5dae2223" +

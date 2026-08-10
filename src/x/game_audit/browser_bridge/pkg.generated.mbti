@@ -8,7 +8,15 @@ pub fn audit_browser_ed25519_sign(String, String) -> String
 
 pub fn audit_browser_ed25519_verify(String, String, String) -> Bool
 
+pub fn audit_browser_merkle_empty_payload() -> String
+
+pub fn audit_browser_merkle_leaf_payload(String) -> String
+
+pub fn audit_browser_merkle_node_payload(String, String) -> String
+
 pub fn audit_browser_merkle_root(Array[String]) -> String
+
+pub fn audit_browser_merkle_root_payload(Int, String) -> String
 
 pub fn audit_browser_sha256(String) -> String
 

@@ -31,6 +31,11 @@ import {
 const CHECKPOINT_EVENT_COUNT = 30;
 const MAX_EVENT_PAYLOAD_LENGTH = 32_768;
 
+export interface AsyncGameAuditDigestAdapter {
+  hashString(value: string): Promise<string>;
+  merkleRoot(payloads: string[]): Promise<string>;
+}
+
 export interface GameItemVerificationWireCheckpoint {
   version: 1;
   epoch: number;
@@ -87,6 +92,87 @@ export interface GameItemAuthorityReceipt {
   ownerHeadId: string;
   checkpointDigest: string;
   inventoryEpoch: number;
+}
+
+export interface GameCheckpointAuthorityReceiptIdentity {
+  playerId: string;
+  seed: number;
+  epoch: number;
+  checkpointDigest: string;
+}
+
+export function canonicalGameCheckpointAuthorityReceipt(
+  unit: string,
+  receipt: GameCheckpointAuthorityReceiptIdentity,
+): string {
+  return JSON.stringify([
+    "audit-survivors-authority-checkpoint-receipt-v1",
+    unit,
+    receipt.playerId,
+    receipt.seed,
+    receipt.epoch,
+    receipt.checkpointDigest,
+  ]);
+}
+
+export function gameCheckpointAuthorityReceiptId(
+  unit: string,
+  receipt: GameCheckpointAuthorityReceiptIdentity,
+  digest: Pick<AuditDigestAdapter, "hashString">,
+): string {
+  return digest.hashString(
+    canonicalGameCheckpointAuthorityReceipt(unit, receipt),
+  );
+}
+
+export function gameCheckpointAuthorityReceiptIdAsync(
+  unit: string,
+  receipt: GameCheckpointAuthorityReceiptIdentity,
+  digest: AsyncGameOwnerDigestAdapter,
+): Promise<string> {
+  return digest.hashString(
+    canonicalGameCheckpointAuthorityReceipt(unit, receipt),
+  );
+}
+
+export type GameItemAuthorityReceiptIdentity = Pick<
+  GameItemAuthorityReceipt,
+  | "checkpointDigest"
+  | "assetId"
+  | "ownerId"
+  | "ownerPublicKey"
+  | "inventoryEpoch"
+>;
+
+export function canonicalGameItemAuthorityReceipt(
+  unit: string,
+  receipt: GameItemAuthorityReceiptIdentity,
+): string {
+  return JSON.stringify([
+    "audit-survivors-authority-item-receipt-v1",
+    unit,
+    receipt.checkpointDigest,
+    receipt.assetId,
+    receipt.ownerId,
+    receipt.ownerPublicKey,
+    receipt.inventoryEpoch,
+  ]);
+}
+
+export function gameItemAuthorityReceiptId(
+  unit: string,
+  receipt: GameItemAuthorityReceiptIdentity,
+  digest: Pick<AuditDigestAdapter, "hashString">,
+): string {
+  return digest.hashString(canonicalGameItemAuthorityReceipt(unit, receipt));
+}
+
+export function gameItemAuthorityReceiptIdAsync(
+  unit: string,
+  receipt: GameItemAuthorityReceiptIdentity,
+  digest: AsyncGameOwnerDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalGameItemAuthorityReceipt(unit, receipt));
 }
 
 export type VerifyGameItemCreationResult =
@@ -463,6 +549,150 @@ export function verifyGameCheckpoint(
   return { ok: true, state, checkpoint, createdItems };
 }
 
+export type VerifyGameCheckpointCommitmentsResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "invalid_request"
+        | "unsupported_checkpoint"
+        | "unverified_parent"
+        | "checkpoint_mismatch";
+    };
+
+/**
+ * Recompute checkpoint cryptographic commitments with an asynchronous backend.
+ * Deterministic event replay remains the caller's responsibility.
+ */
+export async function verifyGameCheckpointCommitmentsAsync(
+  input: unknown,
+  state: GameState,
+  digest: AsyncGameAuditDigestAdapter,
+  parentCheckpointDigest?: string,
+): Promise<VerifyGameCheckpointCommitmentsResult> {
+  const request = decodeGameCheckpointVerificationRequest(input);
+  if (!request) return { ok: false, reason: "invalid_request" };
+  const checkpoint = request.checkpoint;
+  const firstTick = checkpoint.epoch * CHECKPOINT_EVENT_COUNT + 1;
+  const lastTick = firstTick + CHECKPOINT_EVENT_COUNT - 1;
+  if (
+    !Number.isSafeInteger(firstTick) ||
+    checkpoint.first_tick !== firstTick ||
+    checkpoint.last_tick !== lastTick ||
+    checkpoint.event_count !== CHECKPOINT_EVENT_COUNT
+  ) {
+    return { ok: false, reason: "unsupported_checkpoint" };
+  }
+  if (
+    state.seed !== request.seed ||
+    state.player.id !== request.player_id ||
+    state.tick !== checkpoint.last_tick
+  ) {
+    return { ok: false, reason: "checkpoint_mismatch" };
+  }
+
+  let previousCheckpoint: string;
+  if (checkpoint.epoch === 0) {
+    previousCheckpoint = await digest.hashString(
+      canonicalAuditGenesis(
+        request.seed,
+        request.player_id,
+        request.owner_public_key,
+      ),
+    );
+  } else {
+    if (!parentCheckpointDigest) {
+      return { ok: false, reason: "unverified_parent" };
+    }
+    previousCheckpoint = parentCheckpointDigest;
+  }
+
+  const [eventRoot, stateDigest] = await Promise.all([
+    digest.merkleRoot(
+      request.events.map((event) => event.canonical_payload),
+    ),
+    digest.hashString(canonicalGameState(state)),
+  ]);
+  const canonicalEnvelope = canonicalMicroCheckpointEnvelope({
+    epoch: checkpoint.epoch,
+    firstTick: checkpoint.first_tick,
+    lastTick: checkpoint.last_tick,
+    eventCount: checkpoint.event_count,
+    eventRoot,
+    stateDigest,
+    previousCheckpoint,
+    createdAssetIds: checkpoint.created_asset_ids,
+  });
+  const checkpointDigest = await digest.hashString(canonicalEnvelope);
+  if (
+    eventRoot !== checkpoint.event_root ||
+    stateDigest !== checkpoint.state_digest ||
+    previousCheckpoint !== checkpoint.previous_checkpoint ||
+    canonicalEnvelope !== checkpoint.canonical_envelope ||
+    checkpointDigest !== checkpoint.checkpoint_digest
+  ) {
+    return { ok: false, reason: "checkpoint_mismatch" };
+  }
+  return { ok: true };
+}
+
+export type VerifyReplayedGameCheckpointCommitmentsResult =
+  | VerifyGameCheckpointCommitmentsResult
+  | { ok: false; reason: "invalid_parent_state" };
+
+/** Validate the standard-crypto parent binding around a replayed checkpoint. */
+export async function verifyReplayedGameCheckpointCommitmentsAsync(
+  input: unknown,
+  state: GameState,
+  digest: AsyncGameAuditDigestAdapter,
+  parent?: GameCheckpointVerificationParent,
+): Promise<VerifyReplayedGameCheckpointCommitmentsResult> {
+  const request = decodeGameCheckpointVerificationRequest(input);
+  if (!request) return { ok: false, reason: "invalid_request" };
+  const checkpoint = request.checkpoint;
+  if (checkpoint.epoch > 0) {
+    const firstTick = checkpoint.epoch * CHECKPOINT_EVENT_COUNT + 1;
+    if (!parent) return { ok: false, reason: "unverified_parent" };
+    if (
+      parent.checkpointDigest.length === 0 ||
+      parent.stateDigest.length === 0 ||
+      parent.ownerPublicKey !== request.owner_public_key ||
+      parent.state.seed !== request.seed ||
+      parent.state.player.id !== request.player_id ||
+      parent.state.tick !== firstTick - 1 ||
+      await digest.hashString(canonicalGameState(parent.state)) !==
+        parent.stateDigest
+    ) {
+      return { ok: false, reason: "invalid_parent_state" };
+    }
+  }
+  return verifyGameCheckpointCommitmentsAsync(
+    request,
+    state,
+    digest,
+    parent?.checkpointDigest,
+  );
+}
+
+/** Replay once, then require both async platform crypto and MoonBit to agree. */
+export async function verifyGameCheckpointDual(
+  input: unknown,
+  moonBitDigest: AuditDigestAdapter,
+  standardDigest: AsyncGameAuditDigestAdapter,
+  parent?: GameCheckpointVerificationParent,
+): Promise<VerifyGameCheckpointResult> {
+  const moonBit = verifyGameCheckpoint(input, moonBitDigest, parent);
+  if (!moonBit.ok) return moonBit;
+  const standard = await verifyReplayedGameCheckpointCommitmentsAsync(
+    input,
+    moonBit.state,
+    standardDigest,
+    parent,
+  );
+  if (!standard.ok) return standard;
+  return moonBit;
+}
+
 export function verifyGameItemCreation(
   unit: string,
   input: unknown,
@@ -496,15 +726,13 @@ export function verifyGameItemCreation(
     value.assetId === request.asset_id
   );
   if (!item) return { ok: false, reason: "asset_not_created" };
-  const authorityReceiptId = digest.hashString(JSON.stringify([
-    "audit-survivors-authority-item-receipt-v1",
-    unit,
-    checkpoint.checkpoint_digest,
-    item.assetId,
-    item.ownerId,
-    request.owner_public_key,
-    checkpoint.epoch,
-  ]));
+  const authorityReceiptId = gameItemAuthorityReceiptId(unit, {
+    checkpointDigest: checkpoint.checkpoint_digest,
+    assetId: item.assetId,
+    ownerId: item.ownerId,
+    ownerPublicKey: request.owner_public_key,
+    inventoryEpoch: checkpoint.epoch,
+  }, digest);
   const ownerHead = createInitialGameAssetOwnershipHead(
     unit,
     {
