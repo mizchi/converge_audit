@@ -43,6 +43,7 @@ deployment policyである。
 | `audit/layered` | 汎用 | opaque canonical eventをwatermarkで集約する |
 | `audit/runtime` | 汎用 | seal/outbox/ACK/local store/peer retryの純粋契約 |
 | `audit/delivery_auth` | 汎用 | destination固有statementとproducer/witness認証だけを扱う |
+| `audit/key_lifecycle` | 汎用 | opaque statement digestに対するversioned keyの履歴admissionだけを扱う |
 | `audit/quorum` | 汎用 | opaque subjectへのdomain-separated voteを認証・収束する |
 | `audit/quorum/vote` | 汎用 | vote join-semilatticeとその代数則を証明する |
 | `audit/runtime/bridge` | host bridge | primitive/JSONと汎用MoonBit契約の薄い境界 |
@@ -100,6 +101,7 @@ protocol`または「検証可能なcheckpoint監査基盤」と呼ぶ。
 | producer認証とdistinct roster quorumなしにreceiverを進めない | `formal/quint/WitnessQuorum.qnt` | 有限モデルで検査 |
 | vote競合が順序非依存にequivocationへ収束する | `src/audit/quorum` test | bounded実装テスト |
 | delivery capabilityは全trust factsを要求する | `src/audit/runtime_contract.mbtp`, `audit/delivery_auth` | predicate証明 + 実装テスト |
+| routine rotation後も署名時点で有効な公開鍵recordから過去checkpointを検証する | `src/audit/key_lifecycle`, `formal/quint/KeyLifecycle.qnt` | predicate証明 + 有限model + 実Ed25519 reference test |
 | game actionが合法である | `src/x/game_audit/replay`以下 | gameごとの実装・テスト |
 | asset modelとMoonBit policyの観測状態が一致する | `AssetOwnershipModels.qnt` + `quint_asset_driver` | seed固定32 trace / 288 stateのMBT。storage refinementではない |
 

@@ -29,6 +29,8 @@ describe("MoonBit browser audit bridge", () => {
     const signer = deviceKeyFromSeedHex(seed);
     const signature = signer.signDigest("checkpoint-digest");
 
+    expect(Object.keys(signer).sort()).toEqual(["publicKey", "signDigest"]);
+    expect(JSON.stringify(signer)).not.toContain(seed);
     expect(signer.publicKey).toBe(audit_browser_ed25519_public_key(seed));
     expect(signature).toBe(audit_browser_ed25519_sign(seed, "checkpoint-digest"));
     expect(audit_browser_ed25519_verify(
@@ -45,7 +47,7 @@ describe("MoonBit browser audit bridge", () => {
       return bytes;
     });
 
-    expect(signer.seedHex).toBe("5a".repeat(32));
+    expect(Object.keys(signer).sort()).toEqual(["publicKey", "signDigest"]);
     expect(signer.publicKey).toMatch(/^[0-9a-f]{64}$/);
   });
 });

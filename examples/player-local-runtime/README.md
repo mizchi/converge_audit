@@ -4,6 +4,11 @@ Node/mobile SQLiteとbrowser IndexedDBが共有するstorage-neutral DTO、非�
 `PlayerLocalAuditStorage` interface、純粋validator、MoonBit checkpoint policy wrapperを置く。
 ゲーム規則や特定DB APIは含めない。
 
+`key-lifecycle.ts`は`key_id/version`、purpose/scope、公開鍵、有効期間、effective revocationを持つ
+storage-neutralな履歴とkey-bound canonical signatureを提供する。履歴はprovisioning時に一度だけ検査・
+index化し、authorityの署名検証hot pathはexact key lookupをO(1)で行う。rotation/revocation semanticsと
+production custodyの限界は[鍵ライフサイクル契約](../../docs/key-lifecycle-ja.md)に定める。
+
 物理adapterは未認証network payloadからwrite-setを組み立てず、
 `MoonBitCheckpointPolicy.prepareWriteSet`が返したDTOをCAS付きtransactionで適用する。
 `conformance.node.ts`は同じrestart、fault rollback、stale revision、ACK容量再利用testを

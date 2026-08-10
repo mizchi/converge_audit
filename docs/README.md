@@ -15,6 +15,8 @@
   - MUST/SHOULD、信頼境界、mode別要件、受入条件、現在の充足状態
 - [persistence / transport 実装契約](./game-audit-implementation-contract-ja.md)
   - DB relation、atomic seal、durable outbox、ACK、retry、gap recovery、crash consistency
+- [署名鍵ライフサイクルと過去checkpoint検証契約](./key-lifecycle-ja.md)
+  - key ID/version、有効期間、rotation、effective revocation、custody、v1 migration
 - [Quint配送・永続化モデル](../formal/quint/README.md)
   - crash、drop、partition、durable outbox、exact-parent、witness quorum、条件付きliveness
 - [汎用 checkpoint audit 層](../src/audit/README.md)
@@ -51,7 +53,7 @@
 | 公開 API と capability の構築可能性 | `src/**/pkg.generated.mbti` | `moon info` |
 | 実行時の受理・拒否条件 | `src/**/*.mbt` | `moon test`, `moon check --target all` |
 | 論理 predicate と不変条件 | `src/audit/*.mbtp`, `src/x/game_audit/audit/*.mbtp` | `just prove` |
-| 配送・永続化・asset裁定の有限状態遷移 | `formal/quint/CheckpointDelivery.qnt`, `WitnessQuorum.qnt`, `AssetOwnership.qnt`, `LineageAppeal.qnt`, `EvidenceLineageCase.qnt` | `just formal-check` |
+| 配送・永続化・asset裁定・鍵rotationの有限状態遷移 | `formal/quint/CheckpointDelivery.qnt`, `WitnessQuorum.qnt`, `AssetOwnership.qnt`, `LineageAppeal.qnt`, `EvidenceLineageCase.qnt`, `KeyLifecycle.qnt` | `just formal-check` |
 | production runtimeの実装要件 | `docs/game-audit-implementation-contract-ja.md` | contract受入テスト、fault injection |
 | 暗号・永続化・完全 transcript | `crypto`、三mode bundle verifier、Cloudflare DO/Queue | PvE/PvP/open-world prototype実装済み、production監査未達 |
 | 性能値 | benchmark の当該実行結果 | `just bench` |

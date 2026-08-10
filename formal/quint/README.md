@@ -1,4 +1,4 @@
-# Checkpoint delivery / witness quorum / asset settlement Quint model
+# Checkpoint delivery / witness quorum / asset settlement / key lifecycle Quint model
 
 このディレクトリは、ゲーム固有の戦闘規則ではなく、local-firstな監査ログをpeerから
 権威サーバーへ確定させる時間的protocolと、検証済みassetのsettlement状態機械のsource of truthである。
@@ -20,7 +20,7 @@ bounded/inductive safetyへ選択的に使い、TLCのliveness gateとは区別�
 
 ## Source構成
 
-- `CheckpointDelivery.qnt` / `WitnessQuorum.qnt` / `AssetOwnership.qnt` / `LineageAppeal.qnt` / `EvidenceLineageCase.qnt`: protocol本体とproperty
+- `CheckpointDelivery.qnt` / `WitnessQuorum.qnt` / `AssetOwnership.qnt` / `LineageAppeal.qnt` / `EvidenceLineageCase.qnt` / `KeyLifecycle.qnt`: protocol本体とproperty
 - `*Models.qnt`: 正常構成とRed構成
 - `*Tests.qnt`: 代表的な正常・guard scenario
 - `CheckpointDeliveryMbt.qnt` / `WitnessQuorumMbt.qnt`: 実装へ再生する決定的なMBT trace
@@ -74,6 +74,11 @@ case作成とdismissalはassetを変更せず、decision actionだけが`Eligibl
 実署名、case reference digest、SQLite CASはWorker/MoonBit側に残す。case close後もplayer-local holdは
 未解決のままで、認証済みsourceがexact resolutionをnext cursorへpublishする別actionだけがholdを解決する。
 
+`KeyLifecycle.qnt`は2 key version、5 checkpoint候補、4 clock stepへ縮約する。routine rotationは
+旧verification recordを残し、署名時点の有効期間とeffective revocation時刻でadmissionする。
+exact key binding、issuance validity、revocation gateを個別に外す3 broken moduleを持つ。
+署名bytesとkey history JSON/DBはTypeScript/Workers、同じ純粋admissionはMoonBit/Why3の責務である。
+
 asset settlementのclaim ledgerは次のとおりである。
 
 | claim | source of truth | 検査artifact | status |
@@ -95,6 +100,9 @@ asset settlementのclaim ledgerは次のとおりである。
 | asset変更はexact caseを指定した認証済みcertificateだけが行う | `EvidenceLineageCase.decideCase` | certificate invariant + broken authentication/binding反例 | verified（有限model） |
 | dismissalは認証済みexact caseだけを閉じ、assetを変更しない | `EvidenceLineageCase.dismissCase` | dismissal invariant + broken authentication/binding/mutation反例 | verified（有限model） |
 | case closeだけではholdを解決せず、source署名・exact binding・next cursorが必要 | `EvidenceLineageCase.publishSourceResolution` | source resolution invariant + broken authentication/binding/cursor/auto-resolution反例 | verified（有限model） |
+| key version substitutionを受理しない | `KeyLifecycle.verify` | exact binding invariant + broken binding反例 | verified（有限model） |
+| key validity/revocationは署名時刻へ適用する | `KeyLifecycle.verify` | 2 invariant + broken validity/revocation反例 | verified（有限model） |
+| routine rotation後も旧公開鍵historyで過去checkpointを検証できる | `KeyLifecycle.rotate/verify` | rotation/revocation scenario + history deletion negative control | scenario verified |
 
 ## 検査する性質
 
@@ -108,6 +116,7 @@ asset settlementのclaim ledgerは次のとおりである。
 - 未ACK outboxが容量上限に達したpeerは次のcheckpointをsealしない。
 - witness collectionは有効producer署名とdistinct roster quorumなしにreadyにならない。
 - receiverはready collectionなしに進まず、expiryはinvalid判定にもreceiver更新にもならない。
+- versioned keyで受理したcheckpointはexact key binding、有効な署名時刻、effective revocation前を満たす。
 - asset owner versionはtransferごとに正確に1進む。
 - asset transferは送信者と受信者の両方が認証されなければ成立しない。
 - asset transferは未解決の祖先revocationがない場合だけ成立する。

@@ -29,6 +29,7 @@ application checkpoint ── CheckpointAdapter ── CheckpointCommitment
 | `audit/layered` | watermark駆動のevent→micro→macro builderと二段 inclusion proof |
 | `audit/runtime` | trusted closure、atomic seal/outbox/ACK、player-local論理DB、peer fanout/retry選択 |
 | `audit/delivery_auth` | destination固有checkpointのproducer署名とdistinct witness quorumをopaque capabilityへ変換 |
+| `audit/key_lifecycle` | historical key binding、有効期間、effective revocationのfail-closed admissionとproof |
 | `audit/quorum` | opaque subjectへのdomain-separated vote、roster認証、重複排除、equivocation収束 |
 | `audit/quorum/vote` | vote join-semilatticeと可換・結合・冪等・equivocation吸収のproof |
 | `audit/runtime/bridge` | Node/Worker等から利用するprimitive/JSONの小さいJS/Wasm bridge |
@@ -145,6 +146,7 @@ just test-audit
 just test-audit-layered
 just test-audit-runtime
 moon test src/audit/delivery_auth
+moon test src/audit/key_lifecycle
 moon test src/audit/quorum
 moon test src/audit/runtime/bridge
 just prove-audit-core

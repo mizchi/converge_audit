@@ -37,6 +37,8 @@ quint typecheck formal/quint/LineageAppeal.qnt
 quint typecheck formal/quint/LineageAppealModels.qnt
 quint typecheck formal/quint/EvidenceLineageCase.qnt
 quint typecheck formal/quint/EvidenceLineageCaseModels.qnt
+quint typecheck formal/quint/KeyLifecycle.qnt
+quint typecheck formal/quint/KeyLifecycleModels.qnt
 
 audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
@@ -221,3 +223,21 @@ check_expected_failure \
   invariant \
   caseCloseNeverAutomaticallyResolvesHold \
   "$audit_quint_tmp/evidence-case-automatic-hold-resolution.log"
+check_expected_failure \
+  formal/quint/KeyLifecycleModels.qnt \
+  keyLifecycleBrokenBinding \
+  invariant \
+  acceptedCheckpointHasExactKeyBinding \
+  "$audit_quint_tmp/key-lifecycle-binding.log"
+check_expected_failure \
+  formal/quint/KeyLifecycleModels.qnt \
+  keyLifecycleBrokenIssuanceValidity \
+  invariant \
+  acceptedCheckpointWasIssuedInKeyWindow \
+  "$audit_quint_tmp/key-lifecycle-validity.log"
+check_expected_failure \
+  formal/quint/KeyLifecycleModels.qnt \
+  keyLifecycleBrokenRevocation \
+  invariant \
+  acceptedCheckpointPredatesEffectiveRevocation \
+  "$audit_quint_tmp/key-lifecycle-revocation.log"

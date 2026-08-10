@@ -19,6 +19,7 @@ import { IndexedDbRunSnapshotStore } from "./audit/indexeddb";
 import { BrowserPlayerLocalCheckpointRuntime } from "./audit/player-local-checkpoint-runtime";
 import {
   deviceKeyFromSeedHex,
+  experimentalExportDeviceSeedForPersistence,
   generateDeviceKey,
   type ReferenceGameDeviceKey,
 } from "./audit/device-key";
@@ -360,7 +361,7 @@ restartButton.addEventListener("click", () => {
   auditJournal = newAuditJournal(state, deviceKey.publicKey);
   const key = runStorageKey(state);
   replacePlayerLocalRuntime(key, state, auditJournal);
-  const seedHex = deviceKey.seedHex;
+  const seedHex = experimentalExportDeviceSeedForPersistence(deviceKey);
   persistenceQueue = persistenceQueue
     .then(() => snapshotStore.saveDeviceSeed(key, seedHex))
     .catch(reportPersistenceFailure);
@@ -982,7 +983,10 @@ async function start(): Promise<void> {
       ? generateDeviceKey()
       : deviceKeyFromSeedHex(storedSeed);
     if (storedSeed === undefined) {
-      await snapshotStore.saveDeviceSeed(storageKey, deviceKey.seedHex);
+      await snapshotStore.saveDeviceSeed(
+        storageKey,
+        experimentalExportDeviceSeedForPersistence(deviceKey),
+      );
     }
   } catch (error) {
     reportPersistenceFailure(error);

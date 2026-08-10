@@ -1,0 +1,75 @@
+///|
+test "historical key admission uses signing time instead of verification time" {
+  assert_eq(
+    classify_historical_key_admission(
+      key_binding_matches=true,
+      key_version=1,
+      key_valid_from_ms=0,
+      key_valid_until_ms=100,
+      key_revoked=false,
+      key_revoked_at_ms=0,
+      statement_issued_at_ms=50,
+      verification_time_ms=250,
+      max_clock_skew_ms=0,
+      scheme_supported=true,
+      signature_valid=true,
+    ),
+    AdmitHistoricalKey,
+  )
+}
+
+///|
+test "historical key admission rejects validity and revocation boundaries" {
+  assert_eq(
+    classify_historical_key_admission(
+      key_binding_matches=true,
+      key_version=1,
+      key_valid_from_ms=0,
+      key_valid_until_ms=50,
+      key_revoked=false,
+      key_revoked_at_ms=0,
+      statement_issued_at_ms=50,
+      verification_time_ms=250,
+      max_clock_skew_ms=0,
+      scheme_supported=true,
+      signature_valid=true,
+    ),
+    RejectHistoricalKeyExpiredAtIssuance,
+  )
+  assert_eq(
+    classify_historical_key_admission(
+      key_binding_matches=true,
+      key_version=1,
+      key_valid_from_ms=0,
+      key_valid_until_ms=100,
+      key_revoked=true,
+      key_revoked_at_ms=50,
+      statement_issued_at_ms=50,
+      verification_time_ms=250,
+      max_clock_skew_ms=0,
+      scheme_supported=true,
+      signature_valid=true,
+    ),
+    RejectHistoricalKeyRevokedAtIssuance,
+  )
+}
+
+///|
+test "historical key admission rejects a substituted key version" {
+  assert_eq(
+    classify_historical_key_admission(
+      key_binding_matches=false,
+      key_version=2,
+      key_valid_from_ms=100,
+      key_valid_until_ms=300,
+      key_revoked=false,
+      key_revoked_at_ms=0,
+      statement_issued_at_ms=50,
+      verification_time_ms=250,
+      max_clock_skew_ms=0,
+      scheme_supported=true,
+      signature_valid=false,
+    ),
+    RejectHistoricalKeyBinding,
+  )
+}

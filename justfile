@@ -61,6 +61,7 @@ info:
 # currently asks WhyML to translate non-proof dependency types as well.
 prove:
   nix develop path:. --command moon prove src/audit
+  nix develop path:. --command moon prove src/audit/key_lifecycle
   nix develop path:. --command moon prove src/audit/quorum/vote
   nix develop path:. --command moon prove src/x/game_audit/audit
 
@@ -71,6 +72,7 @@ prove-game-audit:
 # Prove the generalized checkpoint-audit contracts only
 prove-audit-core:
   nix develop path:. --command moon prove src/audit
+  nix develop path:. --command moon prove src/audit/key_lifecycle
   nix develop path:. --command moon prove src/audit/quorum/vote
 
 # Backward-compatible alias
@@ -107,6 +109,7 @@ quint-docs:
   nix develop path:. --command quint docs formal/quint/AssetOwnership.qnt
   nix develop path:. --command quint docs formal/quint/LineageAppeal.qnt
   nix develop path:. --command quint docs formal/quint/EvidenceLineageCase.qnt
+  nix develop path:. --command quint docs formal/quint/KeyLifecycle.qnt
 
 # Confirm that all load-bearing Quint guards produce counterexamples
 quint-counterexamples:

@@ -1,0 +1,292 @@
+///|
+predicate historical_key_is_admitted(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    AdmitHistoricalKey => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_rejects_metadata(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    RejectHistoricalKeyMetadata => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_rejects_binding(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    RejectHistoricalKeyBinding => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_rejects_future_statement(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    RejectHistoricalKeyStatementFromFuture => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_rejects_not_yet_valid(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    RejectHistoricalKeyNotYetValidAtIssuance => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_rejects_expired(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    RejectHistoricalKeyExpiredAtIssuance => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_rejects_revoked(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    RejectHistoricalKeyRevokedAtIssuance => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_rejects_scheme(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    RejectHistoricalKeyScheme => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_rejects_signature(
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  match decision {
+    RejectHistoricalKeySignature => true
+    _ => false
+  }
+}
+
+///|
+predicate historical_key_metadata_valid(
+  key_version : Int,
+  key_valid_from_ms : Int,
+  key_valid_until_ms : Int,
+  statement_issued_at_ms : Int,
+  verification_time_ms : Int,
+  max_clock_skew_ms : Int,
+) {
+  key_version > 0 &&
+  key_valid_from_ms >= 0 &&
+  key_valid_until_ms > key_valid_from_ms &&
+  statement_issued_at_ms >= 0 &&
+  verification_time_ms >= 0 &&
+  max_clock_skew_ms >= 0
+}
+
+///|
+predicate historical_key_admission_post(
+  key_binding_matches : Bool,
+  key_version : Int,
+  key_valid_from_ms : Int,
+  key_valid_until_ms : Int,
+  key_revoked : Bool,
+  key_revoked_at_ms : Int,
+  statement_issued_at_ms : Int,
+  verification_time_ms : Int,
+  max_clock_skew_ms : Int,
+  scheme_supported : Bool,
+  signature_valid : Bool,
+  decision : HistoricalKeyAdmissionDecision,
+) {
+  if !historical_key_metadata_valid(
+      key_version,
+      key_valid_from_ms,
+      key_valid_until_ms,
+      statement_issued_at_ms,
+      verification_time_ms,
+      max_clock_skew_ms,
+    ) {
+    historical_key_rejects_metadata(decision)
+  } else {
+    if !key_binding_matches {
+      historical_key_rejects_binding(decision)
+    } else {
+      if statement_issued_at_ms >
+        verification_time_ms + max_clock_skew_ms {
+        historical_key_rejects_future_statement(decision)
+      } else {
+        if statement_issued_at_ms < key_valid_from_ms {
+          historical_key_rejects_not_yet_valid(decision)
+        } else {
+          if statement_issued_at_ms >= key_valid_until_ms {
+            historical_key_rejects_expired(decision)
+          } else {
+            if key_revoked && statement_issued_at_ms >= key_revoked_at_ms {
+              historical_key_rejects_revoked(decision)
+            } else {
+              if !scheme_supported {
+                historical_key_rejects_scheme(decision)
+              } else {
+                if !signature_valid {
+                  historical_key_rejects_signature(decision)
+                } else {
+                  historical_key_is_admitted(decision)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+///|
+pub lemma admitted_historical_key_requires_binding_and_crypto_gates(
+  key_binding_matches : Bool,
+  key_version : Int,
+  key_valid_from_ms : Int,
+  key_valid_until_ms : Int,
+  key_revoked : Bool,
+  key_revoked_at_ms : Int,
+  statement_issued_at_ms : Int,
+  verification_time_ms : Int,
+  max_clock_skew_ms : Int,
+  scheme_supported : Bool,
+  signature_valid : Bool,
+  decision : HistoricalKeyAdmissionDecision,
+) where {
+  proof_require: historical_key_admission_post(
+    key_binding_matches,
+    key_version,
+    key_valid_from_ms,
+    key_valid_until_ms,
+    key_revoked,
+    key_revoked_at_ms,
+    statement_issued_at_ms,
+    verification_time_ms,
+    max_clock_skew_ms,
+    scheme_supported,
+    signature_valid,
+    decision,
+  ),
+  proof_require: historical_key_is_admitted(decision),
+  proof_ensure: key_binding_matches == true,
+  proof_ensure: scheme_supported == true,
+  proof_ensure: signature_valid == true,
+} {
+}
+
+///|
+/// A routine rotation does not invalidate an old signature merely because it
+/// is verified after the old key's validity interval ended.
+pub lemma historical_verification_survives_routine_rotation(
+  key_valid_from_ms : Int,
+  key_valid_until_ms : Int,
+  statement_issued_at_ms : Int,
+  verification_time_ms : Int,
+) where {
+  proof_require: key_valid_from_ms >= 0,
+  proof_require: key_valid_until_ms > key_valid_from_ms,
+  proof_require: statement_issued_at_ms >= key_valid_from_ms,
+  proof_require: statement_issued_at_ms < key_valid_until_ms,
+  proof_require: verification_time_ms >= key_valid_until_ms,
+  proof_ensure: historical_key_admission_post(
+    true,
+    1,
+    key_valid_from_ms,
+    key_valid_until_ms,
+    false,
+    0,
+    statement_issued_at_ms,
+    verification_time_ms,
+    0,
+    true,
+    true,
+    AdmitHistoricalKey,
+  ),
+} {
+}
+
+///|
+pub lemma key_revoked_at_issuance_is_rejected(
+  key_valid_from_ms : Int,
+  key_valid_until_ms : Int,
+  key_revoked_at_ms : Int,
+  statement_issued_at_ms : Int,
+  verification_time_ms : Int,
+) where {
+  proof_require: key_valid_from_ms >= 0,
+  proof_require: key_valid_until_ms > key_valid_from_ms,
+  proof_require: key_revoked_at_ms >= key_valid_from_ms,
+  proof_require: key_revoked_at_ms <= key_valid_until_ms,
+  proof_require: statement_issued_at_ms >= key_revoked_at_ms,
+  proof_require: statement_issued_at_ms < key_valid_until_ms,
+  proof_require: verification_time_ms >= statement_issued_at_ms,
+  proof_ensure: historical_key_admission_post(
+    true,
+    1,
+    key_valid_from_ms,
+    key_valid_until_ms,
+    true,
+    key_revoked_at_ms,
+    statement_issued_at_ms,
+    verification_time_ms,
+    0,
+    true,
+    true,
+    RejectHistoricalKeyRevokedAtIssuance,
+  ),
+} {
+}
+
+///|
+pub lemma substituted_historical_key_is_rejected(
+  key_valid_from_ms : Int,
+  key_valid_until_ms : Int,
+  statement_issued_at_ms : Int,
+  verification_time_ms : Int,
+) where {
+  proof_require: key_valid_from_ms >= 0,
+  proof_require: key_valid_until_ms > key_valid_from_ms,
+  proof_require: statement_issued_at_ms >= key_valid_from_ms,
+  proof_require: statement_issued_at_ms < key_valid_until_ms,
+  proof_require: verification_time_ms >= statement_issued_at_ms,
+  proof_ensure: historical_key_admission_post(
+    false,
+    1,
+    key_valid_from_ms,
+    key_valid_until_ms,
+    false,
+    0,
+    statement_issued_at_ms,
+    verification_time_ms,
+    0,
+    true,
+    true,
+    RejectHistoricalKeyBinding,
+  ),
+} {
+}

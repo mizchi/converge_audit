@@ -11,6 +11,8 @@ quint typecheck formal/quint/LineageAppeal.qnt
 quint typecheck formal/quint/LineageAppealModels.qnt
 quint typecheck formal/quint/EvidenceLineageCase.qnt
 quint typecheck formal/quint/EvidenceLineageCaseModels.qnt
+quint typecheck formal/quint/KeyLifecycle.qnt
+quint typecheck formal/quint/KeyLifecycleModels.qnt
 
 quint verify formal/quint/CheckpointDeliveryModels.qnt \
   --backend=tlc \
@@ -112,4 +114,14 @@ quint verify formal/quint/EvidenceLineageCaseModels.qnt \
     decidedCasesMatchDecisionCount \
     dismissedCasesMatchDismissalCount \
     resolvedHoldsMatchResolutionCount \
+  --verbosity=1
+
+quint verify formal/quint/KeyLifecycleModels.qnt \
+  --backend=tlc \
+  --main=keyLifecycleSafety \
+  --invariants \
+    typeOk \
+    acceptedCheckpointHasExactKeyBinding \
+    acceptedCheckpointWasIssuedInKeyWindow \
+    acceptedCheckpointPredatesEffectiveRevocation \
   --verbosity=1

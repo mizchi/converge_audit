@@ -4,9 +4,9 @@ import {
 } from "../../../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
 import type { GameOwnerSigner } from "../../../game/authority/owner-authentication";
 
-export interface ReferenceGameDeviceKey extends GameOwnerSigner {
-  seedHex: string;
-}
+export interface ReferenceGameDeviceKey extends GameOwnerSigner {}
+
+const experimentalSeeds = new WeakMap<ReferenceGameDeviceKey, string>();
 
 export type RandomFill = (bytes: Uint8Array) => Uint8Array;
 
@@ -24,8 +24,7 @@ export function deviceKeyFromSeedHex(seedHex: string): ReferenceGameDeviceKey {
   if (!/^[0-9a-f]{64}$/.test(publicKey)) {
     throw new Error("MoonBit Ed25519 public-key derivation failed");
   }
-  return Object.freeze({
-    seedHex,
+  const key = Object.freeze({
     publicKey,
     signDigest(digest: string): string {
       const signature = audit_browser_ed25519_sign(seedHex, digest);
@@ -35,6 +34,8 @@ export function deviceKeyFromSeedHex(seedHex: string): ReferenceGameDeviceKey {
       return signature;
     },
   });
+  experimentalSeeds.set(key, seedHex);
+  return key;
 }
 
 export function generateDeviceKey(
@@ -43,4 +44,17 @@ export function generateDeviceKey(
   const bytes = fill(new Uint8Array(32));
   if (bytes.length !== 32) throw new Error("device key entropy must be 32 bytes");
   return deviceKeyFromSeedHex(bytesToLowerHex(bytes));
+}
+
+/**
+ * Experimental software-key persistence hook. The signer itself intentionally
+ * does not expose its seed. A production backend must replace this with a
+ * non-extractable WebCrypto or platform-keystore handle.
+ */
+export function experimentalExportDeviceSeedForPersistence(
+  key: ReferenceGameDeviceKey,
+): string {
+  const seed = experimentalSeeds.get(key);
+  if (!seed) throw new Error("unknown reference-game device key");
+  return seed;
 }

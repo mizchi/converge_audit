@@ -1,0 +1,36 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/converge_audit/audit/key_lifecycle"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn admitted_historical_key_requires_binding_and_crypto_gates(Bool, Int, Int, Int, Bool, Int, Int, Int, Int, Bool, Bool, HistoricalKeyAdmissionDecision) -> Unit
+
+pub fn classify_historical_key_admission(key_binding_matches~ : Bool, key_version~ : Int, key_valid_from_ms~ : Int, key_valid_until_ms~ : Int, key_revoked~ : Bool, key_revoked_at_ms~ : Int, statement_issued_at_ms~ : Int, verification_time_ms~ : Int, max_clock_skew_ms~ : Int, scheme_supported~ : Bool, signature_valid~ : Bool) -> HistoricalKeyAdmissionDecision
+
+pub fn historical_verification_survives_routine_rotation(Int, Int, Int, Int) -> Unit
+
+pub fn key_revoked_at_issuance_is_rejected(Int, Int, Int, Int, Int) -> Unit
+
+pub fn substituted_historical_key_is_rejected(Int, Int, Int, Int) -> Unit
+
+// Errors
+
+// Types and methods
+pub(all) enum HistoricalKeyAdmissionDecision {
+  AdmitHistoricalKey
+  RejectHistoricalKeyMetadata
+  RejectHistoricalKeyBinding
+  RejectHistoricalKeyStatementFromFuture
+  RejectHistoricalKeyNotYetValidAtIssuance
+  RejectHistoricalKeyExpiredAtIssuance
+  RejectHistoricalKeyRevokedAtIssuance
+  RejectHistoricalKeyScheme
+  RejectHistoricalKeySignature
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits

@@ -360,7 +360,11 @@ macro間隔よりquorumが遅くても、collectionをpipelineできればcheckp
 - `AUD-SEC-005`（SHOULD）: witness/observer/transparency roleを同一failure domainへ集中させない。
 
 状態: FNV/mockと`experimental_crypto` SHA-256/Ed25519接続は`Implemented + Tested`だが未監査。
-したがってproduction security gateは`Pending`。
+key ID/version、署名時点validity、effective revocation、rotation後の公開鍵history検証、
+player/authority wire custodyのreference contractは`Implemented + Proven/Model checked + Tested`。
+監査済みbackend、non-extractable player key、Cloudflare/端末DB migrationは未接続なので、
+production security gate全体は`Pending`。詳細は
+[鍵ライフサイクル契約](./key-lifecycle-ja.md)を参照する。
 
 ## 10. 受入条件
 

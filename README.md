@@ -150,7 +150,7 @@ Each claim uses the smallest appropriate verifier.
 | Subject | Method | Current checked scope |
 | --- | --- | --- |
 | Cadence, retention, heads, seals, vote merge | MoonBit proof → Why3/Z3 | All configured proof obligations over pure predicates and mathematical integers |
-| Crash, drop, retry, bounded outbox, witness quorum | Quint / TLC | Every configured healthy model completes without a counterexample |
+| Crash, drop, retry, bounded outbox, witness quorum, key rotation | Quint / TLC | Every configured healthy model completes without a counterexample |
 | Whether guards are load-bearing | Deliberately broken Quint modules | Every configured broken model produces its expected counterexample |
 | Quint model ↔ MoonBit policy projection | `mizchi/quint_connect` ITF replay | 32 seeded asset traces / 288 states plus a state-divergence negative control |
 | SQLite/DO/Queue/HTTP mapping | Integration tests and fault injection | Atomic rollback, restart, duplicate, fork, and ACK-loss behavior |

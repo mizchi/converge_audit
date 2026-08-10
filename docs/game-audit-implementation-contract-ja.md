@@ -420,6 +420,7 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | authority boundary/initial headの事前provision | 管理API → destination DO、source側provision ledger、未設定receiver拒否 | Tested locally |
 | Queue jobのsource outbox認証 | receiver mutation前のsource DO exact-match | Tested locally |
 | producer署名 + provision済みwitness quorum | `src/audit/delivery_auth`のopaque capability、実Ed25519 Worker bridge、source/receiver二重gate | Proven gate + Tested locally |
+| versioned key lifecycle | key ID/version/purpose/scope/public keyを含むcanonical statement、署名時点validity/effective revocation、provision時履歴compile、O(1) exact lookup、rotation後の過去checkpoint検証、seed非列挙signer/wire custody | MoonBit 5 goals + Quint normal/3 broken + TypeScript実Ed25519 Tested / production backend・DB migration・non-extractable keyはPending |
 | remote witness collection | 公開pull/ローカル署名submit、pure bounded fanout/指数retry/backpressure/複数response選択、SQLite collection、deadline | remote E2E + pure scheduler Tested / socket push・global fair queueはPending |
 | player-local peer checkpoint fanout | MoonBit JS policy、SQLite route/lease/attempt/backoff/fork quarantine、bounded HTTP POST、restart lease | loopback 7 tests / 実credential・WebSocket/WebTransportはPending |
 | 最古未ACK checkpoint retry worker | direct DO RPC、SQLite lease、DO alarm + pure選択契約 | Tested locally + remote E2E |
@@ -447,6 +448,9 @@ exact statementをproducerとprovision済みwitness quorumが署名し、source 
 mean 0.729秒 / p95 1.003秒だった。ただしoutbound push、global/roster-aware fair queue、production端末DB統合、
 監査済みproduction cryptoは未接続である。単一client・単一egressのremote実測をproduction P2Pの
 source独立性や全地域SLAと同一視してはならない。
+
+key lifecycleのwire/storage移行、routine rotationとretroactive revocationの区別、private-key custodyは
+[署名鍵ライフサイクルと過去checkpoint検証契約](./key-lifecycle-ja.md)をsource of truthとする。
 
 形式仕様とのreconciliation ledger:
 
