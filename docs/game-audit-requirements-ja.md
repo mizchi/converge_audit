@@ -263,8 +263,10 @@ issued/expires/clock-skew、appeal deadline、decision history/finalityのSQLite
 fail-closedにする。reference PvE originは別rosterのsourceが署名したactive holdを、asset/ancestor/
 checkpointへexact bindしたcaseとして永続化し、case作成ではassetを変更せず、v2 arbiter certificateで
 caseとlineageを同時にupholdする経路と、署名付きdismissalでcaseだけを閉じる経路まで
-`Proven / Model checked / Tested locally`。dismissalが返すhold resolutionはsource再署名前のdraftである。
-production rosterのrotation/revocation、poll schedulerからの自動提出・draft再署名配送、transfer caseは`Pending`。
+`Proven / Model checked / Tested locally`。dismissalが返すhold resolutionはsource再署名前のdraftであり、
+source別durable notice、arbiter certificate再検証、source署名、next-cursor CAS、既存player-local inbox適用まで
+接続済みである。production rosterのrotation/revocation、case自動提出、source workerの自動schedule/credential、
+transfer caseは`Pending`。
 
 ### AUD-ASSET-005: multi-asset checkpointを一括受理する（MUST）
 

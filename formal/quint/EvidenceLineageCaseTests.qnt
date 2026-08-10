@@ -7,7 +7,11 @@ module evidenceLineageCaseTests {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 
   run authenticatedHoldOpensWithoutRevoking =
@@ -38,7 +42,38 @@ module evidenceLineageCaseTests {
         state.assetStatus == Eligible,
         state.dismissalCount == 1,
         state.assetMutationCount == 0,
+        not(state.holdResolved.get(C1)),
       })
+
+  run exactSourceResolutionResolvesDismissedHold =
+    init
+      .then(openCase(C1, true, true, true))
+      .then(dismissCase(C1, true, true))
+      .then(publishSourceResolution(C1, true, true, true))
+      .expect(and {
+        state.caseStatus.get(C1) == Dismissed,
+        state.holdResolved.get(C1),
+        state.resolutionCount == 1,
+        state.assetStatus == Eligible,
+      })
+
+  run unauthenticatedSourceResolutionIsRejected =
+    init
+      .then(openCase(C1, true, true, true))
+      .then(dismissCase(C1, true, true))
+      .then(publishSourceResolution(C1, false, true, true).fail())
+
+  run retargetedSourceResolutionIsRejected =
+    init
+      .then(openCase(C1, true, true, true))
+      .then(dismissCase(C1, true, true))
+      .then(publishSourceResolution(C1, true, false, true).fail())
+
+  run staleSourceCursorIsRejected =
+    init
+      .then(openCase(C1, true, true, true))
+      .then(dismissCase(C1, true, true))
+      .then(publishSourceResolution(C1, true, true, false).fail())
 
   run unauthenticatedDismissalIsRejected =
     init

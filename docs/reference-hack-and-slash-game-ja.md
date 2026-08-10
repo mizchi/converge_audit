@@ -125,7 +125,9 @@ active holdは維持する。外部source署名付きactive holdはorigin asset/
 Workerへ提出でき、case作成だけではassetを止めない。外部arbiterのv2 certificateがexact case IDを指定した時だけ
 caseを`upheld`としてlineageと同じtransactionで進める。別の署名付きdismissal certificateはcaseだけを
 `dismissed`にしてasset/listingを変更しない。返却するhold resolutionはsource再署名前のdraftであり、端末holdを
-直接解除しない。poll schedulerからの自動提出・draft再署名配送とtransfer caseはまだない。
+直接解除しない。source別notice outboxからarbiter certificateを再検証し、next cursorへsource署名して既存inboxから
+holdを解決するreference relayは接続済みである。case自動提出、source workerの自動schedule/credentialと
+transfer caseはまだない。
 またauthority HTTP応答の真正性はsame-origin Worker境界に依存しており、productionでは署名済み
 ACKまたは認証済みchannel capabilityへ置き換える。
 

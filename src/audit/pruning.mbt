@@ -95,3 +95,15 @@ pub fn evidence_lineage_case_dismissal_allowed(
   certificate_authenticated &&
   certificate_time_valid
 }
+
+///|
+/// Publishing a player-local resolution is a separate authenticated source
+/// transition after the arbiter has resolved the exact case.
+pub fn evidence_case_source_resolution_allowed(
+  case_resolved : Bool,
+  resolution_matches : Bool,
+  source_authenticated : Bool,
+  cursor_matches : Bool,
+) -> Bool {
+  case_resolved && resolution_matches && source_authenticated && cursor_matches
+}

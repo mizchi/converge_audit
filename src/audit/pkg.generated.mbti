@@ -10,6 +10,8 @@ pub fn accepted_audit_event_time_is_not_late(Int, Int, Int) -> Unit
 
 pub fn accepted_evidence_case_dismissal_requires_every_guard(Bool, Bool, Bool, Bool) -> Unit
 
+pub fn accepted_evidence_case_source_resolution_requires_every_guard(Bool, Bool, Bool, Bool) -> Unit
+
 pub fn accepted_evidence_hold_requires_authenticated_exact_binding(Bool, Bool, Bool) -> Unit
 
 pub fn accepted_evidence_hold_resolution_requires_every_guard(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
@@ -57,6 +59,8 @@ pub fn event_leaves_per_micro_checkpoint(VerifiedCheckpointPolicy) -> Int
 pub fn evidence_case_never_admits_an_unauthenticated_hold(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn evidence_case_never_resolves_without_authenticated_certificate(Bool, Bool, Bool) -> Unit
+
+pub fn evidence_case_source_resolution_allowed(Bool, Bool, Bool, Bool) -> Bool
 
 pub fn evidence_inbox_sequence_gap_never_advances(Int, Int, Bool, Bool, Bool, Bool) -> Unit
 
@@ -146,9 +150,13 @@ pub fn unauthenticated_evidence_hold_resolution_is_never_allowed(Bool, Bool, Boo
 
 pub fn unauthenticated_evidence_inbox_message_never_advances(Int, Int, Bool, Bool, Bool) -> Unit
 
+pub fn unauthenticated_source_never_resolves_player_local_hold(Bool, Bool, Bool) -> Unit
+
 pub fn unavailable_capacity_never_prepares_atomic_seal(Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn under_quorum_never_authenticates_checkpoint_delivery(Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn unresolved_case_never_resolves_player_local_hold(Bool, Bool, Bool) -> Unit
 
 pub fn valid_checkpoint_policy_fields_are_nested(Int, Int, Int, Int, Int, Int) -> Unit
 

@@ -197,3 +197,27 @@ check_expected_failure \
   invariant \
   onlyUpheldDecisionMutatesAsset \
   "$audit_quint_tmp/evidence-case-dismissal-mutation.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenSourceAuthentication \
+  invariant \
+  resolvedHoldsRequireAuthenticatedExactSourceCursor \
+  "$audit_quint_tmp/evidence-case-source-authentication.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenSourceBinding \
+  invariant \
+  resolvedHoldsRequireAuthenticatedExactSourceCursor \
+  "$audit_quint_tmp/evidence-case-source-binding.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenSourceCursor \
+  invariant \
+  resolvedHoldsRequireAuthenticatedExactSourceCursor \
+  "$audit_quint_tmp/evidence-case-source-cursor.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenAutomaticHoldResolution \
+  invariant \
+  caseCloseNeverAutomaticallyResolvesHold \
+  "$audit_quint_tmp/evidence-case-automatic-hold-resolution.log"

@@ -460,3 +460,79 @@ pub lemma closed_evidence_case_is_never_dismissed_again(
   ),
 } {
 }
+
+///|
+predicate evidence_case_source_resolution_post(
+  case_resolved : Bool,
+  resolution_matches : Bool,
+  source_authenticated : Bool,
+  cursor_matches : Bool,
+  result : Bool,
+) {
+  if case_resolved {
+    if resolution_matches {
+      if source_authenticated {
+        result == cursor_matches
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_case_source_resolution_requires_every_guard(
+  case_resolved : Bool,
+  resolution_matches : Bool,
+  source_authenticated : Bool,
+  cursor_matches : Bool,
+) where {
+  proof_require: evidence_case_source_resolution_post(
+    case_resolved,
+    resolution_matches,
+    source_authenticated,
+    cursor_matches,
+    true,
+  ),
+  proof_ensure: case_resolved == true,
+  proof_ensure: resolution_matches == true,
+  proof_ensure: source_authenticated == true,
+  proof_ensure: cursor_matches == true,
+} {
+}
+
+///|
+pub lemma unresolved_case_never_resolves_player_local_hold(
+  resolution_matches : Bool,
+  source_authenticated : Bool,
+  cursor_matches : Bool,
+) where {
+  proof_ensure: evidence_case_source_resolution_post(
+    false,
+    resolution_matches,
+    source_authenticated,
+    cursor_matches,
+    false,
+  ),
+} {
+}
+
+///|
+pub lemma unauthenticated_source_never_resolves_player_local_hold(
+  case_resolved : Bool,
+  resolution_matches : Bool,
+  cursor_matches : Bool,
+) where {
+  proof_ensure: evidence_case_source_resolution_post(
+    case_resolved,
+    resolution_matches,
+    false,
+    cursor_matches,
+    false,
+  ),
+} {
+}

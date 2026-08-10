@@ -177,7 +177,7 @@ CRDT本体へgame ruleを持ち込まない。
   汎用audit policy/head/event-time/closure/ACK/atomic seal/
   delivery authenticationとvote semilatticeの包含・精度・exact-next・late-event・
   evidence inbox hash-chain/bounded page、poll claim/deadline/backoff step、case admission/uphold/dismissal・
-  fail-closed/収束条件が57 goals、quorum vote 8 goalsを含め計241 goals。
+  fail-closed/収束条件が60 goals、quorum vote 8 goalsを含め計244 goals。
 - 限界: verifier は数学整数を使うため machine integer overflow を証明しない。暗号の
   collision resistance、signature unforgeability、game kernel 全体の determinism も
   現在の proof 外である。
@@ -371,8 +371,9 @@ active/resolved evidence hold registry、署名済みhash-chain envelope、sourc
 bounded single-page polling、source別durable poll job/lease/attempt fencing/指数backoff/restart回復、
 `expired`/`escalated`停止を追加した。reference PvE originは外部source署名付きholdから裁定前caseを
 Workerへ提出し、exact case ID付きarbiter uphold/dismiss certificateと時間制appealへ接続済みである。
-dismissalはassetを変更せず、hold resolutionはsource再署名前のdraftとして返す。zone/epoch key の委任、
-動的 observer assignment、production durable store、checkpoint-head transport、poll schedulerからのcase自動提出・draft再署名配送、transfer case、
+dismissalはassetを変更せず、hold resolutionはsource別durable noticeへ置き、arbiter certificate再検証後の
+source署名だけをnext cursorへCAS publishする。zone/epoch key の委任、動的 observer assignment、
+production durable store、checkpoint-head transport、case自動提出、source workerの自動schedule/credential、transfer case、
 階層Merkle pruningは未実装である。詳細は
 [不規則 encounter の選択的アンチチート](./open-world-audit-ja.md)を参照する。
 

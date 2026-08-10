@@ -8,7 +8,11 @@ module evidenceLineageCaseSafety {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 }
 
@@ -21,7 +25,11 @@ module evidenceLineageCaseBrokenHoldAuthentication {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 }
 
@@ -34,7 +42,11 @@ module evidenceLineageCaseBrokenHoldBinding {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 }
 
@@ -47,7 +59,11 @@ module evidenceLineageCaseBrokenOpenMutation {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = true,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 }
 
@@ -60,7 +76,11 @@ module evidenceLineageCaseBrokenCertificateAuthentication {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 }
 
@@ -73,7 +93,11 @@ module evidenceLineageCaseBrokenDecisionBinding {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 }
 
@@ -86,7 +110,11 @@ module evidenceLineageCaseBrokenDismissalAuthentication {
     enforceDismissalAuthentication = false,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 }
 
@@ -99,7 +127,11 @@ module evidenceLineageCaseBrokenDismissalBinding {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = false,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = false
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
   ).* from "./EvidenceLineageCase"
 }
 
@@ -112,6 +144,78 @@ module evidenceLineageCaseBrokenDismissalMutation {
     enforceDismissalAuthentication = true,
     enforceDismissalBinding = true,
     mutateAssetOnCaseOpen = false,
-    mutateAssetOnDismissal = true
+    mutateAssetOnDismissal = true,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
+  ).* from "./EvidenceLineageCase"
+}
+
+module evidenceLineageCaseBrokenSourceAuthentication {
+  import evidenceLineageCase(
+    enforceHoldAuthentication = true,
+    enforceHoldBinding = true,
+    enforceCertificateAuthentication = true,
+    enforceDecisionBinding = true,
+    enforceDismissalAuthentication = true,
+    enforceDismissalBinding = true,
+    mutateAssetOnCaseOpen = false,
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = false,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
+  ).* from "./EvidenceLineageCase"
+}
+
+module evidenceLineageCaseBrokenSourceBinding {
+  import evidenceLineageCase(
+    enforceHoldAuthentication = true,
+    enforceHoldBinding = true,
+    enforceCertificateAuthentication = true,
+    enforceDecisionBinding = true,
+    enforceDismissalAuthentication = true,
+    enforceDismissalBinding = true,
+    mutateAssetOnCaseOpen = false,
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = false,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = false
+  ).* from "./EvidenceLineageCase"
+}
+
+module evidenceLineageCaseBrokenSourceCursor {
+  import evidenceLineageCase(
+    enforceHoldAuthentication = true,
+    enforceHoldBinding = true,
+    enforceCertificateAuthentication = true,
+    enforceDecisionBinding = true,
+    enforceDismissalAuthentication = true,
+    enforceDismissalBinding = true,
+    mutateAssetOnCaseOpen = false,
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = false,
+    resolveHoldOnCaseClose = false
+  ).* from "./EvidenceLineageCase"
+}
+
+module evidenceLineageCaseBrokenAutomaticHoldResolution {
+  import evidenceLineageCase(
+    enforceHoldAuthentication = true,
+    enforceHoldBinding = true,
+    enforceCertificateAuthentication = true,
+    enforceDecisionBinding = true,
+    enforceDismissalAuthentication = true,
+    enforceDismissalBinding = true,
+    mutateAssetOnCaseOpen = false,
+    mutateAssetOnDismissal = false,
+    enforceSourceAuthentication = true,
+    enforceSourceBinding = true,
+    enforceSourceCursor = true,
+    resolveHoldOnCaseClose = true
   ).* from "./EvidenceLineageCase"
 }

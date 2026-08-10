@@ -107,6 +107,9 @@ quint verify formal/quint/EvidenceLineageCaseModels.qnt \
     assetMutationRequiresAuthenticatedExactCertificate \
     dismissedCasesRequireAuthenticatedExactCertificate \
     onlyUpheldDecisionMutatesAsset \
+    caseCloseNeverAutomaticallyResolvesHold \
+    resolvedHoldsRequireAuthenticatedExactSourceCursor \
     decidedCasesMatchDecisionCount \
     dismissedCasesMatchDismissalCount \
+    resolvedHoldsMatchResolutionCount \
   --verbosity=1

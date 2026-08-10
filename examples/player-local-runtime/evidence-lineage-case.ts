@@ -85,6 +85,10 @@ export type VerifiedEvidenceLineageCaseProposal =
   }
   | { ok: false; reason: EvidenceLineageCaseRejection };
 
+export type VerifiedEvidenceLineageCaseSourceEnvelope =
+  | { ok: true; envelope: PlayerLocalEvidenceHoldEnvelope }
+  | { ok: false; reason: EvidenceLineageCaseRejection };
+
 export function parseEvidenceLineageCaseSourceRoster(
   encoded: string | undefined,
 ): EvidenceLineageCaseSourceRoster | undefined {
@@ -136,6 +140,46 @@ export function evidenceLineageCaseReferenceDigest(
     reference.checkpointDigest,
     reference.holdKind,
   ]));
+}
+
+export async function verifyEvidenceLineageCaseSourceEnvelope(
+  value: unknown,
+  expectedBoundary: AuditBoundary,
+  expectedSourceId: string,
+  options: VerifyEvidenceLineageCaseProposalOptions,
+): Promise<VerifiedEvidenceLineageCaseSourceEnvelope> {
+  const decoded = decodePlayerLocalEvidenceHoldEnvelope(
+    value,
+    expectedBoundary,
+    expectedSourceId,
+  );
+  if (!decoded.ok) return { ok: false, reason: "invalid_proposal" };
+  const source = options.roster[expectedSourceId];
+  if (!source) return { ok: false, reason: "unknown_source" };
+  const authentication = recordValue(decoded.envelope.authentication);
+  if (
+    !authentication || !nonEmptyBounded(authentication.scheme, 128) ||
+    typeof authentication.signature !== "string" ||
+    authentication.signature.length > 16_384
+  ) return { ok: false, reason: "invalid_proposal" };
+  if (source.scheme !== authentication.scheme) {
+    return { ok: false, reason: "source_scheme_mismatch" };
+  }
+  const verifier = options.verifiers[authentication.scheme];
+  if (!verifier) {
+    return { ok: false, reason: "unsupported_authentication_scheme" };
+  }
+  const canonical = playerLocalEvidenceHoldEnvelopeStatement(decoded.envelope);
+  const messageDigest = options.digest.hashString(canonical);
+  if (messageDigest !== decoded.envelope.message_digest) {
+    return { ok: false, reason: "invalid_message_digest" };
+  }
+  if (!await verifier.verify(
+    source.publicKey,
+    messageDigest,
+    authentication.signature,
+  )) return { ok: false, reason: "invalid_signature" };
+  return { ok: true, envelope: decoded.envelope };
 }
 
 /**

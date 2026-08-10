@@ -246,11 +246,12 @@ just prove-audit-core
 ```
 
 The Nix development shell pins Why3 1.7.2 and Z3 4.8.17. The generic audit
-core proves 57 goals for nested cadence/retention, localization precision,
+core proves 60 goals for nested cadence/retention, localization precision,
 finality arithmetic, exact-next head classification, late-event admission,
 trusted epoch closure, exact success-ACK admission, and checkpoint delivery
 authentication, including the evidence-inbox hash-chain, bounded-page, durable poll
-claim/deadline/backoff, and evidence-case admission/uphold/dismissal gates. The quorum vote
+claim/deadline/backoff, evidence-case admission/uphold/dismissal, and source-signed
+resolution handoff gates. The quorum vote
 package proves 8 additional goals for vote-merge idempotence, commutativity,
 associativity, and equivocation absorption.
 The game audit package

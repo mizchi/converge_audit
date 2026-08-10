@@ -119,8 +119,8 @@ inventory head更新はeligible creation、proof成功、manifest一致、exact 
 owner/version整合の6条件を要求し、wrong-parentとversion rollbackを拒否する。
 multi-asset checkpointはさらにasset非空・件数上限・canonical順・共有parent/epoch・全creation/lineage/
 proof/head条件の10条件を要求する。game-audit packageで176 proof goals、汎用audit
-policy/head/event-time/closure/ACK/atomic seal/delivery authentication/evidence inbox/poll schedule/case handoffで57 goals、
-vote semilatticeで8 goals、計241 goalsが成功している。Workerは汎用headを含むMoonBit分類器を直接呼ぶため、Queue配送成功を
+policy/head/event-time/closure/ACK/atomic seal/delivery authentication/evidence inbox/poll schedule/case/source resolution handoffで60 goals、
+vote semilatticeで8 goals、計244 goalsが成功している。Workerは汎用headを含むMoonBit分類器を直接呼ぶため、Queue配送成功を
 ゲーム結果の検証成功へ昇格させない。
 
 三modeでversioned canonical CBOR bundleを`replay_artifacts`へ保存する経路を実装した。PvE bundleは
@@ -171,6 +171,9 @@ certificateはexact open caseを`upheld`にしてrevokeと同時commitし、管�
 `game-asset-lineage-case-dismissals`は別のarbiter署名を検証してcaseだけを`dismissed`にする。
 dismissal履歴とcase CASは同一transactionで、asset head/listingは触らない。応答の
 `hold_resolution_draft`はevidence sourceのhash-chain再署名が必要であり、端末holdを直接解除しない。
+reference relayはresolution noticeをsource別にdurable保存し、sourceがarbiter certificateを再検証して
+next cursorへ署名したenvelopeだけをinboxへCAS publishする。端末は既存bounded pollerでplacementとresolveを
+順に取り込み、source停止・未認証・stale cursorではactive holdを維持する。
 
 汎用側ではまず`POST /v1/open/:unit/asset-lineage-proofs`が、authority署名owner-key binding、
 sender/recipient二重署名、exact parent/version、累積`lineage_root`、current checkpoint membershipを

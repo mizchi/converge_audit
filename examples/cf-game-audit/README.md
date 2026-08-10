@@ -99,6 +99,35 @@ Content-Type: application/json
 evidence sourceが次のsequence/previous digestを付けて署名し、端末がそのhash-chain envelopeを受理するまで
 active holdは解除しない。case棄却、lineageの`eligible` appeal、端末hold解除は別々の状態遷移である。
 
+この再署名relayもreference実装へ接続済みである。case起票時の署名済みplacementはcaseと同じtransactionで
+source inboxの次sequence（初回は0）へ保存され、uphold/dismiss時はarbiter certificateを含むresolution noticeを
+source別outboxへ保存する。sourceは次をlimit 1でpollし、応答のcertificateを再検証して
+`evidence-case-resolution-relay.ts`で`source_cursor + 1`のresolve envelopeを署名する。
+
+```http
+POST /v1/pve/:unit/game-evidence-case-resolution-polls
+Content-Type: application/json
+
+{"version":1,"source_id":"evidence-source-a","after_sequence":-1,
+ "after_resolution_id":"resolution-genesis","limit":1}
+```
+
+署名済みenvelopeは`game-evidence-case-resolution-envelopes`へ提出する。Workerはsource roster、exact
+case/reference/resolution、next sequence/previous digestを検証し、source inboxへのinsertとnotice完了を
+同じtransactionでCASする。受理済みmessage digestと完全一致する再送だけが`duplicate`となり、別digestは
+競合として拒否する。端末の既存pollerは次を読む。
+
+```http
+POST /v1/pve/:unit/game-evidence-inbox
+Content-Type: application/json
+
+{"version":1,"source_id":"evidence-source-a","after_sequence":-1,
+ "after_message_digest":"inbox-genesis","limit":2}
+```
+
+Workerはsource秘密鍵を保持しない。reference source workerの自動schedule/lease/backoffとcredential付き
+poll認証は次段階だが、source停止中・未署名・stale cursorではnoticeとactive holdを維持してfail-closedになる。
+
 lineage decisionの管理API contractは次のとおり。`expected_revision`はancestorごとのCASで、初回は0、
 成功ごとに1進む。同じcanonical requestは同じ`decision_id`となり`duplicate`、古いrevisionは
 `stale_lineage_revision`、既に同じstatusなら`lineage_status_unchanged`になる。署名対象はscope、unit、
@@ -564,7 +593,7 @@ NAT共有時の公平性を表さない。
 | source of truth | MoonBitの`CheckpointReplayMatch`は完全transcriptのkernel replayと署名済みgame checkpoint一致からだけ生成される |
 | implementation observation | anchor-only jobに加え、管理境界でmode固有の期待checkpointを固定して完全bundleをDO保存する経路がある |
 | model question | anchor配送だけで`verified`へ到達可能か |
-| machine result | 不可能。`verified`はanchor、transcript、checkpoint link、kernel complete、kernel matchを要求し、open-worldではさらにtrusted boundary、外部transparency publication、plan、seal/seed、registration、inclusion、replayの全条件を要求する。item生成の保存とinventory head更新もfail-closedで、game audit 176 + 汎用audit 57 + quorum vote 8、計241 proof goals成功 |
+| machine result | 不可能。`verified`はanchor、transcript、checkpoint link、kernel complete、kernel matchを要求し、open-worldではさらにtrusted boundary、外部transparency publication、plan、seal/seed、registration、inclusion、replayの全条件を要求する。item生成の保存とinventory head更新もfail-closedで、game audit 176 + 汎用audit 60 + quorum vote 8、計244 proof goals成功 |
 | decision | anchor-onlyは`awaiting_transcript`。PvEは三root、PvPはさらに`n-f` replay witness、open-world v2は4 checkpoint・2 publication proofs・遅延seed・`n-f` registration・eligible inclusion後だけ`verified`にする |
 | regression lock | `central_replay.mbt/.mbtp`、mode別wire/verifier tests、Worker bridge test、workerd Queue integration test |
 

@@ -119,3 +119,27 @@ test "evidence case dismissal closes only an exact open case" {
     content="false",
   )
 }
+
+///|
+test "source resolution requires a resolved exact case and next authenticated cursor" {
+  inspect(
+    evidence_case_source_resolution_allowed(true, true, true, true),
+    content="true",
+  )
+  inspect(
+    evidence_case_source_resolution_allowed(false, true, true, true),
+    content="false",
+  )
+  inspect(
+    evidence_case_source_resolution_allowed(true, false, true, true),
+    content="false",
+  )
+  inspect(
+    evidence_case_source_resolution_allowed(true, true, false, true),
+    content="false",
+  )
+  inspect(
+    evidence_case_source_resolution_allowed(true, true, true, false),
+    content="false",
+  )
+}

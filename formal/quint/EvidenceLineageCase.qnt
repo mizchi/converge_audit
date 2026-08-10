@@ -13,14 +13,19 @@ module evidenceLineageCase {
     holdActive: CaseId -> bool,
     holdAuthenticated: CaseId -> bool,
     holdExactlyBound: CaseId -> bool,
+    holdResolved: CaseId -> bool,
     assetStatus: AssetStatus,
     decisionCount: int,
     dismissalCount: int,
     assetMutationCount: int,
+    resolutionCount: int,
     lastCertificateAuthenticated: bool,
     lastDecisionExactlyBound: bool,
     lastDismissalAuthenticated: bool,
     lastDismissalExactlyBound: bool,
+    lastSourceAuthenticated: bool,
+    lastSourceExactlyBound: bool,
+    lastSourceCursorExact: bool,
   }
 
   const enforceHoldAuthentication: bool
@@ -31,6 +36,10 @@ module evidenceLineageCase {
   const enforceDismissalBinding: bool
   const mutateAssetOnCaseOpen: bool
   const mutateAssetOnDismissal: bool
+  const enforceSourceAuthentication: bool
+  const enforceSourceBinding: bool
+  const enforceSourceCursor: bool
+  const resolveHoldOnCaseClose: bool
 
   pure val Cases = Set(C1, C2)
   var state: State
@@ -42,14 +51,19 @@ module evidenceLineageCase {
       holdActive: Cases.mapBy(_ => false),
       holdAuthenticated: Cases.mapBy(_ => false),
       holdExactlyBound: Cases.mapBy(_ => false),
+      holdResolved: Cases.mapBy(_ => false),
       assetStatus: Eligible,
       decisionCount: 0,
       dismissalCount: 0,
       assetMutationCount: 0,
+      resolutionCount: 0,
       lastCertificateAuthenticated: true,
       lastDecisionExactlyBound: true,
       lastDismissalAuthenticated: true,
       lastDismissalExactlyBound: true,
+      lastSourceAuthenticated: true,
+      lastSourceExactlyBound: true,
+      lastSourceCursorExact: true,
     }
   }
 
@@ -95,6 +109,9 @@ module evidenceLineageCase {
       assetMutationCount: state.assetMutationCount + 1,
       lastCertificateAuthenticated: authenticated,
       lastDecisionExactlyBound: exactlyBound,
+      holdResolved:
+        if (resolveHoldOnCaseClose) state.holdResolved.set(caseId, true)
+        else state.holdResolved,
     },
   }
 
@@ -117,6 +134,34 @@ module evidenceLineageCase {
         state.assetMutationCount + (if (mutateAssetOnDismissal) 1 else 0),
       lastDismissalAuthenticated: authenticated,
       lastDismissalExactlyBound: exactlyBound,
+      holdResolved:
+        if (resolveHoldOnCaseClose) state.holdResolved.set(caseId, true)
+        else state.holdResolved,
+    },
+  }
+
+  /// A resolved case only creates a draft. The evidence source separately
+  /// authenticates the exact resolution at the next hash-chain cursor.
+  action publishSourceResolution(
+    caseId: CaseId,
+    authenticated: bool,
+    exactlyBound: bool,
+    cursorExact: bool,
+  ): bool = all {
+    caseId.in(Cases),
+    state.caseStatus.get(caseId) == Decided or
+      state.caseStatus.get(caseId) == Dismissed,
+    not(state.holdResolved.get(caseId)),
+    not(enforceSourceAuthentication) or authenticated,
+    not(enforceSourceBinding) or exactlyBound,
+    not(enforceSourceCursor) or cursorExact,
+    state' = {
+      ...state,
+      holdResolved: state.holdResolved.set(caseId, true),
+      resolutionCount: state.resolutionCount + 1,
+      lastSourceAuthenticated: authenticated,
+      lastSourceExactlyBound: exactlyBound,
+      lastSourceCursorExact: cursorExact,
     },
   }
 
@@ -154,19 +199,36 @@ module evidenceLineageCase {
     dismissCase(caseId, authenticated, exactlyBound)
   }
 
-  action step = any { openSome, decideSome, dismissSome, duplicateSome }
+  action publishSourceResolutionSome = {
+    nondet caseId = Cases.oneOf()
+    nondet authenticated = Set(true, false).oneOf()
+    nondet exactlyBound = Set(true, false).oneOf()
+    nondet cursorExact = Set(true, false).oneOf()
+    publishSourceResolution(caseId, authenticated, exactlyBound, cursorExact)
+  }
+
+  action step = any {
+    openSome,
+    decideSome,
+    dismissSome,
+    publishSourceResolutionSome,
+    duplicateSome,
+  }
 
   val typeOk = and {
     state.caseStatus.keys() == Cases,
     state.holdActive.keys() == Cases,
     state.holdAuthenticated.keys() == Cases,
     state.holdExactlyBound.keys() == Cases,
+    state.holdResolved.keys() == Cases,
     state.decisionCount >= 0,
     state.decisionCount <= 2,
     state.dismissalCount >= 0,
     state.dismissalCount <= 2,
     state.assetMutationCount >= 0,
     state.assetMutationCount <= 2,
+    state.resolutionCount >= 0,
+    state.resolutionCount <= 2,
   }
 
   val acceptedCasesRequireAuthenticatedActiveExactHolds =
@@ -196,6 +258,17 @@ module evidenceLineageCase {
   val onlyUpheldDecisionMutatesAsset =
     state.assetMutationCount == state.decisionCount
 
+  val caseCloseNeverAutomaticallyResolvesHold =
+    state.resolutionCount == 0 implies
+      Cases.forall(caseId => not(state.holdResolved.get(caseId)))
+
+  val resolvedHoldsRequireAuthenticatedExactSourceCursor =
+    state.resolutionCount > 0 implies and {
+      state.lastSourceAuthenticated,
+      state.lastSourceExactlyBound,
+      state.lastSourceCursorExact,
+    }
+
   val decidedCasesMatchDecisionCount =
     state.decisionCount ==
       Cases.filter(caseId => state.caseStatus.get(caseId) == Decided).size()
@@ -203,4 +276,8 @@ module evidenceLineageCase {
   val dismissedCasesMatchDismissalCount =
     state.dismissalCount ==
       Cases.filter(caseId => state.caseStatus.get(caseId) == Dismissed).size()
+
+  val resolvedHoldsMatchResolutionCount =
+    state.resolutionCount ==
+      Cases.filter(caseId => state.holdResolved.get(caseId)).size()
 }

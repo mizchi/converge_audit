@@ -11,6 +11,10 @@ import {
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
 
 import {
+  buildEvidenceCaseResolutionEnvelope,
+  type EvidenceCaseResolutionNotice,
+} from "../../player-local-runtime/evidence-case-resolution-relay.ts";
+import {
   playerLocalEvidenceHoldEnvelopeStatement,
   type PlayerLocalEvidenceHoldUnsignedEnvelope,
 } from "../../player-local-runtime/evidence-hold-wire.ts";
@@ -225,6 +229,62 @@ test("bounded evidence polling applies a signed page and resumes from its durabl
     after_sequence: 1,
     after_message_digest: signedResolution.message_digest,
     limit: 2,
+  });
+  runtime.close();
+});
+
+test("an authenticated arbiter notice is source-signed before the inbox resolves a hold", async () => {
+  const runtime = await openRuntime();
+  const signedPlacement = sign(placement());
+  const unsignedResolution = resolution(signedPlacement.message_digest);
+  if (unsignedResolution.operation.kind !== "resolve") {
+    assert.fail("expected resolution");
+  }
+  const notice: EvidenceCaseResolutionNotice = {
+    version: 1,
+    noticeSequence: 0,
+    scope: "reference-game",
+    unit: "dungeon-1",
+    caseId: "c".repeat(64),
+    sourceId,
+    acceptedAtMs: 1_000,
+    resolution: unsignedResolution.operation.resolution,
+    authorization: { kind: "dismissal", certificate: "authenticated" },
+  };
+  const relayed = await buildEvidenceCaseResolutionEnvelope(notice, {
+    cursor: {
+      boundary,
+      source_id: sourceId,
+      sequence: 0,
+      message_digest: signedPlacement.message_digest,
+    },
+    authorizationVerifier: {
+      verify: (candidate) => candidate.authorization === notice.authorization,
+    },
+    digest: { hashString: audit_browser_sha256 },
+    signer: {
+      scheme: "moonbit-ed25519-v1",
+      sign: (digest) => audit_browser_ed25519_sign(seed, digest),
+    },
+  });
+  if (!relayed.ok) throw new Error(relayed.reason);
+  const fetcher = (async () => Response.json(page(
+    -1,
+    initialMessageDigest,
+    [signedPlacement, relayed.envelope],
+  ))) as typeof fetch;
+  assert.deepEqual(await pollPlayerLocalEvidenceInbox(
+    pollInput(runtime, fetcher),
+  ), {
+    decision: "applied",
+    applied_messages: 2,
+    last_sequence: 1,
+  });
+  const image = await runtime.image();
+  assert.deepEqual(image.evidence_holds[0]?.state, {
+    kind: "resolved",
+    decision: "dismissed",
+    resolution_digest: "resolution-0",
   });
   runtime.close();
 });

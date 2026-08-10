@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   audit_browser_ed25519_public_key,
   audit_browser_ed25519_sign,
+  audit_browser_ed25519_verify,
   audit_browser_merkle_root,
   audit_browser_sha256,
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
@@ -43,6 +44,13 @@ import {
   evidenceCaseDismissalStatementDigest,
   type EvidenceCaseDismissalStatement,
 } from "../src/evidence-case-dismissal-certificate";
+import {
+  createReferenceGameEvidenceResolutionAuthorizationVerifier,
+} from "../src/evidence-case-resolution-authorization";
+import {
+  buildEvidenceCaseResolutionEnvelope,
+  decodeEvidenceCaseResolutionPollPage,
+} from "../../player-local-runtime/evidence-case-resolution-relay";
 import {
   evidenceLineageCaseReferenceDigest,
   type EvidenceLineageCaseReference,
@@ -1809,6 +1817,182 @@ describe.sequential("Cloudflare game audit shard", () => {
       },
     });
     expect(dismissedBody.dismissal_id).toMatch(/^[0-9a-f]{64}$/);
+
+    const resolutionPollCursor = {
+      sourceId,
+      sequence: -1,
+      resolutionId: "resolution-genesis",
+    };
+    const resolutionPoll = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-evidence-case-resolution-polls`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          version: 1,
+          source_id: sourceId,
+          after_sequence: resolutionPollCursor.sequence,
+          after_resolution_id: resolutionPollCursor.resolutionId,
+          limit: 1,
+        }),
+      },
+    );
+    expect(resolutionPoll.status).toBe(200);
+    const decodedPage = decodeEvidenceCaseResolutionPollPage(
+      await resolutionPoll.json(),
+      resolutionPollCursor,
+      1,
+    );
+    expect(decodedPage).toMatchObject({
+      ok: true,
+      page: {
+        sourceId,
+        sourceCursor: {
+          source_id: sourceId,
+          sequence: 0,
+          message_digest: messageDigest,
+        },
+        notices: [{
+          caseId: openedBody.case.case_id,
+          resolution: {
+            decision: "dismissed",
+            resolution_digest: dismissedBody.dismissal_id,
+          },
+          authorization: { kind: "dismissal" },
+        }],
+      },
+    });
+    if (!decodedPage.ok) throw new Error(decodedPage.reason);
+    const resolutionNotice = decodedPage.page.notices[0];
+    const signedResolution = await buildEvidenceCaseResolutionEnvelope(
+      resolutionNotice,
+      {
+        cursor: decodedPage.page.sourceCursor,
+        authorizationVerifier:
+          createReferenceGameEvidenceResolutionAuthorizationVerifier({
+            roster: {
+              "external-arbiter-a": {
+                scheme: "moonbit-ed25519-v1",
+                publicKey: audit_browser_ed25519_public_key(
+                  LINEAGE_ARBITER_SEED,
+                ),
+              },
+            },
+            verifiers: {
+              "moonbit-ed25519-v1": {
+                verify: audit_browser_ed25519_verify,
+              },
+            },
+            digest: referenceGameDigest,
+            maxClockSkewMs: 0,
+          }),
+        digest: referenceGameDigest,
+        signer: {
+          scheme: "moonbit-ed25519-v1",
+          sign: (digest) => audit_browser_ed25519_sign(
+            EVIDENCE_SOURCE_SEED,
+            digest,
+          ),
+        },
+      },
+    );
+    if (!signedResolution.ok) throw new Error(signedResolution.reason);
+    const publishResolution = (envelope: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-evidence-case-resolution-envelopes`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          version: 1,
+          case_id: openedBody.case.case_id,
+          envelope,
+        }),
+      },
+    );
+    const forgedResolution = structuredClone(signedResolution.envelope);
+    forgedResolution.authentication.signature = "0".repeat(128);
+    const refusedResolution = await publishResolution(forgedResolution);
+    expect(refusedResolution.status).toBe(403);
+    await expect(refusedResolution.json()).resolves.toMatchObject({
+      decision: "invalid_signature",
+    });
+    const publishedResolution = await publishResolution(
+      signedResolution.envelope,
+    );
+    expect(publishedResolution.status).toBe(201);
+    await expect(publishedResolution.json()).resolves.toMatchObject({
+      decision: "published",
+      evidence_case_id: openedBody.case.case_id,
+      message_digest: signedResolution.envelope.message_digest,
+      sequence: 1,
+    });
+    const duplicateResolution = await publishResolution(
+      signedResolution.envelope,
+    );
+    expect(duplicateResolution.status).toBe(200);
+    await expect(duplicateResolution.json()).resolves.toMatchObject({
+      decision: "duplicate",
+      message_digest: signedResolution.envelope.message_digest,
+    });
+    const conflictingUnsignedResolution: PlayerLocalEvidenceHoldUnsignedEnvelope = {
+      version: 1,
+      source_id: sourceId,
+      message_id: target.holdId,
+      sequence: 2,
+      previous_message_digest: signedResolution.envelope.message_digest,
+      operation: signedResolution.envelope.operation,
+    };
+    const conflictingResolutionDigest = referenceGameDigest.hashString(
+      playerLocalEvidenceHoldEnvelopeStatement(conflictingUnsignedResolution),
+    );
+    const conflictingResolution = await publishResolution({
+      ...conflictingUnsignedResolution,
+      message_digest: conflictingResolutionDigest,
+      authentication: {
+        scheme: "moonbit-ed25519-v1",
+        signature: audit_browser_ed25519_sign(
+          EVIDENCE_SOURCE_SEED,
+          conflictingResolutionDigest,
+        ),
+      },
+    });
+    expect(conflictingResolution.status).toBe(409);
+    await expect(conflictingResolution.json()).resolves.toMatchObject({
+      error: "evidence_resolution_already_delivered",
+    });
+    const inboxPage = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-evidence-inbox`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          version: 1,
+          source_id: sourceId,
+          after_sequence: -1,
+          after_message_digest: "inbox-genesis",
+          limit: 2,
+        }),
+      },
+    );
+    expect(inboxPage.status).toBe(200);
+    await expect(inboxPage.json()).resolves.toMatchObject({
+      version: 1,
+      source_id: sourceId,
+      after_sequence: -1,
+      after_message_digest: "inbox-genesis",
+      messages: [
+        { sequence: 0, message_digest: messageDigest },
+        {
+          sequence: 1,
+          previous_message_digest: messageDigest,
+          message_digest: signedResolution.envelope.message_digest,
+          operation: {
+            kind: "resolve",
+            resolution: { decision: "dismissed" },
+          },
+        },
+      ],
+    });
 
     await evictAuditShard("pve", unit);
     const persistedCase = await SELF.fetch(

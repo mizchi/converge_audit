@@ -798,6 +798,21 @@ export async function evidenceLineageCaseDismissalAllowed(input: {
   );
 }
 
+export async function evidenceCaseSourceResolutionAllowed(input: {
+  caseResolved: boolean;
+  resolutionMatches: boolean;
+  sourceAuthenticated: boolean;
+  cursorMatches: boolean;
+}): Promise<boolean> {
+  const audit = await loadAuditModule();
+  return audit.audit_evidence_case_source_resolution_allowed(
+    input.caseResolved,
+    input.resolutionMatches,
+    input.sourceAuthenticated,
+    input.cursorMatches,
+  );
+}
+
 export async function verifyPveReplayBundle(
   bundleHex: string,
   expectedSessionId: string,

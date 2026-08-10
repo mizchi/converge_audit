@@ -37,6 +37,7 @@ import {
   evidenceLineageCaseHoldResolutionDraft,
   parseEvidenceLineageCaseSourceRoster,
   verifyEvidenceLineageCaseProposal,
+  verifyEvidenceLineageCaseSourceEnvelope,
   type EvidenceLineageCaseReference,
 } from "../../player-local-runtime/evidence-lineage-case";
 import {
@@ -75,6 +76,7 @@ import {
   evidenceLineageCaseAdmissionAllowed,
   evidenceLineageCaseDecisionAllowed,
   evidenceLineageCaseDismissalAllowed,
+  evidenceCaseSourceResolutionAllowed,
   loadCheckpointRuntime,
   marketplaceCreationPersistAllowed,
   openCheckpointClosure,
@@ -455,6 +457,31 @@ interface ReferenceGameEvidenceCaseDismissalRow
   dismissed_at: number;
 }
 
+interface ReferenceGameEvidenceInboxMessageRow
+  extends Record<string, SqlStorageValue> {
+  source_id: string;
+  sequence: number;
+  message_digest: string;
+  previous_message_digest: string;
+  message_id: string;
+  operation_kind: "place" | "resolve";
+  case_id: string;
+  envelope_json: string;
+  published_at: number;
+}
+
+interface ReferenceGameEvidenceCaseResolutionNoticeRow
+  extends Record<string, SqlStorageValue> {
+  source_id: string;
+  notice_sequence: number;
+  resolution_id: string;
+  case_id: string;
+  notice_json: string;
+  delivered_message_digest: string | null;
+  created_at: number;
+  delivered_at: number | null;
+}
+
 interface ReferenceGameSourceWindowRow extends Record<string, SqlStorageValue> {
   window_started_at: number;
   attempts: number;
@@ -493,6 +520,9 @@ const REFERENCE_GAME_PUBLIC_ACTIONS = new Set([
   "game-market-listing-cancellations",
   "game-asset-lineage-status",
   "game-asset-lineage-cases",
+  "game-evidence-case-resolution-polls",
+  "game-evidence-case-resolution-envelopes",
+  "game-evidence-inbox",
 ]);
 const AUDIT_ADMIN_ACTIONS = new Set([
   "asset-lineage-decisions",
@@ -1187,6 +1217,38 @@ export class GameAuditShard extends DurableObject<Env> {
         expires_at INTEGER NOT NULL CHECK (expires_at >= issued_at),
         dismissed_at INTEGER NOT NULL CHECK (dismissed_at >= 0)
       );
+      CREATE TABLE IF NOT EXISTS reference_game_evidence_inbox_messages (
+        source_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL CHECK (sequence >= 0),
+        message_digest TEXT NOT NULL CHECK (length(message_digest) > 0),
+        previous_message_digest TEXT NOT NULL CHECK (
+          length(previous_message_digest) > 0
+        ),
+        message_id TEXT NOT NULL,
+        operation_kind TEXT NOT NULL CHECK (
+          operation_kind IN ('place', 'resolve')
+        ),
+        case_id TEXT NOT NULL CHECK (length(case_id) = 64),
+        envelope_json TEXT NOT NULL,
+        published_at INTEGER NOT NULL CHECK (published_at >= 0),
+        PRIMARY KEY(source_id, sequence),
+        UNIQUE(source_id, message_digest),
+        UNIQUE(case_id, operation_kind)
+      );
+      CREATE TABLE IF NOT EXISTS
+        reference_game_evidence_case_resolution_notices (
+          source_id TEXT NOT NULL,
+          notice_sequence INTEGER NOT NULL CHECK (notice_sequence >= 0),
+          resolution_id TEXT NOT NULL UNIQUE CHECK (
+            length(resolution_id) = 64
+          ),
+          case_id TEXT NOT NULL UNIQUE CHECK (length(case_id) = 64),
+          notice_json TEXT NOT NULL,
+          delivered_message_digest TEXT UNIQUE,
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          delivered_at INTEGER CHECK (delivered_at >= 0),
+          PRIMARY KEY(source_id, notice_sequence)
+        );
       CREATE TABLE IF NOT EXISTS reference_game_verification_source_windows (
         source_bucket TEXT PRIMARY KEY CHECK (length(source_bucket) = 64),
         window_started_at INTEGER NOT NULL CHECK (window_started_at >= 0),
@@ -1405,6 +1467,15 @@ export class GameAuditShard extends DurableObject<Env> {
         return this.openReferenceGameEvidenceLineageCase(request, mode, unit);
       case "POST game-asset-lineage-case-dismissals":
         return this.dismissReferenceGameEvidenceLineageCase(request, mode, unit);
+      case "POST game-evidence-case-resolution-polls":
+        return this.pollReferenceGameEvidenceCaseResolutions(request, mode);
+      case "POST game-evidence-case-resolution-envelopes":
+        return this.publishReferenceGameEvidenceCaseResolution(
+          request,
+          mode,
+        );
+      case "POST game-evidence-inbox":
+        return this.pollReferenceGameEvidenceInbox(request, mode);
       case "GET game-asset-lineage-status":
         return this.getReferenceGameAssetLineageStatus(url, mode);
       case "GET asset-lineage-status":
@@ -2944,6 +3015,102 @@ export class GameAuditShard extends DurableObject<Env> {
     ).toArray()[0];
   }
 
+  private referenceGameEvidenceInboxMessageAt(
+    sourceId: string,
+    sequence: number,
+  ): ReferenceGameEvidenceInboxMessageRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameEvidenceInboxMessageRow>(
+      `SELECT source_id, sequence, message_digest, previous_message_digest,
+              message_id, operation_kind, case_id, envelope_json, published_at
+       FROM reference_game_evidence_inbox_messages
+       WHERE source_id = ? AND sequence = ?`,
+      sourceId,
+      sequence,
+    ).toArray()[0];
+  }
+
+  private referenceGameEvidenceInboxHead(
+    sourceId: string,
+  ): ReferenceGameEvidenceInboxMessageRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameEvidenceInboxMessageRow>(
+      `SELECT source_id, sequence, message_digest, previous_message_digest,
+              message_id, operation_kind, case_id, envelope_json, published_at
+       FROM reference_game_evidence_inbox_messages
+       WHERE source_id = ? ORDER BY sequence DESC LIMIT 1`,
+      sourceId,
+    ).toArray()[0];
+  }
+
+  private referenceGameEvidenceResolutionNoticeForCase(
+    caseId: string,
+  ): ReferenceGameEvidenceCaseResolutionNoticeRow | undefined {
+    return this.ctx.storage.sql.exec<
+      ReferenceGameEvidenceCaseResolutionNoticeRow
+    >(
+      `SELECT source_id, notice_sequence, resolution_id, case_id, notice_json,
+              delivered_message_digest, created_at, delivered_at
+       FROM reference_game_evidence_case_resolution_notices
+       WHERE case_id = ?`,
+      caseId,
+    ).toArray()[0];
+  }
+
+  private referenceGameEvidenceResolutionNoticeAt(
+    sourceId: string,
+    sequence: number,
+  ): ReferenceGameEvidenceCaseResolutionNoticeRow | undefined {
+    return this.ctx.storage.sql.exec<
+      ReferenceGameEvidenceCaseResolutionNoticeRow
+    >(
+      `SELECT source_id, notice_sequence, resolution_id, case_id, notice_json,
+              delivered_message_digest, created_at, delivered_at
+       FROM reference_game_evidence_case_resolution_notices
+       WHERE source_id = ? AND notice_sequence = ?`,
+      sourceId,
+      sequence,
+    ).toArray()[0];
+  }
+
+  private insertReferenceGameEvidenceResolutionNotice(
+    row: ReferenceGameEvidenceLineageCaseRow,
+    unit: string,
+    decision: "upheld" | "dismissed",
+    resolutionId: string,
+    authorizationKind: "lineage_decision" | "dismissal",
+    certificate: unknown,
+    createdAt: number,
+  ): ReferenceGameEvidenceCaseResolutionNoticeRow {
+    const noticeSequence = this.ctx.storage.sql.exec<{ next: number }>(
+      `SELECT COALESCE(MAX(notice_sequence), -1) + 1 AS next
+       FROM reference_game_evidence_case_resolution_notices
+       WHERE source_id = ?`,
+      row.source_id,
+    ).toArray()[0]?.next ?? 0;
+    const notice = referenceGameEvidenceCaseResolutionNoticeWire(
+      row,
+      unit,
+      noticeSequence,
+      decision,
+      resolutionId,
+      authorizationKind,
+      certificate,
+      createdAt,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO reference_game_evidence_case_resolution_notices
+       (source_id, notice_sequence, resolution_id, case_id, notice_json,
+        delivered_message_digest, created_at, delivered_at)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)`,
+      row.source_id,
+      noticeSequence,
+      resolutionId,
+      row.case_id,
+      JSON.stringify(notice),
+      createdAt,
+    );
+    return this.referenceGameEvidenceResolutionNoticeForCase(row.case_id)!;
+  }
+
   private referenceGameOpenRevocationCount(assetId: string): number {
     return this.ctx.storage.sql.exec<{ count: number }>(
       `SELECT COUNT(*) AS count
@@ -3950,7 +4117,18 @@ export class GameAuditShard extends DurableObject<Env> {
         target.sourceId,
         target.holdId,
       );
-      if (raced) return raced;
+      if (raced) return { decision: "hold_conflict" as const, row: raced };
+      const sourceHead = this.referenceGameEvidenceInboxHead(target.sourceId);
+      const expectedSequence = (sourceHead?.sequence ?? -1) + 1;
+      const expectedPreviousDigest = sourceHead?.message_digest ??
+        verified.proposal.envelope.previous_message_digest;
+      if (
+        verified.proposal.envelope.sequence !== expectedSequence ||
+        verified.proposal.envelope.previous_message_digest !==
+          expectedPreviousDigest
+      ) {
+        return { decision: "cursor_conflict" as const, row: undefined };
+      }
       this.ctx.storage.sql.exec(
         `INSERT INTO reference_game_evidence_lineage_cases
          (case_id, asset_id, ancestor_id, ancestor_kind, source_id, hold_id,
@@ -3979,19 +4157,45 @@ export class GameAuditShard extends DurableObject<Env> {
         holdEnvelopeJson,
         openedAt,
       );
-      return this.referenceGameEvidenceLineageCaseAt(verified.caseId);
+      this.ctx.storage.sql.exec(
+        `INSERT INTO reference_game_evidence_inbox_messages
+         (source_id, sequence, message_digest, previous_message_digest,
+          message_id, operation_kind, case_id, envelope_json, published_at)
+         VALUES (?, ?, ?, ?, ?, 'place', ?, ?, ?)`,
+        target.sourceId,
+        verified.proposal.envelope.sequence,
+        verified.proposal.envelope.message_digest,
+        verified.proposal.envelope.previous_message_digest,
+        verified.proposal.envelope.message_id,
+        verified.caseId,
+        holdEnvelopeJson,
+        openedAt,
+      );
+      return {
+        decision: "inserted" as const,
+        row: this.referenceGameEvidenceLineageCaseAt(verified.caseId),
+      };
     });
-    if (!inserted || inserted.case_id !== verified.caseId) {
+    if (inserted.decision === "cursor_conflict") {
+      return jsonResponse({
+        ok: true,
+        decision: "evidence_source_cursor_mismatch",
+      }, 409);
+    }
+    if (
+      inserted.decision !== "inserted" || !inserted.row ||
+      inserted.row.case_id !== verified.caseId
+    ) {
       return jsonResponse({
         ok: true,
         decision: "evidence_hold_conflict",
-        case_id: inserted?.case_id,
+        case_id: inserted.row?.case_id,
       }, 409);
     }
     await this.ctx.storage.sync();
     return jsonResponse(referenceGameEvidenceCaseResponse(
       "opened",
-      inserted,
+      inserted.row,
       this.referenceGameOpenRevocationCount(target.assetId),
     ), 201);
   }
@@ -4107,6 +4311,15 @@ export class GameAuditShard extends DurableObject<Env> {
       if (changed !== 1) {
         throw new Error("reference game evidence dismissal CAS failed");
       }
+      this.insertReferenceGameEvidenceResolutionNotice(
+        latest,
+        unit,
+        "dismissed",
+        verified.dismissalId,
+        "dismissal",
+        body.value,
+        dismissedAt,
+      );
       return {
         row: this.referenceGameEvidenceLineageCaseAt(latest.case_id)!,
         dismissal: this.referenceGameEvidenceCaseDismissalAt(
@@ -4129,6 +4342,318 @@ export class GameAuditShard extends DurableObject<Env> {
       this.referenceGameOpenRevocationCount(committed.row.asset_id),
       unit,
     ), 201);
+  }
+
+  private async pollReferenceGameEvidenceCaseResolutions(
+    request: Request,
+    mode: AuditMode,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      return jsonError("reference_game_verification_rate_limited", 429);
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const version = numberField(body.value, "version");
+    const sourceId = stringField(body.value, "source_id");
+    const afterSequence = numberField(body.value, "after_sequence");
+    const afterResolutionId = stringField(body.value, "after_resolution_id");
+    const limit = numberField(body.value, "limit");
+    if (
+      version !== 1 || !sourceId || !/^[A-Za-z0-9._:-]{1,256}$/.test(sourceId) ||
+      afterSequence === undefined || afterSequence < -1 ||
+      !afterResolutionId || afterResolutionId.length > 4_096 || limit !== 1
+    ) return jsonError("invalid_evidence_resolution_poll", 400);
+    if (afterSequence === -1) {
+      if (afterResolutionId !== "resolution-genesis") {
+        return jsonError("evidence_resolution_cursor_mismatch", 409);
+      }
+    } else {
+      const cursor = this.referenceGameEvidenceResolutionNoticeAt(
+        sourceId,
+        afterSequence,
+      );
+      if (cursor?.resolution_id !== afterResolutionId) {
+        return jsonError("evidence_resolution_cursor_mismatch", 409);
+      }
+    }
+    const sourceHead = this.referenceGameEvidenceInboxHead(sourceId);
+    if (!sourceHead) {
+      return jsonError("evidence_source_cursor_not_found", 409);
+    }
+    const sourceCase = this.referenceGameEvidenceLineageCaseAt(
+      sourceHead.case_id,
+    );
+    if (!sourceCase) {
+      return jsonError("evidence_source_cursor_inconsistent", 500);
+    }
+    const next = this.referenceGameEvidenceResolutionNoticeAt(
+      sourceId,
+      afterSequence + 1,
+    );
+    return jsonNoStoreResponse({
+      version: 1,
+      source_id: sourceId,
+      after_sequence: afterSequence,
+      after_resolution_id: afterResolutionId,
+      source_cursor: {
+        boundary: referenceGameEvidenceCaseBoundary(sourceCase),
+        source_id: sourceId,
+        sequence: sourceHead.sequence,
+        message_digest: sourceHead.message_digest,
+      },
+      notices: next ? [JSON.parse(next.notice_json)] : [],
+    });
+  }
+
+  private async publishReferenceGameEvidenceCaseResolution(
+    request: Request,
+    mode: AuditMode,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      return jsonError("reference_game_verification_rate_limited", 429);
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const version = numberField(body.value, "version");
+    const caseId = stringField(body.value, "case_id");
+    const envelope = body.value !== null && typeof body.value === "object"
+      ? (body.value as Record<string, unknown>).envelope
+      : undefined;
+    if (version !== 1 || !caseId || !/^[0-9a-f]{64}$/.test(caseId)) {
+      return jsonError("invalid_evidence_resolution_envelope", 400);
+    }
+    const evidenceCase = this.referenceGameEvidenceLineageCaseAt(caseId);
+    const notice = this.referenceGameEvidenceResolutionNoticeForCase(caseId);
+    if (
+      !evidenceCase || evidenceCase.status !== "decided" ||
+      !evidenceCase.disposition || !evidenceCase.resolution_id || !notice
+    ) {
+      return jsonError("evidence_case_not_resolved", 409);
+    }
+    const roster = parseEvidenceLineageCaseSourceRoster(
+      this.auditEnv.EVIDENCE_HOLD_SOURCE_ROSTER,
+    );
+    if (!roster) {
+      return jsonError("evidence_hold_source_roster_not_configured", 503);
+    }
+    const verified = await verifyEvidenceLineageCaseSourceEnvelope(
+      envelope,
+      referenceGameEvidenceCaseBoundary(evidenceCase),
+      evidenceCase.source_id,
+      {
+        roster,
+        verifiers: referenceGameLineageDecisionVerifiers,
+        digest: referenceGameDigest,
+      },
+    );
+    if (!verified.ok) {
+      return jsonResponse({ ok: false, decision: verified.reason },
+        verified.reason === "invalid_proposal" ? 400 : 403);
+    }
+    const operation = verified.envelope.operation;
+    const resolution = operation.kind === "resolve"
+      ? operation.resolution
+      : undefined;
+    const exactResolution = resolution &&
+      resolution.hold_id === evidenceCase.hold_id &&
+      resolution.epoch === evidenceCase.epoch &&
+      resolution.checkpoint_digest === evidenceCase.checkpoint_digest &&
+      resolution.reference_digest === evidenceCase.reference_digest &&
+      resolution.decision === evidenceCase.disposition &&
+      resolution.resolution_digest === evidenceCase.resolution_id;
+    if (!exactResolution) {
+      return jsonError("evidence_resolution_binding_mismatch", 409);
+    }
+    if (notice.delivered_message_digest !== null) {
+      if (
+        notice.delivered_message_digest !== verified.envelope.message_digest
+      ) {
+        return jsonError("evidence_resolution_already_delivered", 409);
+      }
+      return jsonResponse({
+        ok: true,
+        decision: "duplicate",
+        evidence_case_id: caseId,
+        message_digest: notice.delivered_message_digest,
+      });
+    }
+    const sourceHeadBeforePublish = this.referenceGameEvidenceInboxHead(
+      evidenceCase.source_id,
+    );
+    const sourceResolutionAllowed = await evidenceCaseSourceResolutionAllowed({
+      caseResolved: evidenceCase.status === "decided",
+      resolutionMatches: Boolean(exactResolution),
+      sourceAuthenticated: true,
+      cursorMatches: Boolean(sourceHeadBeforePublish) &&
+        verified.envelope.sequence === sourceHeadBeforePublish!.sequence + 1 &&
+        verified.envelope.previous_message_digest ===
+          sourceHeadBeforePublish!.message_digest,
+    });
+    if (!sourceResolutionAllowed) {
+      return jsonError("evidence_source_cursor_mismatch", 409);
+    }
+    const publishedAt = Date.now();
+    const committed = this.ctx.storage.transactionSync(() => {
+      const latestNotice = this.referenceGameEvidenceResolutionNoticeForCase(
+        caseId,
+      );
+      if (latestNotice?.delivered_message_digest) {
+        if (
+          latestNotice.delivered_message_digest !==
+            verified.envelope.message_digest
+        ) {
+          return {
+            decision: "delivery_conflict" as const,
+            messageDigest: latestNotice.delivered_message_digest,
+          };
+        }
+        return {
+          decision: "duplicate" as const,
+          messageDigest: latestNotice.delivered_message_digest,
+        };
+      }
+      const sourceHead = this.referenceGameEvidenceInboxHead(
+        evidenceCase.source_id,
+      );
+      if (
+        !sourceHead ||
+        verified.envelope.sequence !== sourceHead.sequence + 1 ||
+        verified.envelope.previous_message_digest !== sourceHead.message_digest
+      ) return { decision: "cursor_conflict" as const, messageDigest: "" };
+      this.ctx.storage.sql.exec(
+        `INSERT INTO reference_game_evidence_inbox_messages
+         (source_id, sequence, message_digest, previous_message_digest,
+          message_id, operation_kind, case_id, envelope_json, published_at)
+         VALUES (?, ?, ?, ?, ?, 'resolve', ?, ?, ?)`,
+        evidenceCase.source_id,
+        verified.envelope.sequence,
+        verified.envelope.message_digest,
+        verified.envelope.previous_message_digest,
+        verified.envelope.message_id,
+        caseId,
+        JSON.stringify(verified.envelope),
+        publishedAt,
+      );
+      this.ctx.storage.sql.exec(
+        `UPDATE reference_game_evidence_case_resolution_notices
+         SET delivered_message_digest = ?, delivered_at = ?
+         WHERE case_id = ? AND delivered_message_digest IS NULL`,
+        verified.envelope.message_digest,
+        publishedAt,
+        caseId,
+      );
+      const changed = this.ctx.storage.sql.exec<{ changed: number }>(
+        "SELECT changes() AS changed",
+      ).toArray()[0]?.changed ?? 0;
+      if (changed !== 1) {
+        throw new Error("reference game evidence resolution CAS failed");
+      }
+      return {
+        decision: "published" as const,
+        messageDigest: verified.envelope.message_digest,
+      };
+    });
+    if (
+      committed.decision === "cursor_conflict" ||
+      committed.decision === "delivery_conflict"
+    ) {
+      return jsonError(
+        committed.decision === "cursor_conflict"
+          ? "evidence_source_cursor_mismatch"
+          : "evidence_resolution_already_delivered",
+        409,
+      );
+    }
+    await this.ctx.storage.sync();
+    return jsonResponse({
+      ok: true,
+      decision: committed.decision,
+      evidence_case_id: caseId,
+      message_digest: committed.messageDigest,
+      sequence: verified.envelope.sequence,
+    }, committed.decision === "published" ? 201 : 200);
+  }
+
+  private async pollReferenceGameEvidenceInbox(
+    request: Request,
+    mode: AuditMode,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      return jsonError("reference_game_verification_rate_limited", 429);
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const version = numberField(body.value, "version");
+    const sourceId = stringField(body.value, "source_id");
+    const afterSequence = numberField(body.value, "after_sequence");
+    const afterMessageDigest = stringField(body.value, "after_message_digest");
+    const limit = numberField(body.value, "limit");
+    if (
+      version !== 1 || !sourceId || !/^[A-Za-z0-9._:-]{1,256}$/.test(sourceId) ||
+      afterSequence === undefined || afterSequence < -1 ||
+      !afterMessageDigest || afterMessageDigest.length > 4_096 ||
+      limit === undefined || limit < 1 || limit > 128
+    ) return jsonError("invalid_evidence_inbox_poll", 400);
+    if (afterSequence >= 0) {
+      const cursor = this.referenceGameEvidenceInboxMessageAt(
+        sourceId,
+        afterSequence,
+      );
+      if (cursor?.message_digest !== afterMessageDigest) {
+        return jsonError("evidence_inbox_cursor_mismatch", 409);
+      }
+    }
+    const messages = this.ctx.storage.sql.exec<
+      ReferenceGameEvidenceInboxMessageRow
+    >(
+      `SELECT source_id, sequence, message_digest, previous_message_digest,
+              message_id, operation_kind, case_id, envelope_json, published_at
+       FROM reference_game_evidence_inbox_messages
+       WHERE source_id = ? AND sequence > ?
+       ORDER BY sequence ASC LIMIT ?`,
+      sourceId,
+      afterSequence,
+      limit,
+    ).toArray();
+    if (
+      messages.length > 0 &&
+      (messages[0].sequence !== afterSequence + 1 ||
+        messages[0].previous_message_digest !== afterMessageDigest)
+    ) return jsonError("evidence_inbox_cursor_mismatch", 409);
+    return jsonNoStoreResponse({
+      version: 1,
+      source_id: sourceId,
+      after_sequence: afterSequence,
+      after_message_digest: afterMessageDigest,
+      messages: messages.map((message) => JSON.parse(message.envelope_json)),
+    });
   }
 
   private getReferenceGameAssetLineageStatus(
@@ -4360,18 +4885,20 @@ export class GameAuditShard extends DurableObject<Env> {
     }
     const committed = this.ctx.storage.transactionSync(() => {
       const latest = this.referenceGameAssetLineageHeadAt(assetId, ancestorId);
+      let latestEvidenceCase: ReferenceGameEvidenceLineageCaseRow | undefined;
       if (
         (latest?.revision ?? 0) !== currentRevision ||
         (latest?.status ?? "eligible") !== currentStatus
       ) return { decision: "raced" as const, quarantined: 0 };
       if (evidenceCaseId) {
-        const latestCase = this.referenceGameEvidenceLineageCaseAt(
+        latestEvidenceCase = this.referenceGameEvidenceLineageCaseAt(
           evidenceCaseId,
         );
         if (
-          latestCase?.status !== "open" || latestCase.asset_id !== assetId ||
-          latestCase.ancestor_id !== ancestorId ||
-          latestCase.ancestor_kind !== ancestorKind
+          latestEvidenceCase?.status !== "open" ||
+          latestEvidenceCase.asset_id !== assetId ||
+          latestEvidenceCase.ancestor_id !== ancestorId ||
+          latestEvidenceCase.ancestor_kind !== ancestorKind
         ) return { decision: "case_raced" as const, quarantined: 0 };
       }
       this.ctx.storage.sql.exec(
@@ -4479,6 +5006,15 @@ export class GameAuditShard extends DurableObject<Env> {
         if (changed !== 1) {
           throw new Error("reference game evidence case CAS failed");
         }
+        this.insertReferenceGameEvidenceResolutionNotice(
+          latestEvidenceCase!,
+          unit,
+          "upheld",
+          decisionId,
+          "lineage_decision",
+          body.value,
+          decidedAt,
+        );
       }
       return { decision: "applied" as const, quarantined: quarantine };
     });
@@ -7030,6 +7566,46 @@ function referenceGameEvidenceCaseHoldResolutionDraft(
     decision,
     resolutionDigest,
   );
+}
+
+function referenceGameEvidenceCaseBoundary(
+  row: ReferenceGameEvidenceLineageCaseRow,
+) {
+  return {
+    protocol_version: row.boundary_protocol_version,
+    purpose: row.boundary_purpose,
+    manifest_digest: row.boundary_manifest_digest,
+    scope_id: row.boundary_scope_id,
+    unit_id: row.boundary_unit_id,
+  };
+}
+
+function referenceGameEvidenceCaseResolutionNoticeWire(
+  row: ReferenceGameEvidenceLineageCaseRow,
+  unit: string,
+  noticeSequence: number,
+  decision: "upheld" | "dismissed",
+  resolutionId: string,
+  authorizationKind: "lineage_decision" | "dismissal",
+  certificate: unknown,
+  acceptedAtMs: number,
+) {
+  return {
+    version: 1,
+    notice_sequence: noticeSequence,
+    scope: "reference-game",
+    unit,
+    case_id: row.case_id,
+    source_id: row.source_id,
+    accepted_at_ms: acceptedAtMs,
+    resolution: referenceGameEvidenceCaseHoldResolutionDraft(
+      row,
+      unit,
+      decision,
+      resolutionId,
+    ),
+    authorization: { kind: authorizationKind, certificate },
+  };
 }
 
 function referenceGameOwnershipHeadFromRow(

@@ -29,5 +29,5 @@ quint test formal/quint/LineageAppealTests.qnt \
 
 quint test formal/quint/EvidenceLineageCaseTests.qnt \
   --main=evidenceLineageCaseTests \
-  --match='^(authenticatedHoldOpensWithoutRevoking|exactCertificateDecidesAndRevokes|exactDismissalClosesWithoutRevoking|unauthenticatedDismissalIsRejected|retargetedDismissalIsRejected|unauthenticatedHoldIsRejected|retargetedDecisionIsRejected|exactDuplicateIsIdempotent)$' \
+  --match='^(authenticatedHoldOpensWithoutRevoking|exactCertificateDecidesAndRevokes|exactDismissalClosesWithoutRevoking|exactSourceResolutionResolvesDismissedHold|unauthenticatedSourceResolutionIsRejected|retargetedSourceResolutionIsRejected|staleSourceCursorIsRejected|unauthenticatedDismissalIsRejected|retargetedDismissalIsRejected|unauthenticatedHoldIsRejected|retargetedDecisionIsRejected|exactDuplicateIsIdempotent)$' \
   --verbosity=1

@@ -71,7 +71,8 @@ appealで消さないことを検査する。署名bytes、Unix millisecond、ar
 `EvidenceLineageCase.qnt`は2 caseと1 assetへ縮約する。active/authenticated/exact-bound holdから
 caseを開くactionと、authenticated/exact-bound arbiter certificateでupholdまたはdismissするactionを分ける。
 case作成とdismissalはassetを変更せず、decision actionだけが`Eligible -> Revoked`を行う。hold/certificateの
-実署名、case reference digest、SQLite CASはWorker/MoonBit側に残す。
+実署名、case reference digest、SQLite CASはWorker/MoonBit側に残す。case close後もplayer-local holdは
+未解決のままで、認証済みsourceがexact resolutionをnext cursorへpublishする別actionだけがholdを解決する。
 
 asset settlementのclaim ledgerは次のとおりである。
 
@@ -93,6 +94,7 @@ asset settlementのclaim ledgerは次のとおりである。
 | case作成だけではassetを止めない | `EvidenceLineageCase.openCase/decideCase` | `caseOpeningNeverChangesAsset` + broken auto-mutation反例 | verified（有限model） |
 | asset変更はexact caseを指定した認証済みcertificateだけが行う | `EvidenceLineageCase.decideCase` | certificate invariant + broken authentication/binding反例 | verified（有限model） |
 | dismissalは認証済みexact caseだけを閉じ、assetを変更しない | `EvidenceLineageCase.dismissCase` | dismissal invariant + broken authentication/binding/mutation反例 | verified（有限model） |
+| case closeだけではholdを解決せず、source署名・exact binding・next cursorが必要 | `EvidenceLineageCase.publishSourceResolution` | source resolution invariant + broken authentication/binding/cursor/auto-resolution反例 | verified（有限model） |
 
 ## 検査する性質
 
@@ -153,6 +155,7 @@ eventually always(unpartitioned and all nodes up)
 | case open時の非変更境界 | arbiter判断なしにassetをrevokeできる |
 | case certificate authentication/binding gate | 未認証certificateまたは別caseのcertificateでassetを変更できる |
 | dismissal authentication/binding/non-mutation gate | 未認証・別caseの棄却、または棄却だけでasset revokeが可能になる |
+| source resolution authentication/binding/cursor/non-automatic gate | case closeだけでholdが消える、または未認証・別resolution・stale cursorでholdを解決できる |
 
 ## 実行結果
 
@@ -174,8 +177,8 @@ rosterを超えるquorumの3構成を設定契約違反として拒否する。
 lineage appeal正常modelは反例なし、authentication、certificate time、revision、appeal target、deadlineの
 5 Red構成はそれぞれ対応invariantの反例を出し、6 scenarioが通過した。
 2026-08-10にevidence lineage case正常modelも反例なし、hold authentication/binding、open時auto-mutation、
-uphold certificate authentication/binding、dismissal authentication/binding/auto-mutationの8 Red構成は
-対応invariantの反例を出し、8 scenarioが通過した。
+uphold certificate authentication/binding、dismissal authentication/binding/auto-mutation、source resolution
+authentication/binding/cursor/auto-resolutionの12 Red構成は対応invariantの反例を出し、12 scenarioが通過した。
 
 ## Model-based testing
 

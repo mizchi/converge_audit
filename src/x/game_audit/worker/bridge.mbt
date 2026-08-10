@@ -1228,6 +1228,18 @@ pub fn audit_evidence_lineage_case_dismissal_allowed(
 }
 
 ///|
+pub fn audit_evidence_case_source_resolution_allowed(
+  case_resolved : Bool,
+  resolution_matches : Bool,
+  source_authenticated : Bool,
+  cursor_matches : Bool,
+) -> Bool {
+  @checkpoint_audit.evidence_case_source_resolution_allowed(
+    case_resolved, resolution_matches, source_authenticated, cursor_matches,
+  )
+}
+
+///|
 fn worker_accept_pve_event(
   adapter : @bft.AuditAdapter,
   signed : @bft.SignedEvent,
