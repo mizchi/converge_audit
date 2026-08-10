@@ -366,7 +366,9 @@ player/authority wire custodyのreference contractは`Implemented + Proven/Model
 旧seed migrationは`Tested locally + browser E2E`。Workerのcheckpoint配送認証はMoonBit canonical bytesに対する
 標準WebCrypto + MoonBit dual verifierへ接続済みで、witness collection開始と各approvalにもunder-quorumを
 正常に扱うpartial capabilityを要求する。producer/witness署名生成とpeer clientも交換可能な非同期signer、
-標準WebCrypto、送信前producer再検証へ接続済みである。他のWorker hash/verifierは未監査backendのままである。
+標準WebCrypto、送信前producer再検証へ接続済みである。reference gameのitem精算、transfer、listing、cancelも
+標準WebCryptoでowner proofを生成し、Workerで標準WebCrypto + MoonBit dual verifierを通す。game
+checkpoint/journalのhash・Merkle・replayなど、残るWorker暗号経路は未監査backendのままである。
 production profileでは全route/Queueを拒否するため、production security gate全体は`Partial`。詳細は
 [鍵ライフサイクル契約](./key-lifecycle-ja.md)を参照する。
 
@@ -443,5 +445,6 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 | checkpoint transport | durable bounded outbox、retry、exact-parentによりnetwork安定後authorityがlatest epochへ到達する | Quint/TLC、2 peer・2 epoch、crash/drop/partition | 11,340 distinct states、反例なし。capacity gateを外すbroken modelも反例 | `just formal-check` |
 | witness collection | producer/roster/quorum/expiry/fairnessなしにreadyやreceiver更新へ進まない | Quint/TLC、4 roster + 1 intruder | safety 30,720、liveness 19,456 distinct states、反例なし。2 broken gateは期待どおり反例 | `just formal-check` |
 | witness source isolation | 同一sourceのinvalid floodは別sourceのquorum quotaを消費せず、client指定bucketを信用しない | workerd integration + local 20 run + remote単一egress20 run | HMAC secret欠落時503、local別source quorum 20/20、remote 429回復後quorum 20/20。異なるremote source間公平性は未測定 | `pnpm --dir examples/cf-game-audit bench:witness` |
+| reference owner proof | item精算・二者transfer・listing・cancelは同じcanonical文を標準WebCryptoとMoonBitの両方が受理した場合だけ業務状態を更新する | `AssetOwnership.qnt` auth guard + WebCrypto/MoonBit相互運用test + workerd integration | Model checked + Tested locally。暗号強度そのものは未証明 | `just formal-check` + `pnpm --dir examples/cf-game-audit test` |
 | remote checkpoint/witness infrastructure | Worker、direct authority RPC、durable retry、replay Queue、両Secret、公開route | current `a3c07778-037d-40cf-b2e9-5ad55afdec91`、direct 20-run + deferred alarm smoke artifacts | Deployed + authority ACK 20/20、現行version direct/deferred各1/1 | [Cloudflare実測](./cloudflare-game-audit-ja.md) |
 | production crypto | signature/hashが攻撃耐性を持つ | security audit未実施 | unresolved | audited backendなしにproduction claimを禁止 |

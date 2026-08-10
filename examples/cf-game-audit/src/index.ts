@@ -49,6 +49,7 @@ import {
   decodeGameCheckpointVerificationRequest,
   verifyGameCheckpoint,
   verifyGameItemCreation,
+  verifyGameItemCreationOwnerProofAsync,
   type GameCheckpointVerificationParent,
   type GameCheckpointVerificationRequest,
   type GameItemAuthorityReceipt,
@@ -57,8 +58,11 @@ import type { GameState } from "../game/kernel";
 import {
   gameItemTransferProofDigest,
   verifyGameItemTransferProof,
+  verifyGameItemTransferProofAsync,
   verifyGameMarketListingCancelProof,
+  verifyGameMarketListingCancelProofAsync,
   verifyGameMarketListingProof,
+  verifyGameMarketListingProofAsync,
 } from "../game/authority/owner-authentication";
 import {
   createInitialGameAssetOwnershipHead,
@@ -571,7 +575,7 @@ const ACTIVE_WORKER_CRYPTO_BACKEND: AuditCryptoBackendDescriptor =
     hashScheme: "sha256-v1",
     signatureScheme: "ed25519-v1",
   });
-const standardCheckpointDeliveryCryptoBackend =
+const standardWorkerCryptoBackend =
   createStandardWebCryptoBackend(crypto);
 
 function workerCryptoAdmission(env: Env):
@@ -2043,7 +2047,7 @@ export class GameAuditShard extends DurableObject<Env> {
           policy,
           authentication: producerAuthentication,
         },
-        standardCheckpointDeliveryCryptoBackend,
+        standardWorkerCryptoBackend,
       );
     if (!producerVerification.ok) {
       return jsonResponse(
@@ -2153,7 +2157,7 @@ export class GameAuditShard extends DurableObject<Env> {
       await verifyCheckpointDeliveryAuthenticationPartialDual(
         runtimeCapability,
         candidate.input,
-        standardCheckpointDeliveryCryptoBackend,
+        standardWorkerCryptoBackend,
       );
     if (!approvalVerification.ok) {
       return jsonResponse({
@@ -2309,7 +2313,7 @@ export class GameAuditShard extends DurableObject<Env> {
         policy,
         authentication: value.authentication,
         },
-        standardCheckpointDeliveryCryptoBackend,
+        standardWorkerCryptoBackend,
       );
       if (!verification.ok) {
         return jsonResponse(
@@ -2399,7 +2403,7 @@ export class GameAuditShard extends DurableObject<Env> {
     const authentication = await this.checkpointReceiver.authenticate(
       runtimeCapability,
       body.value,
-      standardCheckpointDeliveryCryptoBackend,
+      standardWorkerCryptoBackend,
     );
     if (authentication.decision === "not_configured") {
       return jsonError("checkpoint_receiver_not_configured", 409);
@@ -3490,6 +3494,19 @@ export class GameAuditShard extends DurableObject<Env> {
     if (!decoded) return jsonError("invalid_request", 400);
     const parent = this.referenceGameVerificationParent(decoded);
     if (!parent.ok) return parent.response;
+    const standardOwnerProof = await verifyGameItemCreationOwnerProofAsync(
+      unit,
+      body.value,
+      standardWorkerCryptoBackend,
+      standardWorkerCryptoBackend,
+    );
+    if (!standardOwnerProof.ok) {
+      const status = standardOwnerProof.reason === "invalid_request" ? 400 : 403;
+      return jsonResponse({
+        ok: false,
+        error: standardOwnerProof.reason,
+      }, status);
+    }
     const verification = verifyGameItemCreation(
       unit,
       body.value,
@@ -3692,6 +3709,22 @@ export class GameAuditShard extends DurableObject<Env> {
         decision: "asset_lineage_revoked",
         asset_id: assetId,
         open_revocations: openRevocations,
+      }, 403);
+    }
+    const standardProof = await verifyGameItemTransferProofAsync(
+      unit,
+      transferRequest,
+      senderSignature,
+      recipientSignature,
+      standardWorkerCryptoBackend,
+      standardWorkerCryptoBackend,
+    );
+    if (!standardProof.ok) {
+      return jsonResponse({
+        ok: true,
+        transferred: false,
+        decision: standardProof.reason,
+        asset_id: assetId,
       }, 403);
     }
     const proof = verifyGameItemTransferProof(
@@ -3969,18 +4002,26 @@ export class GameAuditShard extends DurableObject<Env> {
         seller_id: sellerId,
       }, 409);
     }
+    const listingProofBoundary = {
+      assetId,
+      sellerId,
+      authorityReceiptId,
+      ownerPublicKey,
+      ownerVersion,
+      ownerHeadId,
+      listingNonce,
+    };
     if (
+      !await verifyGameMarketListingProofAsync(
+        unit,
+        listingProofBoundary,
+        ownerSignature,
+        standardWorkerCryptoBackend,
+        standardWorkerCryptoBackend,
+      ) ||
       !verifyGameMarketListingProof(
         unit,
-        {
-          assetId,
-          sellerId,
-          authorityReceiptId,
-          ownerPublicKey,
-          ownerVersion,
-          ownerHeadId,
-          listingNonce,
-        },
+        listingProofBoundary,
         ownerSignature,
         referenceGameDigest,
         referenceGameOwnerVerifier,
@@ -5272,19 +5313,27 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id: assetId,
       }, 409);
     }
+    const cancellationProofBoundary = {
+      listingId,
+      assetId,
+      sellerId,
+      authorityReceiptId,
+      ownerPublicKey,
+      ownerVersion,
+      ownerHeadId,
+      listingNonce,
+    };
     if (
+      !await verifyGameMarketListingCancelProofAsync(
+        unit,
+        cancellationProofBoundary,
+        cancelSignature,
+        standardWorkerCryptoBackend,
+        standardWorkerCryptoBackend,
+      ) ||
       !verifyGameMarketListingCancelProof(
         unit,
-        {
-          listingId,
-          assetId,
-          sellerId,
-          authorityReceiptId,
-          ownerPublicKey,
-          ownerVersion,
-          ownerHeadId,
-          listingNonce,
-        },
+        cancellationProofBoundary,
         cancelSignature,
         referenceGameDigest,
         referenceGameOwnerVerifier,

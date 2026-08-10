@@ -6,16 +6,27 @@ import {
   audit_browser_sha256,
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
 import {
+  signGameItemOwnerProofAsync,
+  signGameItemTransferProofAsync,
+  signGameMarketListingCancelProofAsync,
+  signGameMarketListingProofAsync,
   gameItemOwnerProofDigest,
   gameItemTransferProofDigest,
   gameMarketListingCancelProofDigest,
   gameMarketListingProofDigest,
+  verifyGameItemOwnerProofAsync,
   verifyGameItemOwnerProof,
+  verifyGameItemTransferProofAsync,
   verifyGameItemTransferProof,
+  verifyGameMarketListingCancelProofAsync,
   verifyGameMarketListingCancelProof,
+  verifyGameMarketListingProofAsync,
   verifyGameMarketListingProof,
   type GameOwnerSignatureVerifier,
 } from "../game/authority/owner-authentication";
+import {
+  createStandardWebCryptoBackend,
+} from "../../player-local-runtime/crypto-backend";
 
 const seed =
   "000102030405060708090a0b0c0d0e0f" +
@@ -27,6 +38,128 @@ const verifier: GameOwnerSignatureVerifier = {
 const digest = { hashString: audit_browser_sha256 };
 
 describe("reference game owner authentication", () => {
+  it("keeps standard WebCrypto and the MoonBit verifier interoperable", async () => {
+    const standard = createStandardWebCryptoBackend(crypto);
+    const signer = (await standard.importLegacySeed(seed, publicKey)).signer;
+    const item = {
+      playerId: "player-1",
+      seed: 0x1234,
+      checkpointDigest: "c".repeat(64),
+      assetId: "loot-1",
+      ownerPublicKey: publicKey,
+    };
+    const listing = {
+      assetId: item.assetId,
+      sellerId: item.playerId,
+      authorityReceiptId: "a".repeat(64),
+      ownerPublicKey: publicKey,
+      ownerVersion: 0,
+      ownerHeadId: "b".repeat(64),
+      listingNonce: "9".repeat(64),
+    };
+    const cancellation = {
+      ...listing,
+      listingId: "d".repeat(64),
+    };
+    const transfer = {
+      assetId: item.assetId,
+      authorityReceiptId: listing.authorityReceiptId,
+      previousHeadId: listing.ownerHeadId,
+      fromOwnerId: item.playerId,
+      fromOwnerPublicKey: publicKey,
+      toOwnerId: "player-2",
+      toOwnerPublicKey: publicKey,
+      previousVersion: 0,
+      nextVersion: 1,
+    };
+
+    const itemSignature = await signGameItemOwnerProofAsync(
+      "run-1",
+      item,
+      standard,
+      signer,
+    );
+    const listingSignature = await signGameMarketListingProofAsync(
+      "run-1",
+      listing,
+      standard,
+      signer,
+    );
+    const cancellationSignature =
+      await signGameMarketListingCancelProofAsync(
+        "run-1",
+        cancellation,
+        standard,
+        signer,
+      );
+    const transferSignature = await signGameItemTransferProofAsync(
+      "run-1",
+      transfer,
+      standard,
+      signer,
+    );
+
+    await expect(verifyGameItemOwnerProofAsync(
+      "run-1",
+      item,
+      itemSignature,
+      standard,
+      standard,
+    )).resolves.toBe(true);
+    await expect(verifyGameMarketListingProofAsync(
+      "run-1",
+      listing,
+      listingSignature,
+      standard,
+      standard,
+    )).resolves.toBe(true);
+    await expect(verifyGameMarketListingCancelProofAsync(
+      "run-1",
+      cancellation,
+      cancellationSignature,
+      standard,
+      standard,
+    )).resolves.toBe(true);
+    await expect(verifyGameItemTransferProofAsync(
+      "run-1",
+      transfer,
+      transferSignature,
+      transferSignature,
+      standard,
+      standard,
+    )).resolves.toEqual({ ok: true });
+
+    expect(verifyGameItemOwnerProof(
+      "run-1",
+      item,
+      itemSignature,
+      digest,
+      verifier,
+    )).toBe(true);
+    expect(verifyGameMarketListingProof(
+      "run-1",
+      listing,
+      listingSignature,
+      digest,
+      verifier,
+    )).toBe(true);
+    expect(verifyGameMarketListingCancelProof(
+      "run-1",
+      cancellation,
+      cancellationSignature,
+      digest,
+      verifier,
+    )).toBe(true);
+    expect(verifyGameItemTransferProof(
+      "run-1",
+      transfer,
+      transferSignature,
+      transferSignature,
+      digest,
+      verifier,
+    )).toEqual({ ok: true });
+  });
+
   it("binds item settlement to its run, owner key, asset, and checkpoint", () => {
     const boundary = {
       playerId: "player-1",

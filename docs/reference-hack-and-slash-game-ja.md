@@ -82,6 +82,8 @@ provisionalであり、監査不成立なら最後のACK地点までinventory li
 - browserはrunごとに標準WebCryptoでnon-extractable Ed25519 owner keyを生成し、`CryptoKey` handleを
   別のIndexedDB storeへ保存する。公開鍵は
   genesis digestへ含めるため、item精算直前に別鍵へ差し替えた自己整合ログは元のcheckpoint chainと一致しない。
+- item精算、transfer、listing、cancelのowner proofはcanonical文のSHA-256とEd25519署名を標準WebCryptoで
+  生成する。game event leaf、checkpoint、Merkle rootは引き続きMoonBit実装を使う。
 - micro未満の未保存tickはreload時に失われる。初期cadenceでは最大29 tick、約0.97秒である。
 
 IndexedDBは端末故障や改造clientに対する信頼根拠ではない。ここで保証するのはローカルcrash時の一貫した
@@ -149,8 +151,9 @@ POST /v1/pve/:unit/game-item-verifications
 - replayで実際に生成されたassetだけに、unit・checkpoint・asset・owner・epochへ束縛した
   `authority_receipt_id`を発行する。
 - `owner_signature`はunit・player・seed・checkpoint・asset・genesis束縛済み公開鍵のcanonical digestへ署名する。
-  clientは標準WebCrypto signerを使う。Workerは高価なsegment replayより先にMoonBit Ed25519 bridgeで
-  proof-of-possessionを検査しており、この受信側は標準backendへの未移行経路である。
+  clientは標準WebCryptoでSHA-256と署名を行う。Workerは高価なsegment replayより先に標準WebCryptoで
+  proof-of-possessionを検査し、同じcanonical digestをMoonBit Ed25519 bridgeでも再検証する。両方を通過した
+  requestだけがreplayと永続化へ進む。
 - receiptはDurable Object SQLiteへasset単位で保存する。同じrequestは`duplicate`として同じreceiptへ
   収束し、競合する再登録は409になる。receiptとauthority保存済みparent stateにも公開鍵を保存し、後続epochの
   鍵変更は拒否する。
@@ -186,7 +189,8 @@ transfer文はunit、origin receipt、直前head、両owner identity/key、連�
 旧ownerのhandoff署名と新ownerのacceptance署名を同じdigestへ要求するため、鍵を持たない第三者による移転と、
 新ownerが同意しないitemの押し付けを拒否する。`next_version == previous_version + 1`かつ保存済みheadとの完全一致
 だけが、append-only transfer履歴の追加とper-asset head更新を同じSQLite transactionで行える。同じ二者署名の
-再送は同じtransfer IDへ収束し、stale headやversion gapは409になる。
+再送は同じtransfer IDへ収束し、stale headやversion gapは409になる。両者の署名は標準WebCryptoとMoonBit
+bridgeの二重検証を通過してからtransactionへ渡す。
 
 active listing中のtransferは、listingを古いownerのまま残さないため`asset_listed`で拒否する。正当なcancelを
 保存した後だけtransfer gateが再び開く。
@@ -204,7 +208,7 @@ POST /v1/pve/:unit/game-market-listings
 
 DOは保存済みitem receiptとasset、authority receipt ID、最新のper-asset owner headを完全一致で照合する。
 その後、unit・asset・seller・receipt・公開鍵・owner version・owner head ID・listing nonceに対する
-`owner_signature`を検証し、
+`owner_signature`を標準WebCryptoとMoonBit bridgeの両方で検証し、
 active listingと署名をSQLiteへ
 冪等保存する。同じ出品の再送は決定的Ed25519署名と同じlisting IDで`duplicate`へ収束し、receipt偽造、
 seller不一致、receiptだけを盗んだ第三者の署名、同一assetの競合listingはfail-closedになる。UIは成功後に
@@ -226,7 +230,8 @@ POST /v1/pve/:unit/game-market-listing-cancellations
 ```
 
 cancel署名はunit、listing ID、asset、seller、origin receipt、出品時のowner key/version/headとnonceを
-canonical化する。DOはactive listingと現在owner headの両方を完全一致で照合し、同じSQLite行を
+canonical化し、標準WebCryptoとMoonBit bridgeの両方で検証する。DOはactive listingと現在owner headの
+両方を完全一致で照合し、同じSQLite行を
 `canceled`へ遷移させる。取消履歴は削除せず、同じnonceから導いたlisting IDは再出品に利用できない。
 一方、新しい256-bit nonceなら同じowner headでも別listing IDとして再出品できる。その後の二者署名transferも
 新しいowner version/headを作るため、新ownerは別listing IDで出品できる。
@@ -243,8 +248,9 @@ version 0だけでなく、二者署名transfer後のownerも出品でき、旧o
 同じcanonical write-setへ拘束してから、汎用multi-asset endpointへ渡す必要がある。reference checkpoint/item
 receiptはこのゲーム固有のauthority replay結果であり、汎用peer witness
 quorumの代用ではない。owner keyは自己主権run identityを証明するが、`seller_id`を課金accountや現実の人物へ
-結び付けるものではない。reference実装のowner署名はnon-extractable標準WebCrypto鍵へ移行済みだが、
-他のcheckpoint/journal暗号経路には未監査`experimental_crypto`が残る。productionでは認証済みaccountへの
+結び付けるものではない。reference実装のowner proof生成とWorker受信は標準WebCryptoへ移行し、移行時の
+差分検出のためMoonBit verifierも併用している。一方、game checkpoint/journalのhash・Merkle・replayなどには
+未監査`experimental_crypto`が残る。productionでは認証済みaccountへの
 鍵登録、OS keystore/secure enclaveへの昇格、鍵回復・rotation・失効を別途実装する。
 
 ## Cloudflare配置

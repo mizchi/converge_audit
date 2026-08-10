@@ -19,9 +19,11 @@ import {
   buildGameItemVerificationRequest,
   verifyGameCheckpoint,
   verifyGameItemCreation,
+  verifyGameItemCreationOwnerProofAsync,
   type GameItemVerificationRequest,
 } from "../game/authority/item-verification";
 import { advanceGame, createInitialGame } from "../game/kernel";
+import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypto-backend";
 
 const digest: AuditDigestAdapter = {
   hashString: audit_browser_sha256,
@@ -138,6 +140,33 @@ function resign(request: GameItemVerificationRequest): void {
 }
 
 describe("high-value item authority replay", () => {
+  it("preflights the wire request with standard WebCrypto before replay", async () => {
+    const standard = createStandardWebCryptoBackend(crypto);
+    const { request } = droppedRun();
+
+    await expect(verifyGameItemCreationOwnerProofAsync(
+      "encounter-1",
+      request,
+      standard,
+      standard,
+    )).resolves.toEqual({ ok: true });
+    await expect(verifyGameItemCreationOwnerProofAsync(
+      "different-encounter",
+      request,
+      standard,
+      standard,
+    )).resolves.toEqual({
+      ok: false,
+      reason: "owner_authentication_refused",
+    });
+    await expect(verifyGameItemCreationOwnerProofAsync(
+      "encounter-1",
+      { ...request, owner_signature: "broken" },
+      standard,
+      standard,
+    )).resolves.toEqual({ ok: false, reason: "invalid_request" });
+  });
+
   it("replays an arbitrary checkpoint from an authority-verified parent state", () => {
     const { audit } = runThrough(60);
     const first = verifyGameCheckpoint(

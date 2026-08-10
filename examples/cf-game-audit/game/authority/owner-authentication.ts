@@ -2,8 +2,21 @@ import type { AuditDigestAdapter } from "../audit/journal";
 
 export type GameOwnerDigestAdapter = Pick<AuditDigestAdapter, "hashString">;
 
+/** Asynchronous digest boundary for browser and Worker WebCrypto adapters. */
+export interface AsyncGameOwnerDigestAdapter {
+  hashString(value: string): Promise<string>;
+}
+
 export interface GameOwnerSignatureVerifier {
   verify(publicKey: string, digest: string, signature: string): boolean;
+}
+
+export interface AsyncGameOwnerSignatureVerifier {
+  verify(
+    publicKey: string,
+    digest: string,
+    signature: string,
+  ): Promise<boolean>;
 }
 
 export interface GameOwnerSigner {
@@ -75,6 +88,14 @@ export function gameItemOwnerProofDigest(
   return digest.hashString(canonicalGameItemOwnerProof(unit, boundary));
 }
 
+export function gameItemOwnerProofDigestAsync(
+  unit: string,
+  boundary: GameItemOwnerProofBoundary,
+  digest: AsyncGameOwnerDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalGameItemOwnerProof(unit, boundary));
+}
+
 export function signGameItemOwnerProof(
   unit: string,
   boundary: GameItemOwnerProofBoundary,
@@ -90,13 +111,15 @@ export function signGameItemOwnerProof(
 export async function signGameItemOwnerProofAsync(
   unit: string,
   boundary: GameItemOwnerProofBoundary,
-  digest: GameOwnerDigestAdapter,
+  digest: AsyncGameOwnerDigestAdapter,
   signer: AsyncGameOwnerSigner,
 ): Promise<string> {
   if (boundary.ownerPublicKey !== signer.publicKey) {
     throw new Error("item owner proof key does not match signer");
   }
-  return signer.signDigest(gameItemOwnerProofDigest(unit, boundary, digest));
+  return signer.signDigest(
+    await gameItemOwnerProofDigestAsync(unit, boundary, digest),
+  );
 }
 
 export function verifyGameItemOwnerProof(
@@ -109,6 +132,20 @@ export function verifyGameItemOwnerProof(
   return verifier.verify(
     boundary.ownerPublicKey,
     gameItemOwnerProofDigest(unit, boundary, digest),
+    signature,
+  );
+}
+
+export async function verifyGameItemOwnerProofAsync(
+  unit: string,
+  boundary: GameItemOwnerProofBoundary,
+  signature: string,
+  digest: AsyncGameOwnerDigestAdapter,
+  verifier: AsyncGameOwnerSignatureVerifier,
+): Promise<boolean> {
+  return verifier.verify(
+    boundary.ownerPublicKey,
+    await gameItemOwnerProofDigestAsync(unit, boundary, digest),
     signature,
   );
 }
@@ -138,6 +175,14 @@ export function gameMarketListingProofDigest(
   return digest.hashString(canonicalGameMarketListingProof(unit, boundary));
 }
 
+export function gameMarketListingProofDigestAsync(
+  unit: string,
+  boundary: GameMarketListingProofBoundary,
+  digest: AsyncGameOwnerDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalGameMarketListingProof(unit, boundary));
+}
+
 export function signGameMarketListingProof(
   unit: string,
   boundary: GameMarketListingProofBoundary,
@@ -153,13 +198,15 @@ export function signGameMarketListingProof(
 export async function signGameMarketListingProofAsync(
   unit: string,
   boundary: GameMarketListingProofBoundary,
-  digest: GameOwnerDigestAdapter,
+  digest: AsyncGameOwnerDigestAdapter,
   signer: AsyncGameOwnerSigner,
 ): Promise<string> {
   if (boundary.ownerPublicKey !== signer.publicKey) {
     throw new Error("market listing proof key does not match signer");
   }
-  return signer.signDigest(gameMarketListingProofDigest(unit, boundary, digest));
+  return signer.signDigest(
+    await gameMarketListingProofDigestAsync(unit, boundary, digest),
+  );
 }
 
 export function verifyGameMarketListingProof(
@@ -172,6 +219,20 @@ export function verifyGameMarketListingProof(
   return verifier.verify(
     boundary.ownerPublicKey,
     gameMarketListingProofDigest(unit, boundary, digest),
+    signature,
+  );
+}
+
+export async function verifyGameMarketListingProofAsync(
+  unit: string,
+  boundary: GameMarketListingProofBoundary,
+  signature: string,
+  digest: AsyncGameOwnerDigestAdapter,
+  verifier: AsyncGameOwnerSignatureVerifier,
+): Promise<boolean> {
+  return verifier.verify(
+    boundary.ownerPublicKey,
+    await gameMarketListingProofDigestAsync(unit, boundary, digest),
     signature,
   );
 }
@@ -204,6 +265,16 @@ export function gameMarketListingCancelProofDigest(
   );
 }
 
+export function gameMarketListingCancelProofDigestAsync(
+  unit: string,
+  boundary: GameMarketListingCancelProofBoundary,
+  digest: AsyncGameOwnerDigestAdapter,
+): Promise<string> {
+  return digest.hashString(
+    canonicalGameMarketListingCancelProof(unit, boundary),
+  );
+}
+
 export function signGameMarketListingCancelProof(
   unit: string,
   boundary: GameMarketListingCancelProofBoundary,
@@ -221,14 +292,14 @@ export function signGameMarketListingCancelProof(
 export async function signGameMarketListingCancelProofAsync(
   unit: string,
   boundary: GameMarketListingCancelProofBoundary,
-  digest: GameOwnerDigestAdapter,
+  digest: AsyncGameOwnerDigestAdapter,
   signer: AsyncGameOwnerSigner,
 ): Promise<string> {
   if (boundary.ownerPublicKey !== signer.publicKey) {
     throw new Error("market listing cancellation key does not match signer");
   }
   return signer.signDigest(
-    gameMarketListingCancelProofDigest(unit, boundary, digest),
+    await gameMarketListingCancelProofDigestAsync(unit, boundary, digest),
   );
 }
 
@@ -242,6 +313,20 @@ export function verifyGameMarketListingCancelProof(
   return verifier.verify(
     boundary.ownerPublicKey,
     gameMarketListingCancelProofDigest(unit, boundary, digest),
+    signature,
+  );
+}
+
+export async function verifyGameMarketListingCancelProofAsync(
+  unit: string,
+  boundary: GameMarketListingCancelProofBoundary,
+  signature: string,
+  digest: AsyncGameOwnerDigestAdapter,
+  verifier: AsyncGameOwnerSignatureVerifier,
+): Promise<boolean> {
+  return verifier.verify(
+    boundary.ownerPublicKey,
+    await gameMarketListingCancelProofDigestAsync(unit, boundary, digest),
     signature,
   );
 }
@@ -273,6 +358,14 @@ export function gameItemTransferProofDigest(
   return digest.hashString(canonicalGameItemTransferProof(unit, boundary));
 }
 
+export function gameItemTransferProofDigestAsync(
+  unit: string,
+  boundary: GameItemTransferProofBoundary,
+  digest: AsyncGameOwnerDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalGameItemTransferProof(unit, boundary));
+}
+
 export function signGameItemTransferProof(
   unit: string,
   boundary: GameItemTransferProofBoundary,
@@ -291,7 +384,7 @@ export function signGameItemTransferProof(
 export async function signGameItemTransferProofAsync(
   unit: string,
   boundary: GameItemTransferProofBoundary,
-  digest: GameOwnerDigestAdapter,
+  digest: AsyncGameOwnerDigestAdapter,
   signer: AsyncGameOwnerSigner,
 ): Promise<string> {
   if (
@@ -300,7 +393,9 @@ export async function signGameItemTransferProofAsync(
   ) {
     throw new Error("item transfer signer is not a transfer participant");
   }
-  return signer.signDigest(gameItemTransferProofDigest(unit, boundary, digest));
+  return signer.signDigest(
+    await gameItemTransferProofDigestAsync(unit, boundary, digest),
+  );
 }
 
 export type VerifyGameItemTransferProofResult =
@@ -329,6 +424,36 @@ export function verifyGameItemTransferProof(
     return { ok: false, reason: "sender_authentication_refused" };
   }
   if (!verifier.verify(
+    boundary.toOwnerPublicKey,
+    proofDigest,
+    recipientSignature,
+  )) {
+    return { ok: false, reason: "recipient_authentication_refused" };
+  }
+  return { ok: true };
+}
+
+export async function verifyGameItemTransferProofAsync(
+  unit: string,
+  boundary: GameItemTransferProofBoundary,
+  senderSignature: string,
+  recipientSignature: string,
+  digest: AsyncGameOwnerDigestAdapter,
+  verifier: AsyncGameOwnerSignatureVerifier,
+): Promise<VerifyGameItemTransferProofResult> {
+  const proofDigest = await gameItemTransferProofDigestAsync(
+    unit,
+    boundary,
+    digest,
+  );
+  if (!await verifier.verify(
+    boundary.fromOwnerPublicKey,
+    proofDigest,
+    senderSignature,
+  )) {
+    return { ok: false, reason: "sender_authentication_refused" };
+  }
+  if (!await verifier.verify(
     boundary.toOwnerPublicKey,
     proofDigest,
     recipientSignature,

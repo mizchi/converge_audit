@@ -566,7 +566,7 @@ function scheduleItemVerification(assetId: string): void {
         const request = await authenticateGameItemVerificationRequestAsync(
           unit,
           unsignedRequest,
-          moonBitAuditDigest,
+          productionCryptoBackend,
           deviceKey,
         );
         await verifyItemWithBackfill(assetId, request, unit, generation);
@@ -613,7 +613,7 @@ function scheduleMarketListing(item: InventoryItem): void {
   void signGameMarketListingProofAsync(
     unit,
     boundary,
-    moonBitAuditDigest,
+    productionCryptoBackend,
     deviceKey,
   ).then((ownerSignature) => requestGameMarketListing(
     fetch,
@@ -733,7 +733,7 @@ function scheduleMarketListingCancellation(item: InventoryItem): void {
   void signGameMarketListingCancelProofAsync(
     unit,
     boundary,
-    moonBitAuditDigest,
+    productionCryptoBackend,
     deviceKey,
   ).then((cancelSignature) => requestGameMarketListingCancellation(
     fetch,

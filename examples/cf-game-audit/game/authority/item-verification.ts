@@ -19,8 +19,11 @@ import {
 import {
   signGameItemOwnerProof,
   signGameItemOwnerProofAsync,
+  type AsyncGameOwnerDigestAdapter,
   type AsyncGameOwnerSigner,
   verifyGameItemOwnerProof,
+  verifyGameItemOwnerProofAsync,
+  type AsyncGameOwnerSignatureVerifier,
   type GameOwnerSignatureVerifier,
   type GameOwnerSigner,
 } from "./owner-authentication";
@@ -287,7 +290,7 @@ export function authenticateGameItemVerificationRequest(
 export async function authenticateGameItemVerificationRequestAsync(
   unit: string,
   request: UnsignedGameItemVerificationRequest,
-  digest: AuditDigestAdapter,
+  digest: AsyncGameOwnerDigestAdapter,
   signer: AsyncGameOwnerSigner,
 ): Promise<GameItemVerificationRequest> {
   const owner_signature = await signGameItemOwnerProofAsync(
@@ -303,6 +306,45 @@ export async function authenticateGameItemVerificationRequestAsync(
     signer,
   );
   return { ...request, owner_signature };
+}
+
+export type VerifyGameItemCreationOwnerProofResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "invalid_request" | "owner_authentication_refused";
+    };
+
+/**
+ * Authenticate untrusted item-settlement bytes before deterministic replay.
+ * This function does not mutate game or authority state.
+ */
+export async function verifyGameItemCreationOwnerProofAsync(
+  unit: string,
+  input: unknown,
+  digest: AsyncGameOwnerDigestAdapter,
+  verifier: AsyncGameOwnerSignatureVerifier,
+): Promise<VerifyGameItemCreationOwnerProofResult> {
+  const request = decodeItemRequest(input);
+  if (!request || !isBoundedString(unit, 128)) {
+    return { ok: false, reason: "invalid_request" };
+  }
+  if (!await verifyGameItemOwnerProofAsync(
+    unit,
+    {
+      playerId: request.player_id,
+      seed: request.seed,
+      checkpointDigest: request.checkpoint.checkpoint_digest,
+      assetId: request.asset_id,
+      ownerPublicKey: request.owner_public_key,
+    },
+    request.owner_signature,
+    digest,
+    verifier,
+  )) {
+    return { ok: false, reason: "owner_authentication_refused" };
+  }
+  return { ok: true };
 }
 
 export function verifyGameCheckpoint(
