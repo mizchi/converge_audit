@@ -749,6 +749,55 @@ export async function assetLineageCertificateAllowed(input: {
   );
 }
 
+export async function evidenceLineageCaseAdmissionAllowed(input: {
+  activeHold: boolean;
+  boundaryMatches: boolean;
+  checkpointMatches: boolean;
+  referenceMatches: boolean;
+  ancestorMatches: boolean;
+  authenticationSucceeded: boolean;
+}): Promise<boolean> {
+  const audit = await loadAuditModule();
+  return audit.audit_evidence_lineage_case_admission_allowed(
+    input.activeHold,
+    input.boundaryMatches,
+    input.checkpointMatches,
+    input.referenceMatches,
+    input.ancestorMatches,
+    input.authenticationSucceeded,
+  );
+}
+
+export async function evidenceLineageCaseDecisionAllowed(input: {
+  caseOpen: boolean;
+  assetMatches: boolean;
+  ancestorMatches: boolean;
+  certificateAuthenticated: boolean;
+}): Promise<boolean> {
+  const audit = await loadAuditModule();
+  return audit.audit_evidence_lineage_case_decision_allowed(
+    input.caseOpen,
+    input.assetMatches,
+    input.ancestorMatches,
+    input.certificateAuthenticated,
+  );
+}
+
+export async function evidenceLineageCaseDismissalAllowed(input: {
+  caseOpen: boolean;
+  caseIdMatches: boolean;
+  certificateAuthenticated: boolean;
+  certificateTimeValid: boolean;
+}): Promise<boolean> {
+  const audit = await loadAuditModule();
+  return audit.audit_evidence_lineage_case_dismissal_allowed(
+    input.caseOpen,
+    input.caseIdMatches,
+    input.certificateAuthenticated,
+    input.certificateTimeValid,
+  );
+}
+
 export async function verifyPveReplayBundle(
   bundleHex: string,
   expectedSessionId: string,

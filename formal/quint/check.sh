@@ -9,6 +9,8 @@ quint typecheck formal/quint/AssetOwnership.qnt
 quint typecheck formal/quint/AssetOwnershipModels.qnt
 quint typecheck formal/quint/LineageAppeal.qnt
 quint typecheck formal/quint/LineageAppealModels.qnt
+quint typecheck formal/quint/EvidenceLineageCase.qnt
+quint typecheck formal/quint/EvidenceLineageCaseModels.qnt
 
 quint verify formal/quint/CheckpointDeliveryModels.qnt \
   --backend=tlc \
@@ -93,4 +95,18 @@ quint verify formal/quint/LineageAppealModels.qnt \
     decisionRevisionMatchesHistory \
     finalizedAppealHasExactTarget \
     finalizedAppealHadOpenWindow \
+  --verbosity=1
+
+quint verify formal/quint/EvidenceLineageCaseModels.qnt \
+  --backend=tlc \
+  --main=evidenceLineageCaseSafety \
+  --invariants \
+    typeOk \
+    acceptedCasesRequireAuthenticatedActiveExactHolds \
+    caseOpeningNeverChangesAsset \
+    assetMutationRequiresAuthenticatedExactCertificate \
+    dismissedCasesRequireAuthenticatedExactCertificate \
+    onlyUpheldDecisionMutatesAsset \
+    decidedCasesMatchDecisionCount \
+    dismissedCasesMatchDismissalCount \
   --verbosity=1

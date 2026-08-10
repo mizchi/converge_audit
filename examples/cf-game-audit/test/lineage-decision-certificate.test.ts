@@ -87,6 +87,23 @@ describe("lineage decision certificate", () => {
     });
   });
 
+  it("accepts v2 only when it binds an exact evidence case", () => {
+    const evidenceCaseId = "c".repeat(64);
+    const bound = provisionalRevocation({
+      version: 2,
+      evidenceCaseId,
+    });
+    expect(verify(certificate(bound))).toMatchObject({
+      ok: true,
+      certificate: { statement: { evidenceCaseId } },
+    });
+    const unbound = provisionalRevocation({ version: 2 });
+    expect(verify(certificate(unbound))).toEqual({
+      ok: false,
+      reason: "invalid_certificate",
+    });
+  });
+
   it("rejects an unknown arbiter and an unsupported scheme", () => {
     expect(verify(certificate(provisionalRevocation(), "unknown"))).toEqual({
       ok: false,

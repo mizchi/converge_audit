@@ -5,6 +5,7 @@ quint typecheck formal/quint/CheckpointDeliveryTests.qnt
 quint typecheck formal/quint/WitnessQuorumTests.qnt
 quint typecheck formal/quint/AssetOwnershipTests.qnt
 quint typecheck formal/quint/LineageAppealTests.qnt
+quint typecheck formal/quint/EvidenceLineageCaseTests.qnt
 
 quint test formal/quint/CheckpointDeliveryTests.qnt \
   --main=checkpointDeliveryTests \
@@ -24,4 +25,9 @@ quint test formal/quint/AssetOwnershipTests.qnt \
 quint test formal/quint/LineageAppealTests.qnt \
   --main=lineageAppealTests \
   --match='^(provisionalRevokeAppealFinalized|expiredAppealIsRejected|wrongDecisionAppealIsRejected|oneAppealDoesNotClearAnotherRevocation|exactDuplicateIsIdempotent|conflictingDecisionIdIsRejected)$' \
+  --verbosity=1
+
+quint test formal/quint/EvidenceLineageCaseTests.qnt \
+  --main=evidenceLineageCaseTests \
+  --match='^(authenticatedHoldOpensWithoutRevoking|exactCertificateDecidesAndRevokes|exactDismissalClosesWithoutRevoking|unauthenticatedDismissalIsRejected|retargetedDismissalIsRejected|unauthenticatedHoldIsRejected|retargetedDecisionIsRejected|exactDuplicateIsIdempotent)$' \
   --verbosity=1

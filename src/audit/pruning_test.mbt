@@ -55,3 +55,67 @@ test "evidence hold resolution requires an active exactly bound hold" {
     content="false",
   )
 }
+
+///|
+test "evidence lineage cases require an authenticated active exact binding" {
+  inspect(
+    evidence_lineage_case_admission_allowed(true, true, true, true, true, true),
+    content="true",
+  )
+  inspect(
+    evidence_lineage_case_admission_allowed(false, true, true, true, true, true),
+    content="false",
+  )
+  inspect(
+    evidence_lineage_case_admission_allowed(true, true, true, false, true, true),
+    content="false",
+  )
+  inspect(
+    evidence_lineage_case_admission_allowed(true, true, true, true, true, false),
+    content="false",
+  )
+}
+
+///|
+test "evidence case decisions require an open exact-bound case and certificate" {
+  inspect(
+    evidence_lineage_case_decision_allowed(true, true, true, true),
+    content="true",
+  )
+  inspect(
+    evidence_lineage_case_decision_allowed(false, true, true, true),
+    content="false",
+  )
+  inspect(
+    evidence_lineage_case_decision_allowed(true, true, false, true),
+    content="false",
+  )
+  inspect(
+    evidence_lineage_case_decision_allowed(true, true, true, false),
+    content="false",
+  )
+}
+
+///|
+test "evidence case dismissal closes only an exact open case" {
+  inspect(
+    evidence_lineage_case_dismissal_allowed(true, true, true, true),
+    content="true",
+  )
+  inspect(
+    evidence_lineage_case_dismissal_allowed(false, true, true, true),
+    content="false",
+  )
+  inspect(
+    evidence_lineage_case_dismissal_allowed(true, false, true, true),
+    content="false",
+  )
+  inspect(
+    evidence_lineage_case_dismissal_allowed(true, true, false, true),
+    content="false",
+  )
+  inspect(
+    evidence_lineage_case_dismissal_allowed(true, true, true, false),
+    content="false",
+  )
+}

@@ -260,7 +260,11 @@ anchor/未証明transfer revoke拒否と、`appeal_open -> finalized | expired`�
 scheme別verifier registry、環境provisionしたarbiter roster、domain-separated statement、
 issued/expires/clock-skew、appeal deadline、decision history/finalityのSQLite永続化へ接続し、
 無署名、unknown arbiter、不正署名、期限切れ、wrong lineage binding、stale revision、期限外appealを
-fail-closedにする。production arbiter rosterのrotation/revocationとcase起票システム接続は`Pending`。
+fail-closedにする。reference PvE originは別rosterのsourceが署名したactive holdを、asset/ancestor/
+checkpointへexact bindしたcaseとして永続化し、case作成ではassetを変更せず、v2 arbiter certificateで
+caseとlineageを同時にupholdする経路と、署名付きdismissalでcaseだけを閉じる経路まで
+`Proven / Model checked / Tested locally`。dismissalが返すhold resolutionはsource再署名前のdraftである。
+production rosterのrotation/revocation、poll schedulerからの自動提出・draft再署名配送、transfer caseは`Pending`。
 
 ### AUD-ASSET-005: multi-asset checkpointを一括受理する（MUST）
 

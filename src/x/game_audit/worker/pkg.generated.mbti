@@ -32,6 +32,12 @@ pub fn audit_classify_anchor_head(Bool, Bool, Bool, Int, Int, Bool) -> String
 
 pub fn audit_classify_central_replay(Bool, Bool, Bool, Bool, Bool) -> String
 
+pub fn audit_evidence_lineage_case_admission_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_evidence_lineage_case_decision_allowed(Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_evidence_lineage_case_dismissal_allowed(Bool, Bool, Bool, Bool) -> Bool
+
 pub fn audit_experimental_sign_checkpoint_delivery_approval(String, String, String) -> String
 
 pub fn audit_inventory_head_advance_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool

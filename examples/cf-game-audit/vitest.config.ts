@@ -20,6 +20,13 @@ export default defineConfig({
             },
           }),
           LINEAGE_DECISION_MAX_CLOCK_SKEW_MS: "0",
+          EVIDENCE_HOLD_SOURCE_ROSTER: JSON.stringify({
+            "evidence-source-a": {
+              scheme: "moonbit-ed25519-v1",
+              public_key:
+                "13d9908a70925992ed546007d27f50da68ba7217ef62ac3cca784529ff10471c",
+            },
+          }),
         },
       },
     }),

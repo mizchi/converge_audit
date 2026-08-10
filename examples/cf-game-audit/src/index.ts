@@ -33,6 +33,16 @@ import {
   verifyLineageDecisionCertificate,
   type LineageDecisionLifecycle,
 } from "./lineage-decision-certificate";
+import {
+  evidenceLineageCaseHoldResolutionDraft,
+  parseEvidenceLineageCaseSourceRoster,
+  verifyEvidenceLineageCaseProposal,
+  type EvidenceLineageCaseReference,
+} from "../../player-local-runtime/evidence-lineage-case";
+import {
+  decodeEvidenceCaseDismissalCertificate,
+  verifyEvidenceCaseDismissalCertificate,
+} from "./evidence-case-dismissal-certificate";
 import type { AuditDigestAdapter } from "../game/audit/journal";
 import {
   decodeGameCheckpointVerificationRequest,
@@ -62,6 +72,9 @@ import {
   classifyAnchorHead,
   classifyCentralReplayArtifacts,
   inventoryHeadAdvanceAllowed,
+  evidenceLineageCaseAdmissionAllowed,
+  evidenceLineageCaseDecisionAllowed,
+  evidenceLineageCaseDismissalAllowed,
   loadCheckpointRuntime,
   marketplaceCreationPersistAllowed,
   openCheckpointClosure,
@@ -90,6 +103,7 @@ export interface Env {
   WITNESS_SOURCE_BUCKET_KEY: string;
   LINEAGE_ARBITER_ROSTER?: string;
   LINEAGE_DECISION_MAX_CLOCK_SKEW_MS?: string;
+  EVIDENCE_HOLD_SOURCE_ROSTER?: string;
 }
 
 export type { CheckpointDeliveryJob } from "./checkpoint-runtime";
@@ -398,6 +412,47 @@ interface ReferenceGameAssetLineageDecisionRow
   finalized_at: number | null;
   lifecycle: LineageDecisionLifecycle;
   decided_at: number;
+  evidence_case_id: string | null;
+}
+
+interface ReferenceGameEvidenceLineageCaseRow
+  extends Record<string, SqlStorageValue> {
+  case_id: string;
+  asset_id: string;
+  ancestor_id: string;
+  ancestor_kind: "origin";
+  source_id: string;
+  hold_id: string;
+  hold_message_digest: string;
+  epoch: number;
+  checkpoint_digest: string;
+  hold_kind: "fork" | "challenge" | "appeal";
+  reference_digest: string;
+  boundary_protocol_version: number;
+  boundary_purpose: string;
+  boundary_manifest_digest: string;
+  boundary_scope_id: string;
+  boundary_unit_id: string;
+  hold_envelope_json: string;
+  status: "open" | "decided";
+  disposition: "upheld" | "dismissed" | null;
+  decision_id: string | null;
+  resolution_id: string | null;
+  opened_at: number;
+  decided_at: number | null;
+}
+
+interface ReferenceGameEvidenceCaseDismissalRow
+  extends Record<string, SqlStorageValue> {
+  dismissal_id: string;
+  case_id: string;
+  reason: string;
+  arbiter_id: string;
+  authentication_scheme: string;
+  signature: string;
+  issued_at: number;
+  expires_at: number;
+  dismissed_at: number;
 }
 
 interface ReferenceGameSourceWindowRow extends Record<string, SqlStorageValue> {
@@ -437,12 +492,14 @@ const REFERENCE_GAME_PUBLIC_ACTIONS = new Set([
   "game-market-listings",
   "game-market-listing-cancellations",
   "game-asset-lineage-status",
+  "game-asset-lineage-cases",
 ]);
 const AUDIT_ADMIN_ACTIONS = new Set([
   "asset-lineage-decisions",
   "asset-lineage-proofs",
   "inventory-checkpoints",
   "game-asset-lineage-decisions",
+  "game-asset-lineage-case-dismissals",
   "asset-lineage-status",
 ]);
 const LOCATION_HINTS = new Set([
@@ -892,6 +949,7 @@ export class GameAuditShard extends DurableObject<Env> {
         appeal_deadline_at INTEGER,
         appeal_of_decision_id TEXT,
         finalized_at INTEGER,
+        evidence_case_id TEXT CHECK (length(evidence_case_id) = 64),
         lifecycle TEXT NOT NULL DEFAULT 'finalized' CHECK (
           lifecycle IN ('appeal_open', 'finalized')
         ),
@@ -1074,11 +1132,60 @@ export class GameAuditShard extends DurableObject<Env> {
         appeal_deadline_at INTEGER,
         appeal_of_decision_id TEXT,
         finalized_at INTEGER,
+        evidence_case_id TEXT CHECK (length(evidence_case_id) = 64),
         lifecycle TEXT NOT NULL DEFAULT 'finalized' CHECK (
           lifecycle IN ('appeal_open', 'finalized')
         ),
         decided_at INTEGER NOT NULL CHECK (decided_at >= 0),
         UNIQUE(asset_id, ancestor_id, revision)
+      );
+      CREATE TABLE IF NOT EXISTS reference_game_evidence_lineage_cases (
+        case_id TEXT PRIMARY KEY CHECK (length(case_id) = 64),
+        asset_id TEXT NOT NULL,
+        ancestor_id TEXT NOT NULL CHECK (length(ancestor_id) = 64),
+        ancestor_kind TEXT NOT NULL CHECK (ancestor_kind = 'origin'),
+        source_id TEXT NOT NULL,
+        hold_id TEXT NOT NULL,
+        hold_message_digest TEXT NOT NULL CHECK (
+          length(hold_message_digest) = 64
+        ),
+        epoch INTEGER NOT NULL CHECK (epoch >= 0),
+        checkpoint_digest TEXT NOT NULL CHECK (
+          length(checkpoint_digest) = 64
+        ),
+        hold_kind TEXT NOT NULL CHECK (
+          hold_kind IN ('fork', 'challenge', 'appeal')
+        ),
+        reference_digest TEXT NOT NULL CHECK (length(reference_digest) = 64),
+        boundary_protocol_version INTEGER NOT NULL CHECK (
+          boundary_protocol_version > 0
+        ),
+        boundary_purpose TEXT NOT NULL,
+        boundary_manifest_digest TEXT NOT NULL,
+        boundary_scope_id TEXT NOT NULL,
+        boundary_unit_id TEXT NOT NULL,
+        hold_envelope_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('open', 'decided')),
+        disposition TEXT CHECK (disposition IN ('upheld', 'dismissed')),
+        decision_id TEXT UNIQUE CHECK (length(decision_id) = 64),
+        resolution_id TEXT UNIQUE CHECK (length(resolution_id) = 64),
+        opened_at INTEGER NOT NULL CHECK (opened_at >= 0),
+        decided_at INTEGER CHECK (decided_at >= 0),
+        UNIQUE(source_id, hold_id),
+        UNIQUE(hold_message_digest)
+      );
+      CREATE INDEX IF NOT EXISTS reference_game_evidence_cases_asset_status
+        ON reference_game_evidence_lineage_cases(asset_id, status);
+      CREATE TABLE IF NOT EXISTS reference_game_evidence_case_dismissals (
+        dismissal_id TEXT PRIMARY KEY CHECK (length(dismissal_id) = 64),
+        case_id TEXT NOT NULL UNIQUE CHECK (length(case_id) = 64),
+        reason TEXT NOT NULL,
+        arbiter_id TEXT NOT NULL,
+        authentication_scheme TEXT NOT NULL,
+        signature TEXT NOT NULL,
+        issued_at INTEGER NOT NULL CHECK (issued_at >= 0),
+        expires_at INTEGER NOT NULL CHECK (expires_at >= issued_at),
+        dismissed_at INTEGER NOT NULL CHECK (dismissed_at >= 0)
       );
       CREATE TABLE IF NOT EXISTS reference_game_verification_source_windows (
         source_bucket TEXT PRIMARY KEY CHECK (length(source_bucket) = 64),
@@ -1089,6 +1196,32 @@ export class GameAuditShard extends DurableObject<Env> {
     this.migrateReplayArtifacts();
     this.migrateReferenceGameMarketListings();
     this.migrateVerifiedAssetLineageDecisions();
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_evidence_lineage_cases",
+      "disposition",
+      "TEXT CHECK (disposition IN ('upheld', 'dismissed'))",
+    );
+    this.addReferenceGameColumnIfMissing(
+      "reference_game_evidence_lineage_cases",
+      "resolution_id",
+      "TEXT CHECK (length(resolution_id) = 64)",
+    );
+    this.ctx.storage.sql.exec(
+      `UPDATE reference_game_evidence_lineage_cases
+       SET disposition = COALESCE(disposition, 'upheld'),
+           resolution_id = COALESCE(resolution_id, decision_id),
+           decision_id = CASE
+             WHEN disposition = 'dismissed' THEN NULL
+             ELSE decision_id
+           END
+       WHERE status = 'decided'`,
+    );
+    this.ctx.storage.sql.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS
+         reference_game_evidence_cases_resolution
+       ON reference_game_evidence_lineage_cases(resolution_id)
+       WHERE resolution_id IS NOT NULL`,
+    );
     for (const table of [
       "verified_asset_lineage_heads",
       "reference_game_asset_lineage_heads",
@@ -1113,6 +1246,11 @@ export class GameAuditShard extends DurableObject<Env> {
       this.addLineageColumnIfMissing(table, "appeal_deadline_at", "INTEGER");
       this.addLineageColumnIfMissing(table, "appeal_of_decision_id", "TEXT");
       this.addLineageColumnIfMissing(table, "finalized_at", "INTEGER");
+      this.addLineageColumnIfMissing(
+        table,
+        "evidence_case_id",
+        "TEXT CHECK (length(evidence_case_id) = 64)",
+      );
       this.addLineageColumnIfMissing(
         table,
         "lifecycle",
@@ -1263,6 +1401,10 @@ export class GameAuditShard extends DurableObject<Env> {
         return this.cancelReferenceGameMarketListing(request, mode, unit);
       case "POST game-asset-lineage-decisions":
         return this.decideReferenceGameAssetLineage(request, mode, unit);
+      case "POST game-asset-lineage-cases":
+        return this.openReferenceGameEvidenceLineageCase(request, mode, unit);
+      case "POST game-asset-lineage-case-dismissals":
+        return this.dismissReferenceGameEvidenceLineageCase(request, mode, unit);
       case "GET game-asset-lineage-status":
         return this.getReferenceGameAssetLineageStatus(url, mode);
       case "GET asset-lineage-status":
@@ -2746,10 +2888,59 @@ export class GameAuditShard extends DurableObject<Env> {
       `SELECT decision_id, asset_id, ancestor_id, ancestor_kind, revision,
               outcome, reason, arbiter_id, authentication_scheme, signature,
               issued_at, expires_at, appeal_deadline_at,
-              appeal_of_decision_id, finalized_at, lifecycle, decided_at
+              appeal_of_decision_id, finalized_at, lifecycle, decided_at,
+              evidence_case_id
        FROM reference_game_asset_lineage_decisions
        WHERE decision_id = ?`,
       decisionId,
+    ).toArray()[0];
+  }
+
+  private referenceGameEvidenceLineageCaseAt(
+    caseId: string,
+  ): ReferenceGameEvidenceLineageCaseRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameEvidenceLineageCaseRow>(
+      `SELECT case_id, asset_id, ancestor_id, ancestor_kind, source_id,
+              hold_id, hold_message_digest, epoch, checkpoint_digest,
+              hold_kind, reference_digest, boundary_protocol_version,
+              boundary_purpose, boundary_manifest_digest, boundary_scope_id,
+              boundary_unit_id, hold_envelope_json, status, disposition,
+              decision_id, resolution_id,
+              opened_at, decided_at
+       FROM reference_game_evidence_lineage_cases WHERE case_id = ?`,
+      caseId,
+    ).toArray()[0];
+  }
+
+  private referenceGameEvidenceLineageCaseForHold(
+    sourceId: string,
+    holdId: string,
+  ): ReferenceGameEvidenceLineageCaseRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameEvidenceLineageCaseRow>(
+      `SELECT case_id, asset_id, ancestor_id, ancestor_kind, source_id,
+              hold_id, hold_message_digest, epoch, checkpoint_digest,
+              hold_kind, reference_digest, boundary_protocol_version,
+              boundary_purpose, boundary_manifest_digest, boundary_scope_id,
+              boundary_unit_id, hold_envelope_json, status, disposition,
+              decision_id, resolution_id,
+              opened_at, decided_at
+       FROM reference_game_evidence_lineage_cases
+       WHERE source_id = ? AND hold_id = ?`,
+      sourceId,
+      holdId,
+    ).toArray()[0];
+  }
+
+  private referenceGameEvidenceCaseDismissalAt(
+    dismissalId: string,
+  ): ReferenceGameEvidenceCaseDismissalRow | undefined {
+    return this.ctx.storage.sql.exec<ReferenceGameEvidenceCaseDismissalRow>(
+      `SELECT dismissal_id, case_id, reason, arbiter_id,
+              authentication_scheme, signature, issued_at, expires_at,
+              dismissed_at
+       FROM reference_game_evidence_case_dismissals
+       WHERE dismissal_id = ?`,
+      dismissalId,
     ).toArray()[0];
   }
 
@@ -3647,6 +3838,299 @@ export class GameAuditShard extends DurableObject<Env> {
     }, 201);
   }
 
+  private async openReferenceGameEvidenceLineageCase(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const sourceBucket = request.headers.get("x-audit-source-bucket");
+    if (!sourceBucket || !/^[0-9a-f]{64}$/.test(sourceBucket)) {
+      return jsonError("invalid_reference_game_source", 400);
+    }
+    const admission = this.reserveReferenceGameVerification(
+      sourceBucket,
+      Date.now(),
+    );
+    if (!admission.allowed) {
+      const response = jsonError("reference_game_verification_rate_limited", 429);
+      response.headers.set(
+        "retry-after",
+        String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))),
+      );
+      return response;
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const roster = parseEvidenceLineageCaseSourceRoster(
+      this.auditEnv.EVIDENCE_HOLD_SOURCE_ROSTER,
+    );
+    if (!roster) {
+      return jsonError("evidence_hold_source_roster_not_configured", 503);
+    }
+    const verified = await verifyEvidenceLineageCaseProposal(body.value, {
+      roster,
+      verifiers: referenceGameLineageDecisionVerifiers,
+      digest: referenceGameDigest,
+    });
+    if (!verified.ok) {
+      return jsonResponse(
+        { ok: false, decision: verified.reason },
+        verified.reason === "invalid_proposal" ? 400 : 403,
+      );
+    }
+    const target = verified.proposal.target;
+    if (target.scope !== "reference-game" || target.unit !== unit) {
+      return jsonResponse({ ok: false, decision: "case_boundary_mismatch" }, 403);
+    }
+    const creation = this.referenceGameItemReceiptAt(target.assetId);
+    if (!creation) {
+      return jsonResponse({
+        ok: true,
+        decision: "asset_not_found",
+        asset_id: target.assetId,
+      }, 404);
+    }
+    const ancestorKind = this.referenceGameAncestorKind(
+      creation,
+      target.ancestorId,
+    );
+    const boundaryMatches = target.boundary.protocol_version === 1 &&
+      target.boundary.purpose === "reference-game-checkpoint-v1" &&
+      target.boundary.scope_id === creation.owner_id;
+    const checkpointMatches = target.checkpointDigest ===
+        creation.checkpoint_digest && target.epoch === creation.inventory_epoch;
+    // V1 binds origin challenges to the authority-verified creation
+    // checkpoint. Transfer checkpoint evidence needs its own game adapter.
+    const ancestorMatches = ancestorKind === "origin" &&
+      target.ancestorKind === "origin";
+    const allowed = await evidenceLineageCaseAdmissionAllowed({
+      activeHold: true,
+      boundaryMatches,
+      checkpointMatches,
+      referenceMatches: true,
+      ancestorMatches,
+      authenticationSucceeded: true,
+    });
+    if (!allowed) {
+      return jsonResponse({
+        ok: true,
+        decision: !boundaryMatches
+          ? "case_boundary_mismatch"
+          : !checkpointMatches
+          ? "case_checkpoint_mismatch"
+          : "case_ancestor_mismatch",
+        asset_id: target.assetId,
+        ancestor_id: target.ancestorId,
+      }, 409);
+    }
+    const existing = this.referenceGameEvidenceLineageCaseAt(verified.caseId);
+    if (existing) {
+      return jsonResponse(referenceGameEvidenceCaseResponse(
+        "duplicate",
+        existing,
+        this.referenceGameOpenRevocationCount(target.assetId),
+      ));
+    }
+    const conflicting = this.referenceGameEvidenceLineageCaseForHold(
+      target.sourceId,
+      target.holdId,
+    );
+    if (conflicting) {
+      return jsonResponse({
+        ok: true,
+        decision: "evidence_hold_conflict",
+        case_id: conflicting.case_id,
+      }, 409);
+    }
+    const openedAt = Date.now();
+    const holdEnvelopeJson = JSON.stringify(verified.proposal.envelope);
+    const inserted = this.ctx.storage.transactionSync(() => {
+      const raced = this.referenceGameEvidenceLineageCaseForHold(
+        target.sourceId,
+        target.holdId,
+      );
+      if (raced) return raced;
+      this.ctx.storage.sql.exec(
+        `INSERT INTO reference_game_evidence_lineage_cases
+         (case_id, asset_id, ancestor_id, ancestor_kind, source_id, hold_id,
+         hold_message_digest, epoch, checkpoint_digest, hold_kind,
+          reference_digest, boundary_protocol_version, boundary_purpose,
+          boundary_manifest_digest, boundary_scope_id, boundary_unit_id,
+          hold_envelope_json, status, disposition, decision_id, resolution_id,
+          opened_at, decided_at)
+         VALUES (?, ?, ?, 'origin', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                 'open', NULL, NULL, NULL, ?, NULL)`,
+        verified.caseId,
+        target.assetId,
+        target.ancestorId,
+        target.sourceId,
+        target.holdId,
+        verified.proposal.envelope.message_digest,
+        target.epoch,
+        target.checkpointDigest,
+        target.holdKind,
+        verified.referenceDigest,
+        target.boundary.protocol_version,
+        target.boundary.purpose,
+        target.boundary.manifest_digest,
+        target.boundary.scope_id,
+        target.boundary.unit_id,
+        holdEnvelopeJson,
+        openedAt,
+      );
+      return this.referenceGameEvidenceLineageCaseAt(verified.caseId);
+    });
+    if (!inserted || inserted.case_id !== verified.caseId) {
+      return jsonResponse({
+        ok: true,
+        decision: "evidence_hold_conflict",
+        case_id: inserted?.case_id,
+      }, 409);
+    }
+    await this.ctx.storage.sync();
+    return jsonResponse(referenceGameEvidenceCaseResponse(
+      "opened",
+      inserted,
+      this.referenceGameOpenRevocationCount(target.assetId),
+    ), 201);
+  }
+
+  private async dismissReferenceGameEvidenceLineageCase(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "pve") return jsonError("not_found", 404);
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const certificate = decodeEvidenceCaseDismissalCertificate(body.value);
+    if (!certificate) {
+      return jsonError("invalid_evidence_case_dismissal", 400);
+    }
+    const roster = parseLineageDecisionArbiterRoster(
+      this.auditEnv.LINEAGE_ARBITER_ROSTER,
+    );
+    const maxClockSkewMs = lineageDecisionMaxClockSkewMs(this.auditEnv);
+    if (!roster || maxClockSkewMs === undefined) {
+      return jsonError("lineage_arbiter_roster_not_configured", 503);
+    }
+    const dismissedAt = Date.now();
+    const verified = verifyEvidenceCaseDismissalCertificate(certificate, {
+      expectedScope: "reference-game",
+      expectedUnit: unit,
+      nowMs: dismissedAt,
+      maxClockSkewMs,
+      roster,
+      verifiers: referenceGameLineageDecisionVerifiers,
+      digest: referenceGameDigest,
+    });
+    if (!verified.ok) {
+      return jsonResponse({ ok: false, decision: verified.reason }, 403);
+    }
+    const statement = certificate.statement;
+    const existing = this.referenceGameEvidenceCaseDismissalAt(
+      verified.dismissalId,
+    );
+    if (existing) {
+      const existingCase = this.referenceGameEvidenceLineageCaseAt(
+        existing.case_id,
+      );
+      if (!existingCase) {
+        return jsonError("evidence_case_dismissal_history_inconsistent", 500);
+      }
+      return jsonResponse(referenceGameEvidenceCaseDismissalResponse(
+        "duplicate",
+        existingCase,
+        existing,
+        this.referenceGameOpenRevocationCount(existingCase.asset_id),
+        unit,
+      ));
+    }
+    const evidenceCase = this.referenceGameEvidenceLineageCaseAt(
+      statement.evidenceCaseId,
+    );
+    if (!evidenceCase) {
+      return jsonResponse({
+        ok: true,
+        decision: "evidence_case_not_found",
+        evidence_case_id: statement.evidenceCaseId,
+      }, 409);
+    }
+    const allowed = await evidenceLineageCaseDismissalAllowed({
+      caseOpen: evidenceCase.status === "open",
+      caseIdMatches: evidenceCase.case_id === statement.evidenceCaseId,
+      certificateAuthenticated: true,
+      certificateTimeValid: true,
+    });
+    if (!allowed) {
+      return jsonResponse({
+        ok: true,
+        decision: evidenceCase.status !== "open"
+          ? "evidence_case_already_decided"
+          : "evidence_case_binding_mismatch",
+        evidence_case_id: statement.evidenceCaseId,
+      }, 409);
+    }
+    const committed = this.ctx.storage.transactionSync(() => {
+      const latest = this.referenceGameEvidenceLineageCaseAt(
+        statement.evidenceCaseId,
+      );
+      if (latest?.status !== "open") return undefined;
+      this.ctx.storage.sql.exec(
+        `INSERT INTO reference_game_evidence_case_dismissals
+         (dismissal_id, case_id, reason, arbiter_id, authentication_scheme,
+          signature, issued_at, expires_at, dismissed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        verified.dismissalId,
+        latest.case_id,
+        statement.reasonCode,
+        certificate.authentication.arbiterId,
+        certificate.authentication.scheme,
+        certificate.authentication.signature,
+        statement.issuedAtMs,
+        statement.expiresAtMs,
+        dismissedAt,
+      );
+      this.ctx.storage.sql.exec(
+        `UPDATE reference_game_evidence_lineage_cases
+         SET status = 'decided', disposition = 'dismissed', decision_id = NULL,
+             resolution_id = ?, decided_at = ?
+         WHERE case_id = ? AND status = 'open'`,
+        verified.dismissalId,
+        dismissedAt,
+        latest.case_id,
+      );
+      const changed = this.ctx.storage.sql.exec<{ changed: number }>(
+        "SELECT changes() AS changed",
+      ).toArray()[0]?.changed ?? 0;
+      if (changed !== 1) {
+        throw new Error("reference game evidence dismissal CAS failed");
+      }
+      return {
+        row: this.referenceGameEvidenceLineageCaseAt(latest.case_id)!,
+        dismissal: this.referenceGameEvidenceCaseDismissalAt(
+          verified.dismissalId,
+        )!,
+      };
+    });
+    if (!committed) {
+      return jsonResponse({
+        ok: true,
+        decision: "evidence_case_raced",
+        evidence_case_id: statement.evidenceCaseId,
+      }, 409);
+    }
+    await this.ctx.storage.sync();
+    return jsonResponse(referenceGameEvidenceCaseDismissalResponse(
+      "dismissed",
+      committed.row,
+      committed.dismissal,
+      this.referenceGameOpenRevocationCount(committed.row.asset_id),
+      unit,
+    ), 201);
+  }
+
   private getReferenceGameAssetLineageStatus(
     url: URL,
     mode: AuditMode,
@@ -3732,12 +4216,18 @@ export class GameAuditShard extends DurableObject<Env> {
       }, 409);
     }
     const decisionId = verifiedCertificate.decisionId;
+    const evidenceCaseId = statement.version === 2
+      ? statement.evidenceCaseId
+      : undefined;
     const existing = this.referenceGameAssetLineageDecisionAt(decisionId);
     if (existing) {
       const currentHead = this.referenceGameAssetLineageHeadAt(
         assetId,
         ancestorId,
       );
+      const existingCase = existing.evidence_case_id
+        ? this.referenceGameEvidenceLineageCaseAt(existing.evidence_case_id)
+        : undefined;
       return jsonResponse({
         ok: true,
         decision: "duplicate",
@@ -3754,7 +4244,52 @@ export class GameAuditShard extends DurableObject<Env> {
           : existing.lifecycle,
         open_revocations: this.referenceGameOpenRevocationCount(assetId),
         quarantined_listings: 0,
+        ...(existing.evidence_case_id
+          ? {
+            evidence_case_id: existing.evidence_case_id,
+            evidence_case_status: existingCase?.status ?? "decided",
+            evidence_case_disposition: existingCase?.disposition ?? "upheld",
+            ...(existingCase
+              ? {
+                hold_resolution_draft:
+                  referenceGameEvidenceCaseHoldResolutionDraft(
+                    existingCase,
+                    unit,
+                    "upheld",
+                    existing.decision_id,
+                  ),
+              }
+              : {}),
+          }
+          : {}),
       });
+    }
+    let evidenceCase: ReferenceGameEvidenceLineageCaseRow | undefined;
+    if (evidenceCaseId) {
+      evidenceCase = this.referenceGameEvidenceLineageCaseAt(evidenceCaseId);
+      if (!evidenceCase) {
+        return jsonResponse({
+          ok: true,
+          decision: "evidence_case_not_found",
+          evidence_case_id: evidenceCaseId,
+        }, 409);
+      }
+      const caseAllowed = await evidenceLineageCaseDecisionAllowed({
+        caseOpen: evidenceCase.status === "open",
+        assetMatches: evidenceCase.asset_id === assetId,
+        ancestorMatches: evidenceCase.ancestor_id === ancestorId &&
+          evidenceCase.ancestor_kind === ancestorKind,
+        certificateAuthenticated: true,
+      });
+      if (!caseAllowed) {
+        return jsonResponse({
+          ok: true,
+          decision: evidenceCase.status !== "open"
+            ? "evidence_case_already_decided"
+            : "evidence_case_binding_mismatch",
+          evidence_case_id: evidenceCaseId,
+        }, 409);
+      }
     }
     const current = this.referenceGameAssetLineageHeadAt(assetId, ancestorId);
     const currentRevision = current?.revision ?? 0;
@@ -3829,13 +4364,23 @@ export class GameAuditShard extends DurableObject<Env> {
         (latest?.revision ?? 0) !== currentRevision ||
         (latest?.status ?? "eligible") !== currentStatus
       ) return { decision: "raced" as const, quarantined: 0 };
+      if (evidenceCaseId) {
+        const latestCase = this.referenceGameEvidenceLineageCaseAt(
+          evidenceCaseId,
+        );
+        if (
+          latestCase?.status !== "open" || latestCase.asset_id !== assetId ||
+          latestCase.ancestor_id !== ancestorId ||
+          latestCase.ancestor_kind !== ancestorKind
+        ) return { decision: "case_raced" as const, quarantined: 0 };
+      }
       this.ctx.storage.sql.exec(
         `INSERT INTO reference_game_asset_lineage_decisions
          (decision_id, asset_id, ancestor_id, ancestor_kind, revision,
           outcome, reason, arbiter_id, authentication_scheme, signature,
           issued_at, expires_at, appeal_deadline_at, appeal_of_decision_id,
-          finalized_at, lifecycle, decided_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          finalized_at, lifecycle, decided_at, evidence_case_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         decisionId,
         assetId,
         ancestorId,
@@ -3853,6 +4398,7 @@ export class GameAuditShard extends DurableObject<Env> {
         statement.finalizedAtMs,
         verifiedCertificate.lifecycle,
         decidedAt,
+        evidenceCaseId ?? null,
       );
       if (latest) {
         this.ctx.storage.sql.exec(
@@ -3916,12 +4462,32 @@ export class GameAuditShard extends DurableObject<Env> {
           "SELECT changes() AS changed",
         ).toArray()[0]?.changed ?? 0;
       }
+      if (evidenceCaseId) {
+        this.ctx.storage.sql.exec(
+          `UPDATE reference_game_evidence_lineage_cases
+           SET status = 'decided', disposition = 'upheld', decision_id = ?,
+               resolution_id = ?, decided_at = ?
+           WHERE case_id = ? AND status = 'open'`,
+          decisionId,
+          decisionId,
+          decidedAt,
+          evidenceCaseId,
+        );
+        const changed = this.ctx.storage.sql.exec<{ changed: number }>(
+          "SELECT changes() AS changed",
+        ).toArray()[0]?.changed ?? 0;
+        if (changed !== 1) {
+          throw new Error("reference game evidence case CAS failed");
+        }
+      }
       return { decision: "applied" as const, quarantined: quarantine };
     });
-    if (committed.decision === "raced") {
+    if (committed.decision === "raced" || committed.decision === "case_raced") {
       return jsonResponse({
         ok: true,
-        decision: "lineage_head_raced",
+        decision: committed.decision === "raced"
+          ? "lineage_head_raced"
+          : "evidence_case_raced",
         asset_id: assetId,
         ancestor_id: ancestorId,
       }, 409);
@@ -3941,6 +4507,20 @@ export class GameAuditShard extends DurableObject<Env> {
       finalized_at_ms: statement.finalizedAtMs,
       open_revocations: this.referenceGameOpenRevocationCount(assetId),
       quarantined_listings: committed.quarantined,
+      ...(evidenceCaseId
+        ? {
+          evidence_case_id: evidenceCaseId,
+          evidence_case_status: "decided",
+          evidence_case_disposition: "upheld",
+          hold_resolution_draft:
+            referenceGameEvidenceCaseHoldResolutionDraft(
+              this.referenceGameEvidenceLineageCaseAt(evidenceCaseId)!,
+              unit,
+              "upheld",
+              decisionId,
+            ),
+        }
+        : {}),
     }, 201);
   }
 
@@ -4495,6 +5075,13 @@ export class GameAuditShard extends DurableObject<Env> {
       }, 403);
     }
     const statement = certificate.statement;
+    if (statement.version === 2) {
+      return jsonResponse({
+        ok: true,
+        decision: "evidence_cases_not_supported_for_verified_assets",
+        evidence_case_id: statement.evidenceCaseId,
+      }, 409);
+    }
     const assetId = statement.assetId;
     const ancestorId = statement.ancestorId;
     const expectedRevision = statement.expectedRevision;
@@ -6039,7 +6626,8 @@ export class GameAuditShard extends DurableObject<Env> {
     table:
       | "reference_game_item_receipts"
       | "reference_game_checkpoint_states"
-      | "reference_game_market_listings",
+      | "reference_game_market_listings"
+      | "reference_game_evidence_lineage_cases",
     name: string,
     sqlType: string,
   ): void {
@@ -6347,6 +6935,101 @@ function referenceGameReceiptWire(receipt: GameItemAuthorityReceipt) {
     checkpoint_digest: receipt.checkpointDigest,
     inventory_epoch: receipt.inventoryEpoch,
   };
+}
+
+function referenceGameEvidenceCaseResponse(
+  decision: "opened" | "duplicate",
+  row: ReferenceGameEvidenceLineageCaseRow,
+  openRevocations: number,
+) {
+  return {
+    ok: true,
+    decision,
+    lineage_status: openRevocations === 0 ? "eligible" : "revoked",
+    open_revocations: openRevocations,
+    case: {
+      version: 1,
+      case_id: row.case_id,
+      asset_id: row.asset_id,
+      ancestor_id: row.ancestor_id,
+      ancestor_kind: row.ancestor_kind,
+      source_id: row.source_id,
+      hold_id: row.hold_id,
+      hold_message_digest: row.hold_message_digest,
+      epoch: row.epoch,
+      checkpoint_digest: row.checkpoint_digest,
+      hold_kind: row.hold_kind,
+      reference_digest: row.reference_digest,
+      status: row.status,
+      disposition: row.disposition,
+      decision_id: row.decision_id,
+      resolution_id: row.resolution_id,
+      opened_at: row.opened_at,
+      decided_at: row.decided_at,
+    },
+  };
+}
+
+function referenceGameEvidenceCaseDismissalResponse(
+  decision: "dismissed" | "duplicate",
+  row: ReferenceGameEvidenceLineageCaseRow,
+  dismissal: ReferenceGameEvidenceCaseDismissalRow,
+  openRevocations: number,
+  unit: string,
+) {
+  return {
+    ok: true,
+    decision,
+    dismissal_id: dismissal.dismissal_id,
+    evidence_case_id: row.case_id,
+    evidence_case_status: row.status,
+    evidence_case_disposition: row.disposition,
+    lineage_status: openRevocations === 0 ? "eligible" : "revoked",
+    open_revocations: openRevocations,
+    reason_code: dismissal.reason,
+    arbiter_id: dismissal.arbiter_id,
+    dismissed_at_ms: dismissal.dismissed_at,
+    hold_resolution_draft: referenceGameEvidenceCaseHoldResolutionDraft(
+      row,
+      unit,
+      "dismissed",
+      dismissal.dismissal_id,
+    ),
+  };
+}
+
+function referenceGameEvidenceCaseHoldResolutionDraft(
+  row: ReferenceGameEvidenceLineageCaseRow,
+  unit: string,
+  decision: "upheld" | "dismissed",
+  resolutionDigest: string,
+) {
+  const reference: EvidenceLineageCaseReference = {
+    version: 1,
+    scope: "reference-game",
+    unit,
+    assetId: row.asset_id,
+    ancestorId: row.ancestor_id,
+    ancestorKind: row.ancestor_kind,
+    boundary: {
+      protocol_version: row.boundary_protocol_version,
+      purpose: row.boundary_purpose,
+      manifest_digest: row.boundary_manifest_digest,
+      scope_id: row.boundary_scope_id,
+      unit_id: row.boundary_unit_id,
+    },
+    sourceId: row.source_id,
+    holdId: row.hold_id,
+    epoch: row.epoch,
+    checkpointDigest: row.checkpoint_digest,
+    holdKind: row.hold_kind,
+  };
+  return evidenceLineageCaseHoldResolutionDraft(
+    reference,
+    row.reference_digest,
+    decision,
+    resolutionDigest,
+  );
 }
 
 function referenceGameOwnershipHeadFromRow(

@@ -118,9 +118,9 @@ central replay成功、summary正規化、checkpoint一致、DB衝突なしの5�
 inventory head更新はeligible creation、proof成功、manifest一致、exact parent、epoch前進、
 owner/version整合の6条件を要求し、wrong-parentとversion rollbackを拒否する。
 multi-asset checkpointはさらにasset非空・件数上限・canonical順・共有parent/epoch・全creation/lineage/
-proof/head条件の10条件を要求する。game-audit packageで172 proof goals、汎用audit
-policy/head/event-time/closure/ACK/atomic seal/delivery authentication/evidence inbox/poll scheduleで50 goals、
-vote semilatticeで8 goals、計230 goalsが成功している。Workerは汎用headを含むMoonBit分類器を直接呼ぶため、Queue配送成功を
+proof/head条件の10条件を要求する。game-audit packageで176 proof goals、汎用audit
+policy/head/event-time/closure/ACK/atomic seal/delivery authentication/evidence inbox/poll schedule/case handoffで57 goals、
+vote semilatticeで8 goals、計241 goalsが成功している。Workerは汎用headを含むMoonBit分類器を直接呼ぶため、Queue配送成功を
 ゲーム結果の検証成功へ昇格させない。
 
 三modeでversioned canonical CBOR bundleを`replay_artifacts`へ保存する経路を実装した。PvE bundleは
@@ -165,6 +165,12 @@ finalized時刻の全一致を要求する。期限切れは自動restoreせず`
 公開read `GET /v1/pve/:unit/game-asset-lineage-status?asset_id=...`は、この永続headを
 `provisional | finalized | quarantined | expired`へ射影し、現在の未解決caseとappeal deadlineを返す。
 listing拒否にも同じ射影を埋め込むので、browserは常時pollingせず、隔離後の明示的な再確認時だけreadする。
+
+署名済みactive evidence holdは公開`game-asset-lineage-cases`で裁定前caseへ変換する。v2 lineage
+certificateはexact open caseを`upheld`にしてrevokeと同時commitし、管理token付き
+`game-asset-lineage-case-dismissals`は別のarbiter署名を検証してcaseだけを`dismissed`にする。
+dismissal履歴とcase CASは同一transactionで、asset head/listingは触らない。応答の
+`hold_resolution_draft`はevidence sourceのhash-chain再署名が必要であり、端末holdを直接解除しない。
 
 汎用側ではまず`POST /v1/open/:unit/asset-lineage-proofs`が、authority署名owner-key binding、
 sender/recipient二重署名、exact parent/version、累積`lineage_root`、current checkpoint membershipを
@@ -365,6 +371,8 @@ secret設定後は、新しいunit idにだけlocation hintを適用して測る
 cd examples/cf-game-audit
 pnpm exec wrangler secret put ADMIN_TOKEN
 pnpm exec wrangler secret put WITNESS_SOURCE_BUCKET_KEY
+pnpm exec wrangler secret put LINEAGE_ARBITER_ROSTER
+pnpm exec wrangler secret put EVIDENCE_HOLD_SOURCE_ROSTER
 AUDIT_BASE_URL=https://converge-game-audit.mizchi.workers.dev \
 AUDIT_ADMIN_TOKEN=<同じtoken> \
 AUDIT_LOCATION_HINT=apac-ne \
@@ -427,6 +435,7 @@ pnpm bench:witness
 | multi-asset inventory checkpointは全memberのorigin/proof/head/version/lineage条件を満たす場合だけ能力を発行する | 10条件MoonBit predicate、canonical wire、stale/revoked member tests | Proven + Tested locally |
 | multi-asset head/history/idempotencyは1 transactionで全件commitまたはrollbackする | SQLite transactionSync、途中fault、CAS競合、duplicate/conflict integration | Tested locally |
 | reference origin/transfer revokeはdescendant listingをquarantineし、汎用origin/証明済み中間transfer/current-head revokeは全未解決decisionのappealまでlisting/head更新を止める | bounded authenticated lineage slice、MoonBit clean-lineage predicate、Quint正常/破損model、revision CAS、workerd integration | Proven core + Model checked + Tested locally |
+| evidence case dismissalは署名済みexact open caseだけを閉じ、asset/listingを変更しない | MoonBit/Why3 gate、Quint dismissal正常/破損model、SQLite dismissal history + CAS、workerd integration | Proven core + Model checked + Tested locally |
 | Cloudflare apac-ne hintでcheckpoint/Queue/inventoryのend-to-end値を得られる | 64-head×3 mode remote benchmark | Measured once |
 | remote peerからmode policyどおりquorumを収集する | 公開pull、端末ローカル署名submit、durable collection、deadline、collection-backed seal、HMAC-source fixed window、全mode apac-ne + PvP wnam/weur各20 run | 全mode remote E2E、outbound push・global fairnessはPending |
 | checkpoint outboxを配送しACKで完了する | direct DO RPC、lease/alarm retry、historical Duplicate ACK | Tested locally + remote 20/20、本番ACK-loss回復を観測 |

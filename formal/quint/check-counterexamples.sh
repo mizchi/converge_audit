@@ -35,6 +35,8 @@ quint typecheck formal/quint/AssetOwnership.qnt
 quint typecheck formal/quint/AssetOwnershipModels.qnt
 quint typecheck formal/quint/LineageAppeal.qnt
 quint typecheck formal/quint/LineageAppealModels.qnt
+quint typecheck formal/quint/EvidenceLineageCase.qnt
+quint typecheck formal/quint/EvidenceLineageCaseModels.qnt
 
 audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
@@ -147,3 +149,51 @@ check_expected_failure \
   invariant \
   finalizedAppealHadOpenWindow \
   "$audit_quint_tmp/lineage-appeal-deadline.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenHoldAuthentication \
+  invariant \
+  acceptedCasesRequireAuthenticatedActiveExactHolds \
+  "$audit_quint_tmp/evidence-case-hold-authentication.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenHoldBinding \
+  invariant \
+  acceptedCasesRequireAuthenticatedActiveExactHolds \
+  "$audit_quint_tmp/evidence-case-hold-binding.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenOpenMutation \
+  invariant \
+  caseOpeningNeverChangesAsset \
+  "$audit_quint_tmp/evidence-case-open-mutation.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenCertificateAuthentication \
+  invariant \
+  assetMutationRequiresAuthenticatedExactCertificate \
+  "$audit_quint_tmp/evidence-case-certificate-authentication.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenDecisionBinding \
+  invariant \
+  assetMutationRequiresAuthenticatedExactCertificate \
+  "$audit_quint_tmp/evidence-case-decision-binding.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenDismissalAuthentication \
+  invariant \
+  dismissedCasesRequireAuthenticatedExactCertificate \
+  "$audit_quint_tmp/evidence-case-dismissal-authentication.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenDismissalBinding \
+  invariant \
+  dismissedCasesRequireAuthenticatedExactCertificate \
+  "$audit_quint_tmp/evidence-case-dismissal-binding.log"
+check_expected_failure \
+  formal/quint/EvidenceLineageCaseModels.qnt \
+  evidenceLineageCaseBrokenDismissalMutation \
+  invariant \
+  onlyUpheldDecisionMutatesAsset \
+  "$audit_quint_tmp/evidence-case-dismissal-mutation.log"

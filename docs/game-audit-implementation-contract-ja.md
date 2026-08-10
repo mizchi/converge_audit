@@ -409,13 +409,13 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | 契約 | 現状 | 判定 |
 | --- | --- | --- |
 | policy、commitment、head pure classifier | `src/audit`、Why3、runtime test | Implemented / Proven scope |
-| closure/ACK/atomic seal/delivery authentication/evidence inbox/poll scheduleとvote mergeのfail-closed gate | `src/audit`の50 proof goals + quorum vote 8 goals + `src/audit/runtime` | Implemented / Proven scope |
+| closure/ACK/atomic seal/delivery authentication/evidence inbox/poll schedule/case handoffとvote mergeのfail-closed gate | `src/audit`の57 proof goals + quorum vote 8 goals + `src/audit/runtime` | Implemented / Proven scope |
 | opaque atomic seal plan/outbox、lease、release、最古retry選択 | `src/audit/runtime` | pure contractはImplemented + Tested |
 | watermark駆動micro/macro builder | `src/audit/layered` | in-memoryはImplemented、mode固有closure検証adapterはPending |
 | player-local authenticated event DB | 共通host contract + Node 24 SQLite / IndexedDB relation、event/equivocation/checkpoint/head/closure/outbox/ACK履歴、retention anchor、active/resolved evidence hold、source別evidence inbox cursor/poll job、lease/attempt fencing、revision CAS、起動時全image検証 | Node/IndexedDB Reference Implemented + Tested / mobile SQLiteはPending |
 | seal + local head + checkpoint outboxのatomic transaction | opaque planから公開write-setを導出し、player-local Node SQLite、browser IndexedDB、Cloudflare SQLiteで一括適用、player-local adapterは共通4 fault rollback | Tested locally / mobile SQLiteはPending |
-| player-local evidence prefix pruning/poll | MoonBit一段guard、appeal floor、protected/equivocation pin、durable active/resolved evidence hold、署名済みhash-chain hold envelope、source cursorとのatomic apply、bounded single-page polling、durable poll schedule/lease/attempt fencing/backoff/restart回復/operational terminal、ACK済みprefix、durable anchor、Node SQLite/IndexedDB rollback | Proven predicate/auth/hash-chain/page/schedule gate + Tested locally / holdからlineage caseの自動起票はPending |
-| lineage case裁定 | scheme別署名verifier、arbiter roster、canonical statement、revision CAS、provisional revoke、時間制appeal、finalized/expired、ancestor別decision history、単一asset status readとUX射影 | Proven admission + Quint model checked + Worker SQLite / browser Tested locally / production key rotationはPending |
+| player-local evidence prefix pruning/poll | MoonBit一段guard、appeal floor、protected/equivocation pin、durable active/resolved evidence hold、署名済みhash-chain hold envelope、source cursorとのatomic apply、bounded single-page polling、durable poll schedule/lease/attempt fencing/backoff/restart回復/operational terminal、ACK済みprefix、durable anchor、Node SQLite/IndexedDB rollback | Proven predicate/auth/hash-chain/page/schedule gate + Tested locally / poll schedulerからcase endpointへの自動提出はPending |
+| lineage case起票・裁定 | scheme別evidence source/arbiter verifier、別roster、hold referenceによるexact origin/checkpoint binding、case SQLite、v2 uphold certificateとdismissal certificateのexact case ID、resolution CAS、dismissal history、hold resolution draft、provisional revoke、時間制appeal、finalized/expired、ancestor別decision history、単一asset status readとUX射影 | MoonBit/Why3 gate + Quint normal/broken model + Worker SQLite Tested locally / draftのsource再署名・transfer case・production key rotationはPending |
 | authority boundary/initial headの事前provision | 管理API → destination DO、source側provision ledger、未設定receiver拒否 | Tested locally |
 | Queue jobのsource outbox認証 | receiver mutation前のsource DO exact-match | Tested locally |
 | producer署名 + provision済みwitness quorum | `src/audit/delivery_auth`のopaque capability、実Ed25519 Worker bridge、source/receiver二重gate | Proven gate + Tested locally |
@@ -548,10 +548,21 @@ source独立性や全地域SLAと同一視してはならない。
 | expected claim | sourceごとに一つのjobを永続化し、dueかつdeadline前でleaseが空いたときだけclaimする。各claimは単調attempt tokenを発行し、completionはtokenとlease expiryの完全一致を要求する |
 | implementation observation | lease expiryだけをCAS tokenにすると同じexpiryで再claimされた古いworkerを識別できない。またpoll timeoutがleaseより長い構成では正常なworker同士が重複し得る |
 | model question | deadline到達後のclaimを常に拒否し、backoff stepを非減少かつcap以下に保ち、物理DBではrestart後のlease expiry回復とstale completion拒否を維持できるか |
-| machine result | MoonBit/Why3でclaim/deadline/backoffの4 goalsを追加しcoreは50 goals。共通conformance 11件をNode SQLite 28 testsとIndexedDBで通し、browser scheduler 5 testsがdue実行、100→200 ms指数backoff、restart reclaim、deadline expiry、別claim後のlost lease、absolute Unix msの相対duration正規化を確認した。asset全体は35 tests |
+| machine result | MoonBit/Why3でclaim/deadline/backoffの4 goalsを追加した時点でcoreは50 goals、case handoff追加後の現在は57 goals。共通conformance 11件をNode SQLite 28 testsとIndexedDBで通し、browser scheduler 5 testsがdue実行、100→200 ms指数backoff、restart reclaim、deadline expiry、別claim後のlost lease、absolute Unix msの相対duration正規化を確認した。asset全体は35 tests |
 | domain wording | `expired`は取得期限の終了、`escalated`は人手・上位系へ引き渡した運用状態であり、cheat判定でもchallenge/appealのdismissでもない。どちらもactive holdを維持する |
 | decision | logical imageへsource別job、deadline、next poll、failures、attempt count、scheduled/in-flight/expired/escalatedを含める。leaseはdeadlineでcapし、`requestTimeout <= leaseDuration`を実行前に要求する。成功はfailuresを0へresetし、失敗はMoonBit policyのdeadline-capped backoffで再scheduleする。JSのabsolute Unix msはMoonBit `Int`へ直接渡さず、hostで現在時刻を0とするbounded relative durationへ正規化する |
-| lock | `evidence_poll_schedule.mbt/.mbtp` 4 goals、共通storage conformance、SQLite table、IndexedDB schema v6、`evidence-inbox-scheduler.node-test.ts` 5 tests。poll terminalからlineage caseを自動起票する接続は別要件として残す |
+| lock | `evidence_poll_schedule.mbt/.mbtp` 4 goals、共通storage conformance、SQLite table、IndexedDB schema v6、`evidence-inbox-scheduler.node-test.ts` 5 tests。poll terminalはcase起票でもhold解除でもなく、case提出は独立adapter責務とする |
+
+| 項目 | 内容 |
+| --- | --- |
+| source | active evidence holdは調査開始の根拠であって、cheat verdictや経済状態の変更権限ではない |
+| expected claim | roster内sourceが署名したactive placementを、scope/unit/asset/origin/boundary/epoch/checkpointへexact bindした場合だけcaseを永続化する。case作成だけではasset/listingを変更しない。case IDを含む外部arbiter v2 certificateはcaseとlineageを同時にupholdし、別の署名付きdismissal certificateはcaseだけを閉じてlineageを変えない |
+| implementation observation | holdの署名だけを検証して任意asset IDと組み合わせると、正しいholdを別assetへretargetできる。case作成を既存revoke endpointへ直結すると、evidence sourceがarbiter権限を得てしまう |
+| model question | 未認証/retarget hold、case作成時auto-revoke、未認証/retarget uphold/dismissal certificate、dismissal時asset mutationを許す各broken構成で安全性が破れるか |
+| machine result | MoonBit/Why3でcase admission/decision/dismissalの7 obligationsを証明した。Quint/TLC正常modelは反例なし、8 broken modelは意図した反例を検出する。workerdは署名改ざん、asset retarget、case作成後もeligible、DO eviction後duplicate、unknown case、exact v2 uphold、exact dismissal後もeligible、dismiss済みcaseの再利用拒否を検査する |
+| domain wording | 「監査中」「case棄却」「使用禁止」「端末hold解除」を分離する。caseがopenでも通常プレイと出品を止めず、uphold時だけquarantineする。dismissal応答のhold resolutionは未認証draftなので端末を直接変更しない |
+| decision | holdの`reference_digest`をcase reference hashとし、case IDはreference hashと署名済みmessage digestから導出する。cryptoは`scheme -> verifier`、identityは`EVIDENCE_HOLD_SOURCE_ROSTER`と`LINEAGE_ARBITER_ROSTER`へ分離する。draftはevidence sourceが次のhash-chain envelopeとして再署名する |
+| lock | `evidence-lineage-case.ts`、dismissal certificate、`evidence_lineage_case_*_allowed`、`EvidenceLineageCase*.qnt`、case/dismissal endpoints、SQLite case/decision/dismissal CAS、Worker integration test |
 
 | 項目 | 内容 |
 | --- | --- |

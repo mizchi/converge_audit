@@ -39,11 +39,74 @@ Playwrightで実ブラウザをgateする。LLM providerを設定した上で`pn
 lineage状態UIは`pnpm ui:lineage-plan`、`pnpm ui:lineage-generate`、通常の回帰試験は
 `pnpm test:e2e`で再現できる。
 
+署名済みのactive evidence holdは、裁定前のcaseとして公開endpointへ提出できる。V1 game adapterは
+authorityが検証済みのorigin checkpointだけを対象にし、holdの`reference_digest`へscope/unit、
+asset/ancestor、local boundary、source、epoch/checkpointをdomain-separated hashで固定する。
+`EVIDENCE_HOLD_SOURCE_ROSTER`は`{"source":{"scheme":"...","public_key":"..."}}`形式で設定する。
+case作成は調査記録をSQLiteへ保存するだけで、asset eligibilityやactive listingを変更しない。
+
+```http
+POST /v1/pve/:unit/game-asset-lineage-cases
+Content-Type: application/json
+
+{
+  "version": 1,
+  "scope": "reference-game",
+  "unit": "<unit>",
+  "asset_id": "...",
+  "ancestor_id": "<authority receipt id>",
+  "ancestor_kind": "origin",
+  "boundary": { "protocol_version": 1, "purpose": "reference-game-checkpoint-v1", "...": "..." },
+  "source_id": "evidence-source-a",
+  "hold_envelope": { "...": "signed active placement envelope" }
+}
+```
+
+同じholdの再送は同じ`case_id`で`duplicate`となる。別assetへのretarget、元itemと異なる
+checkpoint/epoch、未認証source、resolved envelopeは無変更で拒否する。現在はpoll schedulerからこの
+endpointを自動送信せず、運用adapterがactive holdを明示的に提出する。公開endpointなので、他の
+reference game検証と同じsource bucketごとのfixed-window上限を署名検証前に消費する。
+
+arbiterがchallengeを再現できなかった場合は、管理tokenと外部arbiter署名の二重境界でexact open caseを
+棄却できる。棄却履歴とcaseの`disposition: dismissed`は同じSQLite transactionで確定し、lineage headや
+listingは変更しない。同一certificateの再送は`duplicate`になる。caseの`resolution_id`はuphold decision
+またはdismissal certificateのdigestを持ち、`decision_id`はuphold時だけ設定する。
+
+```http
+POST /v1/pve/:unit/game-asset-lineage-case-dismissals
+Authorization: Bearer <ADMIN_TOKEN>
+Content-Type: application/json
+
+{
+  "statement": {
+    "version": 1,
+    "scope": "reference-game",
+    "unit": "<unit>",
+    "evidence_case_id": "<64 hex case id>",
+    "reason_code": "challenge_not_reproduced",
+    "issued_at_ms": 1786000000000,
+    "expires_at_ms": 1786000030000
+  },
+  "authentication": {
+    "scheme": "moonbit-ed25519-v1",
+    "arbiter_id": "external-arbiter-a",
+    "signature": "<128 hex>"
+  }
+}
+```
+
+成功応答の`hold_resolution_draft`はplayer-local `resolve` operationの材料であり、認証済み命令ではない。
+evidence sourceが次のsequence/previous digestを付けて署名し、端末がそのhash-chain envelopeを受理するまで
+active holdは解除しない。case棄却、lineageの`eligible` appeal、端末hold解除は別々の状態遷移である。
+
 lineage decisionの管理API contractは次のとおり。`expected_revision`はancestorごとのCASで、初回は0、
 成功ごとに1進む。同じcanonical requestは同じ`decision_id`となり`duplicate`、古いrevisionは
 `stale_lineage_revision`、既に同じstatusなら`lineage_status_unchanged`になる。署名対象はscope、unit、
 asset/ancestor/kind、revision、outcome、reason code、issued/expires、appeal deadline、appeal target、
 finalized時刻のdomain-separated配列である。
+version 2はこれらに64 hexの`evidence_case_id`を追加し、open caseとasset/ancestorが完全一致する場合だけ
+同じtransactionでcaseを`decided / upheld`へ進める。version 1はcaseを経由しない既存arbiter判断として
+互換維持する。
 
 ```http
 POST /v1/pve/:unit/game-asset-lineage-decisions
@@ -52,7 +115,7 @@ Content-Type: application/json
 
 {
   "statement": {
-    "version": 1,
+    "version": 2,
     "scope": "reference-game",
     "unit": "<unit>",
     "asset_id": "...",
@@ -66,7 +129,8 @@ Content-Type: application/json
     "expires_at_ms": 1786000030000,
     "appeal_deadline_at_ms": 1786003600000,
     "appeal_of_decision_id": null,
-    "finalized_at_ms": null
+    "finalized_at_ms": null,
+    "evidence_case_id": "<64 hex case id>"
   },
   "authentication": {
     "scheme": "moonbit-ed25519-v1",
@@ -392,6 +456,8 @@ pnpm bench:witness
 pnpm run deploy
 pnpm exec wrangler secret put ADMIN_TOKEN
 pnpm exec wrangler secret put WITNESS_SOURCE_BUCKET_KEY
+pnpm exec wrangler secret put LINEAGE_ARBITER_ROSTER
+pnpm exec wrangler secret put EVIDENCE_HOLD_SOURCE_ROSTER
 AUDIT_BASE_URL=https://<worker>.workers.dev \
 AUDIT_ADMIN_TOKEN=<token> \
 AUDIT_LOCATION_HINT=apac-ne \
@@ -498,7 +564,7 @@ NAT共有時の公平性を表さない。
 | source of truth | MoonBitの`CheckpointReplayMatch`は完全transcriptのkernel replayと署名済みgame checkpoint一致からだけ生成される |
 | implementation observation | anchor-only jobに加え、管理境界でmode固有の期待checkpointを固定して完全bundleをDO保存する経路がある |
 | model question | anchor配送だけで`verified`へ到達可能か |
-| machine result | 不可能。`verified`はanchor、transcript、checkpoint link、kernel complete、kernel matchを要求し、open-worldではさらにtrusted boundary、外部transparency publication、plan、seal/seed、registration、inclusion、replayの全条件を要求する。item生成の保存とinventory head更新もfail-closedで、game audit 161 + 汎用audit 31、計192 proof goals成功 |
+| machine result | 不可能。`verified`はanchor、transcript、checkpoint link、kernel complete、kernel matchを要求し、open-worldではさらにtrusted boundary、外部transparency publication、plan、seal/seed、registration、inclusion、replayの全条件を要求する。item生成の保存とinventory head更新もfail-closedで、game audit 176 + 汎用audit 57 + quorum vote 8、計241 proof goals成功 |
 | decision | anchor-onlyは`awaiting_transcript`。PvEは三root、PvPはさらに`n-f` replay witness、open-world v2は4 checkpoint・2 publication proofs・遅延seed・`n-f` registration・eligible inclusion後だけ`verified`にする |
 | regression lock | `central_replay.mbt/.mbtp`、mode別wire/verifier tests、Worker bridge test、workerd Queue integration test |
 
@@ -624,7 +690,8 @@ artifact:
   durable active/resolved evidence hold registry、署名済みhash-chain hold envelope、source別cursorと
   hold/cursorのatomic apply、件数/byte/timeout/受信deadline付きsingle-page HTTP poller、source別の
   durable poll job/lease/attempt fencing/指数backoff/restart回復/`expired`・`escalated`停止まで実装済み。
-  poll job終端時もactive holdは維持する。evidence holdからlineage caseを自動起票する接続は未実装。
+  poll job終端時もactive holdは維持する。reference PvE originについて署名済みactive holdをcaseへ提出し、
+  v2 arbiter certificateでexact caseを決着する接続は実装済み。poll schedulerからの自動提出とtransfer caseは未実装。
 - checkpoint outboxの直接DO RPC、lease/alarm retry、authority history、ACK保存はremote E2Eまで接続済み。
   Queue checkpoint consumerは後方互換経路として残す。敵対的peerからのproducer/witness署名はreceiver前の
   認証adapterへ接続済みだが、internal DO RPC自体は同一Cloudflare accountの認証済みchannelとして扱う。

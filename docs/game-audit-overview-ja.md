@@ -144,15 +144,17 @@ prototypeのprotocol骨格は通ったが、production完成ではない。優�
    ACK済みprefix pruning/durable anchor、active/resolved evidence hold registry、署名済みhash-chain
    hold envelope、source別durable cursorとatomic apply、件数/byte/timeout/受信deadline付きsingle-page
    polling、durable poll schedule/lease/attempt fencing/指数backoff/restart回復、operationalな
-   `expired`/`escalated`停止は実装済み。active holdは自動解決しない。署名付きlineage case裁定は
-   Workerへ接続済みだが、holdからcaseを自動起票する接続は未実装。
+   `expired`/`escalated`停止は実装済み。active holdは自動解決しない。reference PvE originでは署名済み
+   holdを裁定前caseへ提出し、exact case ID付きarbiter certificateでupholdまたはdismissするWorker接続まで
+   実装済み。dismissalはlineageを変更せず、hold resolutionはsource再署名前のdraftとして返す。
+   poll schedulerからの自動提出、draft再署名配送とtransfer case adapterは未実装。
 4. 汎用inventoryへMerkle lineage pruningを追加し、実装済みmulti-asset checkpointを
    player-local DBへ接続して、risk-adaptive sampling/Queue backpressureを追加する。
 5. PvE raidのwire/loot binding、PvPのprojectile/visibilityなど実ゲームkernel。
    phase分離boss HP/player attack/cooldownとPvP cooldown/capture objectiveのreferenceは実装済み。
 6. packet loss/partitionを含むnetwork impairment試験、tail latency、実プレイテスト。
-7. Quintモデルを複数authority shard、pruningへ拡張。bounded outboxとlineage appeal lifecycleは
-   実装・broken model反例確認済み。
+7. Quintモデルを複数authority shard、pruningへ拡張。bounded outbox、lineage appeal lifecycle、
+   evidence hold→case→uphold/dismiss certificate handoffは実装・broken model反例確認済み。
 
 head propagationの最小Quintモデルは追加した。durable outbox、最古未ACKのretry、exact-parentがあれば、
 networkが最終的に安定する公平な実行でauthorityがlatest epochへ到達することを有限状態で確認した。

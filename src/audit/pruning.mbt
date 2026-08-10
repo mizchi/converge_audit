@@ -47,3 +47,51 @@ pub fn player_local_evidence_hold_resolution_allowed(
   active &&
   authentication_succeeded
 }
+
+///|
+/// Admission boundary for promoting one authenticated player-local hold to a
+/// durable lineage case. Opening a case is evidence bookkeeping only; it does
+/// not authorize an asset status transition.
+pub fn evidence_lineage_case_admission_allowed(
+  active_hold : Bool,
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  ancestor_matches : Bool,
+  authentication_succeeded : Bool,
+) -> Bool {
+  active_hold &&
+  boundary_matches &&
+  checkpoint_matches &&
+  reference_matches &&
+  ancestor_matches &&
+  authentication_succeeded
+}
+
+///|
+/// A lineage certificate may resolve a case only when it names the still-open
+/// case and exactly the same asset/ancestor. Certificate authentication remains
+/// a separate replaceable adapter fact.
+pub fn evidence_lineage_case_decision_allowed(
+  case_open : Bool,
+  asset_matches : Bool,
+  ancestor_matches : Bool,
+  certificate_authenticated : Bool,
+) -> Bool {
+  case_open && asset_matches && ancestor_matches && certificate_authenticated
+}
+
+///|
+/// Dismissal closes an investigation without changing asset eligibility. The
+/// adapter verifies the signed certificate and its bounded acceptance time.
+pub fn evidence_lineage_case_dismissal_allowed(
+  case_open : Bool,
+  case_id_matches : Bool,
+  certificate_authenticated : Bool,
+  certificate_time_valid : Bool,
+) -> Bool {
+  case_open &&
+  case_id_matches &&
+  certificate_authenticated &&
+  certificate_time_valid
+}

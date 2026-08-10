@@ -4,7 +4,7 @@ export type LineageDecisionOutcome = "eligible" | "revoked";
 export type LineageDecisionLifecycle = "appeal_open" | "finalized";
 
 export interface LineageDecisionStatement {
-  version: 1;
+  version: 1 | 2;
   scope: LineageDecisionScope;
   unit: string;
   assetId: string;
@@ -19,6 +19,8 @@ export interface LineageDecisionStatement {
   appealDeadlineAtMs: number | null;
   appealOfDecisionId: string | null;
   finalizedAtMs: number | null;
+  /** Required by v2; absent in v1 for wire/signature compatibility. */
+  evidenceCaseId?: string;
 }
 
 export interface LineageDecisionAuthentication {
@@ -108,6 +110,7 @@ export function decodeLineageDecisionCertificate(
     appealDeadlineAtMs: wireStatement.appeal_deadline_at_ms,
     appealOfDecisionId: wireStatement.appeal_of_decision_id,
     finalizedAtMs: wireStatement.finalized_at_ms,
+    evidenceCaseId: wireStatement.evidence_case_id,
   } as LineageDecisionStatement;
   const authentication = {
     scheme: wireAuthentication.scheme,
@@ -151,8 +154,10 @@ export function lineageDecisionStatementDigest(
   statement: LineageDecisionStatement,
   digest: LineageDecisionDigestAdapter,
 ): string {
-  return digest.hashString(JSON.stringify([
-    "converge-audit-lineage-decision-statement-v1",
+  const fields = [
+    statement.version === 1
+      ? "converge-audit-lineage-decision-statement-v1"
+      : "converge-audit-lineage-decision-statement-v2",
     statement.version,
     statement.scope,
     statement.unit,
@@ -168,7 +173,9 @@ export function lineageDecisionStatementDigest(
     statement.appealDeadlineAtMs,
     statement.appealOfDecisionId,
     statement.finalizedAtMs,
-  ]));
+  ];
+  if (statement.version === 2) fields.push(statement.evidenceCaseId!);
+  return digest.hashString(JSON.stringify(fields));
 }
 
 export function verifyLineageDecisionCertificate(
@@ -240,7 +247,7 @@ function certificateLifecycle(
 
 function validStatementShape(value: LineageDecisionStatement): boolean {
   return value !== null && typeof value === "object" &&
-    value.version === 1 &&
+    (value.version === 1 || value.version === 2) &&
     (value.scope === "reference-game" || value.scope === "verified-asset") &&
     nonEmptyBounded(value.unit, 256) &&
     nonEmptyBounded(value.assetId, 4_096) &&
@@ -259,7 +266,11 @@ function validStatementShape(value: LineageDecisionStatement): boolean {
     (value.appealOfDecisionId === null ||
       (typeof value.appealOfDecisionId === "string" &&
         /^[0-9a-f]{64}$/.test(value.appealOfDecisionId))) &&
-    nullableNonNegativeSafeInteger(value.finalizedAtMs);
+    nullableNonNegativeSafeInteger(value.finalizedAtMs) &&
+    (value.version === 1
+      ? value.evidenceCaseId === undefined
+      : typeof value.evidenceCaseId === "string" &&
+        /^[0-9a-f]{64}$/.test(value.evidenceCaseId));
 }
 
 function validAuthentication(value: LineageDecisionAuthentication): boolean {

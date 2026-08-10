@@ -1189,6 +1189,45 @@ pub fn audit_asset_lineage_certificate_allowed(
 }
 
 ///|
+pub fn audit_evidence_lineage_case_admission_allowed(
+  active_hold : Bool,
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  ancestor_matches : Bool,
+  authentication_succeeded : Bool,
+) -> Bool {
+  @checkpoint_audit.evidence_lineage_case_admission_allowed(
+    active_hold, boundary_matches, checkpoint_matches, reference_matches, ancestor_matches,
+    authentication_succeeded,
+  )
+}
+
+///|
+pub fn audit_evidence_lineage_case_decision_allowed(
+  case_open : Bool,
+  asset_matches : Bool,
+  ancestor_matches : Bool,
+  certificate_authenticated : Bool,
+) -> Bool {
+  @checkpoint_audit.evidence_lineage_case_decision_allowed(
+    case_open, asset_matches, ancestor_matches, certificate_authenticated,
+  )
+}
+
+///|
+pub fn audit_evidence_lineage_case_dismissal_allowed(
+  case_open : Bool,
+  case_id_matches : Bool,
+  certificate_authenticated : Bool,
+  certificate_time_valid : Bool,
+) -> Bool {
+  @checkpoint_audit.evidence_lineage_case_dismissal_allowed(
+    case_open, case_id_matches, certificate_authenticated, certificate_time_valid,
+  )
+}
+
+///|
 fn worker_accept_pve_event(
   adapter : @bft.AuditAdapter,
   signed : @bft.SignedEvent,

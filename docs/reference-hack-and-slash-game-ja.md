@@ -121,8 +121,11 @@ active holdはprune requestの`protected_epochs`が空でも保持される。re
 appealの署名済みhash-chain envelopeを検証し、holdとsource別cursorをatomicに保存するruntime API、
 件数/byte/timeout/受信deadline付きsingle-page pollerに加え、source別durable schedule、lease、
 attempt fencing、指数backoff、restart回復、`expired`/`escalated`停止まである。取得jobが終端になっても
-active holdは維持する。外部arbiter署名付きlineage case、時間制appeal、restart可能なdecision
-history/finalityはWorkerへ接続済みだが、active holdからcaseを自動起票する経路はまだない。
+active holdは維持する。外部source署名付きactive holdはorigin asset/checkpointへexact bindした裁定前caseとして
+Workerへ提出でき、case作成だけではassetを止めない。外部arbiterのv2 certificateがexact case IDを指定した時だけ
+caseを`upheld`としてlineageと同じtransactionで進める。別の署名付きdismissal certificateはcaseだけを
+`dismissed`にしてasset/listingを変更しない。返却するhold resolutionはsource再署名前のdraftであり、端末holdを
+直接解除しない。poll schedulerからの自動提出・draft再署名配送とtransfer caseはまだない。
 またauthority HTTP応答の真正性はsame-origin Worker境界に依存しており、productionでは署名済み
 ACKまたは認証済みchannel capabilityへ置き換える。
 

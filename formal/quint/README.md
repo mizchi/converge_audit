@@ -1,4 +1,4 @@
-# Checkpoint delivery / witness quorum / asset ownership Quint model
+# Checkpoint delivery / witness quorum / asset settlement Quint model
 
 このディレクトリは、ゲーム固有の戦闘規則ではなく、local-firstな監査ログをpeerから
 権威サーバーへ確定させる時間的protocolと、検証済みassetのsettlement状態機械のsource of truthである。
@@ -20,7 +20,7 @@ bounded/inductive safetyへ選択的に使い、TLCのliveness gateとは区別�
 
 ## Source構成
 
-- `CheckpointDelivery.qnt` / `WitnessQuorum.qnt` / `AssetOwnership.qnt` / `LineageAppeal.qnt`: protocol本体とproperty
+- `CheckpointDelivery.qnt` / `WitnessQuorum.qnt` / `AssetOwnership.qnt` / `LineageAppeal.qnt` / `EvidenceLineageCase.qnt`: protocol本体とproperty
 - `*Models.qnt`: 正常構成とRed構成
 - `*Tests.qnt`: 代表的な正常・guard scenario
 - `CheckpointDeliveryMbt.qnt` / `WitnessQuorumMbt.qnt`: 実装へ再生する決定的なMBT trace
@@ -68,6 +68,11 @@ current headへ到達する認証済みsliceを`registerLineageSlice`で登録�
 `Finalized -> AppealOpen -> Finalized | Expired`、exact appeal target、deadline、別ancestorのrevokeを
 appealで消さないことを検査する。署名bytes、Unix millisecond、arbiter roster parseはWorker/MoonBit側に残す。
 
+`EvidenceLineageCase.qnt`は2 caseと1 assetへ縮約する。active/authenticated/exact-bound holdから
+caseを開くactionと、authenticated/exact-bound arbiter certificateでupholdまたはdismissするactionを分ける。
+case作成とdismissalはassetを変更せず、decision actionだけが`Eligible -> Revoked`を行う。hold/certificateの
+実署名、case reference digest、SQLite CASはWorker/MoonBit側に残す。
+
 asset settlementのclaim ledgerは次のとおりである。
 
 | claim | source of truth | 検査artifact | status |
@@ -84,6 +89,10 @@ asset settlementのclaim ledgerは次のとおりである。
 | lineage decisionは認証済み・期限内・次revisionだけを受理する | `LineageAppeal.revoke/appeal` | 3 invariant + broken authentication/time/revision反例 | verified（有限model） |
 | appealはexact revoke targetかつdeadline内だけfinalizeする | `LineageAppeal.appeal/advanceTime` | 2 invariant + broken target/deadline反例 + 2 scenario | verified（有限model） |
 | 一つのappealは別ancestorのrevokeを消さず、期限切れは自動restoreしない | ancestor別map + `lineageClean` | independent-revocation/expired scenario | scenario verified |
+| caseは認証済みactive holdのexact bindingだけから作る | `EvidenceLineageCase.openCase` | hold invariant + broken authentication/binding反例 | verified（有限model） |
+| case作成だけではassetを止めない | `EvidenceLineageCase.openCase/decideCase` | `caseOpeningNeverChangesAsset` + broken auto-mutation反例 | verified（有限model） |
+| asset変更はexact caseを指定した認証済みcertificateだけが行う | `EvidenceLineageCase.decideCase` | certificate invariant + broken authentication/binding反例 | verified（有限model） |
+| dismissalは認証済みexact caseだけを閉じ、assetを変更しない | `EvidenceLineageCase.dismissCase` | dismissal invariant + broken authentication/binding/mutation反例 | verified（有限model） |
 
 ## 検査する性質
 
@@ -106,6 +115,7 @@ asset settlementのclaim ledgerは次のとおりである。
 - verified historical ancestorはretention anchorを越えず、登録sliceは認証・親・終端の全境界に一致する。
 - lineage decisionは認証済み・期限内・次revisionであり、appealはexact targetかつdeadline内である。
 - expired lineage caseはrevokedのまま残り、別ancestorのappealで解消されない。
+- evidence case作成だけではasset状態を変更せず、認証済みexact-bound certificateだけが決着できる。
 
 checkpoint配送のlivenessは次の条件付き性質である。
 
@@ -139,6 +149,10 @@ eventually always(unpartitioned and all nodes up)
 | revoked lineageのtransfer gate | 無効な祖先から新しいowner headを派生できる |
 | lineage certificate認証/time/revision gate | 未認証・期限外・stale decisionをheadへ反映できる |
 | appeal target/deadline gate | 別revokeまたは期限切れcaseをeligibleへ戻せる |
+| evidence hold authentication/binding gate | 未認証holdまたは別assetへretargetしたholdからcaseを作れる |
+| case open時の非変更境界 | arbiter判断なしにassetをrevokeできる |
+| case certificate authentication/binding gate | 未認証certificateまたは別caseのcertificateでassetを変更できる |
+| dismissal authentication/binding/non-mutation gate | 未認証・別caseの棄却、または棄却だけでasset revokeが可能になる |
 
 ## 実行結果
 
@@ -159,6 +173,9 @@ eventually always(unpartitioned and all nodes up)
 rosterを超えるquorumの3構成を設定契約違反として拒否する。
 lineage appeal正常modelは反例なし、authentication、certificate time、revision、appeal target、deadlineの
 5 Red構成はそれぞれ対応invariantの反例を出し、6 scenarioが通過した。
+2026-08-10にevidence lineage case正常modelも反例なし、hold authentication/binding、open時auto-mutation、
+uphold certificate authentication/binding、dismissal authentication/binding/auto-mutationの8 Red構成は
+対応invariantの反例を出し、8 scenarioが通過した。
 
 ## Model-based testing
 

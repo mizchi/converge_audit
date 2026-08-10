@@ -106,6 +106,7 @@ quint-docs:
   nix develop path:. --command quint docs formal/quint/WitnessQuorum.qnt
   nix develop path:. --command quint docs formal/quint/AssetOwnership.qnt
   nix develop path:. --command quint docs formal/quint/LineageAppeal.qnt
+  nix develop path:. --command quint docs formal/quint/EvidenceLineageCase.qnt
 
 # Confirm that all load-bearing Quint guards produce counterexamples
 quint-counterexamples:

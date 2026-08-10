@@ -40,6 +40,18 @@ import {
   type LineageDecisionStatement,
 } from "../src/lineage-decision-certificate";
 import {
+  evidenceCaseDismissalStatementDigest,
+  type EvidenceCaseDismissalStatement,
+} from "../src/evidence-case-dismissal-certificate";
+import {
+  evidenceLineageCaseReferenceDigest,
+  type EvidenceLineageCaseReference,
+} from "../../player-local-runtime/evidence-lineage-case";
+import {
+  playerLocalEvidenceHoldEnvelopeStatement,
+  type PlayerLocalEvidenceHoldUnsignedEnvelope,
+} from "../../player-local-runtime/evidence-hold-wire";
+import {
   appendAuditTick,
   createGameAuditJournal,
   type AuditDigestAdapter,
@@ -65,6 +77,9 @@ const PLAYER_SEED =
 const LINEAGE_ARBITER_SEED =
   "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf" +
   "d0d1d2d3d4d5d6d7d8d9dadbdcdddedf";
+const EVIDENCE_SOURCE_SEED =
+  "e0e1e2e3e4e5e6e7e8e9eaebecedeeef" +
+  "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff";
 const CHECKPOINT_WITNESS_SEEDS = [
   "404142434445464748494a4b4c4d4e4f" +
     "505152535455565758595a5b5c5d5e5f",
@@ -402,12 +417,13 @@ function signedLineageDecision(
     issued_at_ms?: number;
     expires_at_ms?: number;
     appeal_deadline_at_ms?: number;
+    evidence_case_id?: string;
   },
 ) {
   const now = Date.now();
   const issuedAt = input.issued_at_ms ?? now - 10;
   const statement: LineageDecisionStatement = {
-    version: 1,
+    version: input.evidence_case_id ? 2 : 1,
     scope,
     unit,
     assetId: input.asset_id,
@@ -427,6 +443,9 @@ function signedLineageDecision(
       ? input.appeal_of_decision_id ?? null
       : null,
     finalizedAtMs: input.outcome === "eligible" ? issuedAt - 1 : null,
+    ...(input.evidence_case_id
+      ? { evidenceCaseId: input.evidence_case_id }
+      : {}),
   };
   const signature = audit_browser_ed25519_sign(
     LINEAGE_ARBITER_SEED,
@@ -449,11 +468,51 @@ function signedLineageDecision(
       appeal_deadline_at_ms: statement.appealDeadlineAtMs,
       appeal_of_decision_id: statement.appealOfDecisionId,
       finalized_at_ms: statement.finalizedAtMs,
+      ...(statement.evidenceCaseId
+        ? { evidence_case_id: statement.evidenceCaseId }
+        : {}),
     },
     authentication: {
       scheme: "moonbit-ed25519-v1",
       arbiter_id: "external-arbiter-a",
       signature,
+    },
+  };
+}
+
+function signedEvidenceCaseDismissal(
+  unit: string,
+  evidenceCaseId: string,
+  overrides: Partial<EvidenceCaseDismissalStatement> = {},
+) {
+  const now = Date.now();
+  const statement: EvidenceCaseDismissalStatement = {
+    version: 1,
+    scope: "reference-game",
+    unit,
+    evidenceCaseId,
+    reasonCode: "challenge_not_reproduced",
+    issuedAtMs: now - 10,
+    expiresAtMs: now + 30_000,
+    ...overrides,
+  };
+  return {
+    statement: {
+      version: statement.version,
+      scope: statement.scope,
+      unit: statement.unit,
+      evidence_case_id: statement.evidenceCaseId,
+      reason_code: statement.reasonCode,
+      issued_at_ms: statement.issuedAtMs,
+      expires_at_ms: statement.expiresAtMs,
+    },
+    authentication: {
+      scheme: "moonbit-ed25519-v1",
+      arbiter_id: "external-arbiter-a",
+      signature: audit_browser_ed25519_sign(
+        LINEAGE_ARBITER_SEED,
+        evidenceCaseDismissalStatementDigest(statement, referenceGameDigest),
+      ),
     },
   };
 }
@@ -1409,6 +1468,401 @@ describe.sequential("Cloudflare game audit shard", () => {
     expect(lateAppeal.status).toBe(409);
     await expect(lateAppeal.json()).resolves.toMatchObject({
       decision: "appeal_window_expired",
+    });
+  });
+
+  it("opens an authenticated evidence case without revoking until its exact arbiter certificate", async () => {
+    const unit = `reference-game-evidence-case-${crypto.randomUUID()}`;
+    const itemRequest = referenceGameItemRequest(unit);
+    const verified = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(itemRequest),
+      },
+    );
+    expect(verified.status).toBe(201);
+    const receipt = (await verified.json() as {
+      receipt: { authority_receipt_id: string };
+    }).receipt;
+    const boundary = {
+      protocol_version: 1,
+      purpose: "reference-game-checkpoint-v1",
+      manifest_digest: "reference-game-manifest-1",
+      scope_id: itemRequest.player_id,
+      unit_id: "local-case-run-1",
+    };
+    const sourceId = "evidence-source-a";
+    const target: EvidenceLineageCaseReference = {
+      version: 1,
+      scope: "reference-game",
+      unit,
+      assetId: itemRequest.asset_id,
+      ancestorId: receipt.authority_receipt_id,
+      ancestorKind: "origin",
+      boundary,
+      sourceId,
+      holdId: "checkpoint-challenge-1",
+      epoch: itemRequest.checkpoint.epoch,
+      checkpointDigest: itemRequest.checkpoint.checkpoint_digest,
+      holdKind: "challenge",
+    };
+    const unsigned: PlayerLocalEvidenceHoldUnsignedEnvelope = {
+      version: 1,
+      source_id: sourceId,
+      message_id: target.holdId,
+      sequence: 0,
+      previous_message_digest: "inbox-genesis",
+      operation: {
+        kind: "place",
+        hold: {
+          boundary,
+          hold_id: target.holdId,
+          epoch: target.epoch,
+          checkpoint_digest: target.checkpointDigest,
+          kind: target.holdKind,
+          reference_digest: evidenceLineageCaseReferenceDigest(
+            target,
+            referenceGameDigest,
+          ),
+          state: { kind: "active" },
+        },
+      },
+    };
+    const messageDigest = referenceGameDigest.hashString(
+      playerLocalEvidenceHoldEnvelopeStatement(unsigned),
+    );
+    const proposal = {
+      version: 1,
+      scope: target.scope,
+      unit: target.unit,
+      asset_id: target.assetId,
+      ancestor_id: target.ancestorId,
+      ancestor_kind: target.ancestorKind,
+      boundary,
+      source_id: sourceId,
+      hold_envelope: {
+        ...unsigned,
+        message_digest: messageDigest,
+        authentication: {
+          scheme: "moonbit-ed25519-v1",
+          signature: audit_browser_ed25519_sign(
+            EVIDENCE_SOURCE_SEED,
+            messageDigest,
+          ),
+        },
+      },
+    };
+    const openCase = (body: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-cases`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+
+    const forged = structuredClone(proposal);
+    forged.hold_envelope.authentication.signature = "0".repeat(128);
+    const refusedForgery = await openCase(forged);
+    expect(refusedForgery.status).toBe(403);
+    await expect(refusedForgery.json()).resolves.toMatchObject({
+      decision: "invalid_signature",
+    });
+    const refusedRetarget = await openCase({
+      ...proposal,
+      asset_id: "retargeted-asset",
+    });
+    expect(refusedRetarget.status).toBe(403);
+    await expect(refusedRetarget.json()).resolves.toMatchObject({
+      decision: "reference_mismatch",
+    });
+
+    const opened = await openCase(proposal);
+    expect(opened.status).toBe(201);
+    const openedBody = await opened.json() as {
+      case: { case_id: string };
+    };
+    expect(openedBody).toMatchObject({
+      ok: true,
+      decision: "opened",
+      lineage_status: "eligible",
+      open_revocations: 0,
+      case: {
+        status: "open",
+        asset_id: itemRequest.asset_id,
+        ancestor_id: receipt.authority_receipt_id,
+      },
+    });
+    const statusBeforeDecision = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-status?asset_id=${encodeURIComponent(itemRequest.asset_id)}`,
+    );
+    await expect(statusBeforeDecision.json()).resolves.toMatchObject({
+      eligibility: "eligible",
+      open_revocations: 0,
+    });
+
+    await evictAuditShard("pve", unit);
+    const duplicate = await openCase(proposal);
+    expect(duplicate.status).toBe(200);
+    await expect(duplicate.json()).resolves.toMatchObject({
+      decision: "duplicate",
+      case: { status: "open", case_id: openedBody.case.case_id },
+    });
+
+    const decide = (body: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-decisions`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-admin-token",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const wrongCase = await decide(signedLineageDecision(
+      "reference-game",
+      unit,
+      {
+        asset_id: itemRequest.asset_id,
+        ancestor_id: receipt.authority_receipt_id,
+        ancestor_kind: "origin",
+        expected_revision: 0,
+        outcome: "revoked",
+        reason: "wrong evidence case",
+        evidence_case_id: "f".repeat(64),
+      },
+    ));
+    expect(wrongCase.status).toBe(409);
+    await expect(wrongCase.json()).resolves.toMatchObject({
+      decision: "evidence_case_not_found",
+    });
+    const decided = await decide(signedLineageDecision(
+      "reference-game",
+      unit,
+      {
+        asset_id: itemRequest.asset_id,
+        ancestor_id: receipt.authority_receipt_id,
+        ancestor_kind: "origin",
+        expected_revision: 0,
+        outcome: "revoked",
+        reason: "authenticated checkpoint challenge upheld",
+        evidence_case_id: openedBody.case.case_id,
+      },
+    ));
+    expect(decided.status).toBe(201);
+    await expect(decided.json()).resolves.toMatchObject({
+      decision: "applied",
+      evidence_case_id: openedBody.case.case_id,
+      evidence_case_status: "decided",
+      lineage_status: "revoked",
+    });
+    const decidedDuplicate = await openCase(proposal);
+    expect(decidedDuplicate.status).toBe(200);
+    await expect(decidedDuplicate.json()).resolves.toMatchObject({
+      decision: "duplicate",
+      case: {
+        case_id: openedBody.case.case_id,
+        status: "decided",
+      },
+    });
+  });
+
+  it("dismisses an exact evidence case without mutating lineage and returns only a hold resolution draft", async () => {
+    const unit = `reference-game-evidence-dismissal-${crypto.randomUUID()}`;
+    const itemRequest = referenceGameItemRequest(unit);
+    const verified = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-item-verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(itemRequest),
+      },
+    );
+    expect(verified.status).toBe(201);
+    const receipt = (await verified.json() as {
+      receipt: { authority_receipt_id: string };
+    }).receipt;
+    const boundary = {
+      protocol_version: 1,
+      purpose: "reference-game-checkpoint-v1",
+      manifest_digest: "reference-game-manifest-1",
+      scope_id: itemRequest.player_id,
+      unit_id: "local-dismissal-run-1",
+    };
+    const sourceId = "evidence-source-a";
+    const target: EvidenceLineageCaseReference = {
+      version: 1,
+      scope: "reference-game",
+      unit,
+      assetId: itemRequest.asset_id,
+      ancestorId: receipt.authority_receipt_id,
+      ancestorKind: "origin",
+      boundary,
+      sourceId,
+      holdId: "checkpoint-challenge-dismissal-1",
+      epoch: itemRequest.checkpoint.epoch,
+      checkpointDigest: itemRequest.checkpoint.checkpoint_digest,
+      holdKind: "challenge",
+    };
+    const referenceDigest = evidenceLineageCaseReferenceDigest(
+      target,
+      referenceGameDigest,
+    );
+    const unsigned: PlayerLocalEvidenceHoldUnsignedEnvelope = {
+      version: 1,
+      source_id: sourceId,
+      message_id: target.holdId,
+      sequence: 0,
+      previous_message_digest: "inbox-genesis",
+      operation: {
+        kind: "place",
+        hold: {
+          boundary,
+          hold_id: target.holdId,
+          epoch: target.epoch,
+          checkpoint_digest: target.checkpointDigest,
+          kind: target.holdKind,
+          reference_digest: referenceDigest,
+          state: { kind: "active" },
+        },
+      },
+    };
+    const messageDigest = referenceGameDigest.hashString(
+      playerLocalEvidenceHoldEnvelopeStatement(unsigned),
+    );
+    const proposal = {
+      version: 1,
+      scope: target.scope,
+      unit: target.unit,
+      asset_id: target.assetId,
+      ancestor_id: target.ancestorId,
+      ancestor_kind: target.ancestorKind,
+      boundary,
+      source_id: sourceId,
+      hold_envelope: {
+        ...unsigned,
+        message_digest: messageDigest,
+        authentication: {
+          scheme: "moonbit-ed25519-v1",
+          signature: audit_browser_ed25519_sign(
+            EVIDENCE_SOURCE_SEED,
+            messageDigest,
+          ),
+        },
+      },
+    };
+    const opened = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-cases`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(proposal),
+      },
+    );
+    expect(opened.status).toBe(201);
+    const openedBody = await opened.json() as { case: { case_id: string } };
+    const dismiss = (body: unknown) => SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-case-dismissals`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-admin-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const forged = signedEvidenceCaseDismissal(unit, openedBody.case.case_id);
+    forged.authentication.signature = "0".repeat(128);
+    const refusedForgery = await dismiss(forged);
+    expect(refusedForgery.status).toBe(403);
+    await expect(refusedForgery.json()).resolves.toMatchObject({
+      decision: "invalid_signature",
+    });
+
+    const certificate = signedEvidenceCaseDismissal(
+      unit,
+      openedBody.case.case_id,
+    );
+    const dismissed = await dismiss(certificate);
+    expect(dismissed.status).toBe(201);
+    const dismissedBody = await dismissed.json() as {
+      dismissal_id: string;
+    };
+    expect(dismissedBody).toMatchObject({
+      decision: "dismissed",
+      evidence_case_id: openedBody.case.case_id,
+      evidence_case_status: "decided",
+      evidence_case_disposition: "dismissed",
+      lineage_status: "eligible",
+      open_revocations: 0,
+      hold_resolution_draft: {
+        boundary,
+        hold_id: target.holdId,
+        epoch: target.epoch,
+        checkpoint_digest: target.checkpointDigest,
+        reference_digest: referenceDigest,
+        decision: "dismissed",
+      },
+    });
+    expect(dismissedBody.dismissal_id).toMatch(/^[0-9a-f]{64}$/);
+
+    await evictAuditShard("pve", unit);
+    const persistedCase = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-cases`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(proposal),
+      },
+    );
+    expect(persistedCase.status).toBe(200);
+    await expect(persistedCase.json()).resolves.toMatchObject({
+      decision: "duplicate",
+      case: {
+        status: "decided",
+        disposition: "dismissed",
+        decision_id: null,
+        resolution_id: dismissedBody.dismissal_id,
+      },
+    });
+    const duplicate = await dismiss(certificate);
+    expect(duplicate.status).toBe(200);
+    await expect(duplicate.json()).resolves.toMatchObject({
+      decision: "duplicate",
+      dismissal_id: dismissedBody.dismissal_id,
+      evidence_case_disposition: "dismissed",
+      lineage_status: "eligible",
+    });
+    const revokeDismissedCase = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-asset-lineage-decisions`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-admin-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(signedLineageDecision(
+          "reference-game",
+          unit,
+          {
+            asset_id: itemRequest.asset_id,
+            ancestor_id: receipt.authority_receipt_id,
+            ancestor_kind: "origin",
+            expected_revision: 0,
+            outcome: "revoked",
+            reason: "must not reuse dismissed case",
+            evidence_case_id: openedBody.case.case_id,
+          },
+        )),
+      },
+    );
+    expect(revokeDismissedCase.status).toBe(409);
+    await expect(revokeDismissedCase.json()).resolves.toMatchObject({
+      decision: "evidence_case_already_decided",
     });
   });
 

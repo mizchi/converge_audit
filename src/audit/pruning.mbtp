@@ -252,3 +252,211 @@ pub lemma unauthenticated_evidence_hold_resolution_is_never_allowed(
   ),
 } {
 }
+
+///|
+predicate evidence_lineage_case_admission_post(
+  active_hold : Bool,
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  ancestor_matches : Bool,
+  authentication_succeeded : Bool,
+  result : Bool,
+) {
+  if active_hold {
+    if boundary_matches {
+      if checkpoint_matches {
+        if reference_matches {
+          if ancestor_matches {
+            result == authentication_succeeded
+          } else {
+            result == false
+          }
+        } else {
+          result == false
+        }
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_lineage_case_requires_every_guard(
+  active_hold : Bool,
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  ancestor_matches : Bool,
+  authentication_succeeded : Bool,
+) where {
+  proof_require: evidence_lineage_case_admission_post(
+    active_hold,
+    boundary_matches,
+    checkpoint_matches,
+    reference_matches,
+    ancestor_matches,
+    authentication_succeeded,
+    true,
+  ),
+  proof_ensure: active_hold == true,
+  proof_ensure: boundary_matches == true,
+  proof_ensure: checkpoint_matches == true,
+  proof_ensure: reference_matches == true,
+  proof_ensure: ancestor_matches == true,
+  proof_ensure: authentication_succeeded == true,
+} {
+}
+
+///|
+pub lemma evidence_case_never_admits_an_unauthenticated_hold(
+  active_hold : Bool,
+  boundary_matches : Bool,
+  checkpoint_matches : Bool,
+  reference_matches : Bool,
+  ancestor_matches : Bool,
+) where {
+  proof_ensure: evidence_lineage_case_admission_post(
+    active_hold,
+    boundary_matches,
+    checkpoint_matches,
+    reference_matches,
+    ancestor_matches,
+    false,
+    false,
+  ),
+} {
+}
+
+///|
+predicate evidence_lineage_case_decision_post(
+  case_open : Bool,
+  asset_matches : Bool,
+  ancestor_matches : Bool,
+  certificate_authenticated : Bool,
+  result : Bool,
+) {
+  if case_open {
+    if asset_matches {
+      if ancestor_matches {
+        result == certificate_authenticated
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_lineage_case_decision_requires_every_guard(
+  case_open : Bool,
+  asset_matches : Bool,
+  ancestor_matches : Bool,
+  certificate_authenticated : Bool,
+) where {
+  proof_require: evidence_lineage_case_decision_post(
+    case_open,
+    asset_matches,
+    ancestor_matches,
+    certificate_authenticated,
+    true,
+  ),
+  proof_ensure: case_open == true,
+  proof_ensure: asset_matches == true,
+  proof_ensure: ancestor_matches == true,
+  proof_ensure: certificate_authenticated == true,
+} {
+}
+
+///|
+pub lemma evidence_case_never_resolves_without_authenticated_certificate(
+  case_open : Bool,
+  asset_matches : Bool,
+  ancestor_matches : Bool,
+) where {
+  proof_ensure: evidence_lineage_case_decision_post(
+    case_open, asset_matches, ancestor_matches, false, false,
+  ),
+} {
+}
+
+///|
+predicate evidence_lineage_case_dismissal_post(
+  case_open : Bool,
+  case_id_matches : Bool,
+  certificate_authenticated : Bool,
+  certificate_time_valid : Bool,
+  result : Bool,
+) {
+  if case_open {
+    if case_id_matches {
+      if certificate_authenticated {
+        result == certificate_time_valid
+      } else {
+        result == false
+      }
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma accepted_evidence_case_dismissal_requires_every_guard(
+  case_open : Bool,
+  case_id_matches : Bool,
+  certificate_authenticated : Bool,
+  certificate_time_valid : Bool,
+) where {
+  proof_require: evidence_lineage_case_dismissal_post(
+    case_open,
+    case_id_matches,
+    certificate_authenticated,
+    certificate_time_valid,
+    true,
+  ),
+  proof_ensure: case_open == true,
+  proof_ensure: case_id_matches == true,
+  proof_ensure: certificate_authenticated == true,
+  proof_ensure: certificate_time_valid == true,
+} {
+}
+
+///|
+pub lemma unauthenticated_evidence_case_is_never_dismissed(
+  case_open : Bool,
+  case_id_matches : Bool,
+  certificate_time_valid : Bool,
+) where {
+  proof_ensure: evidence_lineage_case_dismissal_post(
+    case_open, case_id_matches, false, certificate_time_valid, false,
+  ),
+} {
+}
+
+///|
+pub lemma closed_evidence_case_is_never_dismissed_again(
+  case_id_matches : Bool,
+  certificate_authenticated : Bool,
+  certificate_time_valid : Bool,
+) where {
+  proof_ensure: evidence_lineage_case_dismissal_post(
+    false,
+    case_id_matches,
+    certificate_authenticated,
+    certificate_time_valid,
+    false,
+  ),
+} {
+}

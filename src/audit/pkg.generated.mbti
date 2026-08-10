@@ -8,6 +8,8 @@ import {
 // Values
 pub fn accepted_audit_event_time_is_not_late(Int, Int, Int) -> Unit
 
+pub fn accepted_evidence_case_dismissal_requires_every_guard(Bool, Bool, Bool, Bool) -> Unit
+
 pub fn accepted_evidence_hold_requires_authenticated_exact_binding(Bool, Bool, Bool) -> Unit
 
 pub fn accepted_evidence_hold_resolution_requires_every_guard(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
@@ -15,6 +17,10 @@ pub fn accepted_evidence_hold_resolution_requires_every_guard(Bool, Bool, Bool, 
 pub fn accepted_evidence_inbox_advance_requires_every_guard(Int, Int, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn accepted_evidence_inbox_page_requires_every_guard(Int, Int, Int, Int, Int, Int, Bool, Bool) -> Unit
+
+pub fn accepted_evidence_lineage_case_decision_requires_every_guard(Bool, Bool, Bool, Bool) -> Unit
+
+pub fn accepted_evidence_lineage_case_requires_every_guard(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn accepted_evidence_poll_claim_requires_due_available_lease(Int, Int, Int, Bool) -> Unit
 
@@ -29,6 +35,8 @@ pub fn boundary_mismatch_never_advances_or_accuses(Bool, Bool, Int, Int, Bool) -
 pub fn classify_audit_event_time(origin_ms~ : Int, watermark_ms~ : Int, event_time_ms~ : Int) -> AuditEventTimeDecision
 
 pub fn classify_checkpoint_head(boundary_matches~ : Bool, epoch_known~ : Bool, known_digest_matches~ : Bool, current_epoch~ : Int, incoming_epoch~ : Int, parent_matches~ : Bool) -> CheckpointHeadDecision
+
+pub fn closed_evidence_case_is_never_dismissed_again(Bool, Bool, Bool) -> Unit
 
 pub fn completed_checkpoint_ack_requires_all_bindings(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
@@ -46,9 +54,19 @@ pub fn event_leaves_per_macro_checkpoint(VerifiedCheckpointPolicy) -> Int
 
 pub fn event_leaves_per_micro_checkpoint(VerifiedCheckpointPolicy) -> Int
 
+pub fn evidence_case_never_admits_an_unauthenticated_hold(Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn evidence_case_never_resolves_without_authenticated_certificate(Bool, Bool, Bool) -> Unit
+
 pub fn evidence_inbox_sequence_gap_never_advances(Int, Int, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn evidence_level_at_age(VerifiedCheckpointPolicy, Int) -> RetainedEvidenceLevel
+
+pub fn evidence_lineage_case_admission_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn evidence_lineage_case_decision_allowed(Bool, Bool, Bool, Bool) -> Bool
+
+pub fn evidence_lineage_case_dismissal_allowed(Bool, Bool, Bool, Bool) -> Bool
 
 pub fn evidence_poll_backoff_step_never_decreases(Int, Int, Int) -> Unit
 
@@ -119,6 +137,8 @@ pub fn runtime_checkpoint_delivery_authentication_allowed(Bool, Bool, Bool, Bool
 pub fn runtime_epoch_closure_facts_valid(Bool, Bool, Bool) -> Bool
 
 pub fn unacknowledged_player_local_checkpoint_is_never_prunable(Int, Int, Int, Bool) -> Unit
+
+pub fn unauthenticated_evidence_case_is_never_dismissed(Bool, Bool, Bool) -> Unit
 
 pub fn unauthenticated_evidence_hold_is_never_admitted(Bool, Bool) -> Unit
 
