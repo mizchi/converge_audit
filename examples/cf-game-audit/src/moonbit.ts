@@ -1,3 +1,5 @@
+import type { InventoryCheckpointCertificateAuthenticationTranscript } from "./inventory-checkpoint-certificate";
+
 type AuditModule = typeof import("../../../_build/js/release/build/x/game_audit/worker/worker.js");
 
 let auditModule: AuditModule | undefined;
@@ -329,6 +331,7 @@ export interface VerifiedInventoryListing {
   lineage_root: string;
   approval_count: number;
   required_approvals: number;
+  checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
   bundle_bytes: number;
 }
 
@@ -380,6 +383,7 @@ export interface VerifiedInventoryCheckpoint {
   write_set_digest: string;
   approval_count: number;
   required_approvals: number;
+  checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
   bundle_bytes: number;
 }
 
@@ -404,6 +408,21 @@ export interface VerifiedInventoryLineageTransition {
   next_lineage_root: string;
 }
 
+export type InventoryLineageAuthenticationCheckKind =
+  | "sender_binding"
+  | "recipient_binding"
+  | "sender_transfer"
+  | "recipient_transfer";
+
+export interface InventoryLineageAuthenticationCheck {
+  kind: InventoryLineageAuthenticationCheckKind;
+  transfer_index: number;
+  public_key: string;
+  canonical_statement: string;
+  digest: string;
+  signature: string;
+}
+
 export interface VerifiedInventoryLineage {
   ok: true;
   complete: true;
@@ -413,6 +432,8 @@ export interface VerifiedInventoryLineage {
   transfer_count: number;
   transfer_events: string[];
   transitions: VerifiedInventoryLineageTransition[];
+  authentication_checks: InventoryLineageAuthenticationCheck[];
+  checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
   final_owner_id: string;
   final_version: number;
   final_last_event: string;

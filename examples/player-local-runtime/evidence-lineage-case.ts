@@ -40,6 +40,10 @@ export interface EvidenceLineageCaseDigestAdapter {
   hashString(value: string): string;
 }
 
+export interface AsyncEvidenceLineageCaseDigestAdapter {
+  hashString(value: string): Promise<string>;
+}
+
 export interface EvidenceLineageCaseSignatureVerifier {
   verify(
     publicKey: string,
@@ -76,6 +80,18 @@ export interface VerifyEvidenceLineageCaseProposalOptions {
   digest: EvidenceLineageCaseDigestAdapter;
 }
 
+export interface VerifyEvidenceLineageCaseProposalAsyncOptions {
+  roster: EvidenceLineageCaseSourceRoster;
+  verifiers: EvidenceLineageCaseVerifierRegistry;
+  digest: AsyncEvidenceLineageCaseDigestAdapter;
+}
+
+interface VerifyEvidenceLineageCaseProposalAwaitableOptions {
+  roster: EvidenceLineageCaseSourceRoster;
+  verifiers: EvidenceLineageCaseVerifierRegistry;
+  digest: { hashString(value: string): Awaitable<string> };
+}
+
 export type VerifiedEvidenceLineageCaseProposal =
   | {
     ok: true;
@@ -88,6 +104,14 @@ export type VerifiedEvidenceLineageCaseProposal =
 export type VerifiedEvidenceLineageCaseSourceEnvelope =
   | { ok: true; envelope: PlayerLocalEvidenceHoldEnvelope }
   | { ok: false; reason: EvidenceLineageCaseRejection };
+
+export type DualVerifiedEvidenceLineageCaseProposal =
+  | VerifiedEvidenceLineageCaseProposal
+  | { ok: false; reason: "crypto_backend_mismatch" };
+
+export type DualVerifiedEvidenceLineageCaseSourceEnvelope =
+  | VerifiedEvidenceLineageCaseSourceEnvelope
+  | { ok: false; reason: "crypto_backend_mismatch" };
 
 export function parseEvidenceLineageCaseSourceRoster(
   encoded: string | undefined,
@@ -117,11 +141,10 @@ export function parseEvidenceLineageCaseSourceRoster(
   return Object.keys(roster).length > 0 ? roster : undefined;
 }
 
-export function evidenceLineageCaseReferenceDigest(
+export function canonicalEvidenceLineageCaseReference(
   reference: EvidenceLineageCaseReference,
-  digest: EvidenceLineageCaseDigestAdapter,
 ): string {
-  return digest.hashString(JSON.stringify([
+  return JSON.stringify([
     "converge-audit-evidence-lineage-case-reference-v1",
     reference.version,
     reference.scope,
@@ -139,7 +162,21 @@ export function evidenceLineageCaseReferenceDigest(
     reference.epoch,
     reference.checkpointDigest,
     reference.holdKind,
-  ]));
+  ]);
+}
+
+export function evidenceLineageCaseReferenceDigest(
+  reference: EvidenceLineageCaseReference,
+  digest: EvidenceLineageCaseDigestAdapter,
+): string {
+  return digest.hashString(canonicalEvidenceLineageCaseReference(reference));
+}
+
+export function evidenceLineageCaseReferenceDigestAsync(
+  reference: EvidenceLineageCaseReference,
+  digest: AsyncEvidenceLineageCaseDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalEvidenceLineageCaseReference(reference));
 }
 
 export async function verifyEvidenceLineageCaseSourceEnvelope(
@@ -147,6 +184,34 @@ export async function verifyEvidenceLineageCaseSourceEnvelope(
   expectedBoundary: AuditBoundary,
   expectedSourceId: string,
   options: VerifyEvidenceLineageCaseProposalOptions,
+): Promise<VerifiedEvidenceLineageCaseSourceEnvelope> {
+  return verifyEvidenceLineageCaseSourceEnvelopeWithCrypto(
+    value,
+    expectedBoundary,
+    expectedSourceId,
+    options,
+  );
+}
+
+export async function verifyEvidenceLineageCaseSourceEnvelopeAsync(
+  value: unknown,
+  expectedBoundary: AuditBoundary,
+  expectedSourceId: string,
+  options: VerifyEvidenceLineageCaseProposalAsyncOptions,
+): Promise<VerifiedEvidenceLineageCaseSourceEnvelope> {
+  return verifyEvidenceLineageCaseSourceEnvelopeWithCrypto(
+    value,
+    expectedBoundary,
+    expectedSourceId,
+    options,
+  );
+}
+
+async function verifyEvidenceLineageCaseSourceEnvelopeWithCrypto(
+  value: unknown,
+  expectedBoundary: AuditBoundary,
+  expectedSourceId: string,
+  options: VerifyEvidenceLineageCaseProposalAwaitableOptions,
 ): Promise<VerifiedEvidenceLineageCaseSourceEnvelope> {
   const decoded = decodePlayerLocalEvidenceHoldEnvelope(
     value,
@@ -170,7 +235,7 @@ export async function verifyEvidenceLineageCaseSourceEnvelope(
     return { ok: false, reason: "unsupported_authentication_scheme" };
   }
   const canonical = playerLocalEvidenceHoldEnvelopeStatement(decoded.envelope);
-  const messageDigest = options.digest.hashString(canonical);
+  const messageDigest = await options.digest.hashString(canonical);
   if (messageDigest !== decoded.envelope.message_digest) {
     return { ok: false, reason: "invalid_message_digest" };
   }
@@ -180,6 +245,31 @@ export async function verifyEvidenceLineageCaseSourceEnvelope(
     authentication.signature,
   )) return { ok: false, reason: "invalid_signature" };
   return { ok: true, envelope: decoded.envelope };
+}
+
+export async function verifyEvidenceLineageCaseSourceEnvelopeDual(
+  value: unknown,
+  expectedBoundary: AuditBoundary,
+  expectedSourceId: string,
+  synchronous: VerifyEvidenceLineageCaseProposalOptions,
+  asynchronous: VerifyEvidenceLineageCaseProposalAsyncOptions,
+): Promise<DualVerifiedEvidenceLineageCaseSourceEnvelope> {
+  const first = await verifyEvidenceLineageCaseSourceEnvelope(
+    value,
+    expectedBoundary,
+    expectedSourceId,
+    synchronous,
+  );
+  if (!first.ok) return first;
+  const second = await verifyEvidenceLineageCaseSourceEnvelopeAsync(
+    value,
+    expectedBoundary,
+    expectedSourceId,
+    asynchronous,
+  );
+  return second.ok
+    ? first
+    : { ok: false, reason: "crypto_backend_mismatch" };
 }
 
 /**
@@ -208,6 +298,20 @@ export async function verifyEvidenceLineageCaseProposal(
   value: unknown,
   options: VerifyEvidenceLineageCaseProposalOptions,
 ): Promise<VerifiedEvidenceLineageCaseProposal> {
+  return verifyEvidenceLineageCaseProposalWithCrypto(value, options);
+}
+
+export async function verifyEvidenceLineageCaseProposalAsync(
+  value: unknown,
+  options: VerifyEvidenceLineageCaseProposalAsyncOptions,
+): Promise<VerifiedEvidenceLineageCaseProposal> {
+  return verifyEvidenceLineageCaseProposalWithCrypto(value, options);
+}
+
+async function verifyEvidenceLineageCaseProposalWithCrypto(
+  value: unknown,
+  options: VerifyEvidenceLineageCaseProposalAwaitableOptions,
+): Promise<VerifiedEvidenceLineageCaseProposal> {
   const decoded = decodeProposal(value);
   if (!decoded) return { ok: false, reason: "invalid_proposal" };
   const source = options.roster[decoded.target.sourceId];
@@ -226,7 +330,7 @@ export async function verifyEvidenceLineageCaseProposal(
     return { ok: false, reason: "unsupported_authentication_scheme" };
   }
   const canonical = playerLocalEvidenceHoldEnvelopeStatement(decoded.envelope);
-  const messageDigest = options.digest.hashString(canonical);
+  const messageDigest = await options.digest.hashString(canonical);
   if (messageDigest !== decoded.envelope.message_digest) {
     return { ok: false, reason: "invalid_message_digest" };
   }
@@ -235,9 +339,8 @@ export async function verifyEvidenceLineageCaseProposal(
     messageDigest,
     authentication.signature,
   )) return { ok: false, reason: "invalid_signature" };
-  const referenceDigest = evidenceLineageCaseReferenceDigest(
-    decoded.target,
-    options.digest,
+  const referenceDigest = await options.digest.hashString(
+    canonicalEvidenceLineageCaseReference(decoded.target),
   );
   const hold = decoded.envelope.operation.kind === "place"
     ? decoded.envelope.operation.hold
@@ -245,7 +348,7 @@ export async function verifyEvidenceLineageCaseProposal(
   if (!hold || hold.reference_digest !== referenceDigest) {
     return { ok: false, reason: "reference_mismatch" };
   }
-  const caseId = options.digest.hashString(JSON.stringify([
+  const caseId = await options.digest.hashString(JSON.stringify([
     "converge-audit-evidence-lineage-case-v1",
     referenceDigest,
     decoded.envelope.message_digest,
@@ -256,6 +359,26 @@ export async function verifyEvidenceLineageCaseProposal(
     referenceDigest,
     proposal: decoded,
   };
+}
+
+export async function verifyEvidenceLineageCaseProposalDual(
+  value: unknown,
+  synchronous: VerifyEvidenceLineageCaseProposalOptions,
+  asynchronous: VerifyEvidenceLineageCaseProposalAsyncOptions,
+): Promise<DualVerifiedEvidenceLineageCaseProposal> {
+  const first = await verifyEvidenceLineageCaseProposal(value, synchronous);
+  if (!first.ok) return first;
+  const second = await verifyEvidenceLineageCaseProposalAsync(
+    value,
+    asynchronous,
+  );
+  if (
+    !second.ok || second.caseId !== first.caseId ||
+    second.referenceDigest !== first.referenceDigest
+  ) {
+    return { ok: false, reason: "crypto_backend_mismatch" };
+  }
+  return first;
 }
 
 function decodeProposal(value: unknown): EvidenceLineageCaseProposal | undefined {

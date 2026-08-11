@@ -10,12 +10,15 @@ import {
   evidenceLineageCaseReferenceDigest,
   parseEvidenceLineageCaseSourceRoster,
   verifyEvidenceLineageCaseProposal,
+  verifyEvidenceLineageCaseProposalDual,
+  verifyEvidenceLineageCaseSourceEnvelopeDual,
   type EvidenceLineageCaseReference,
 } from "../../player-local-runtime/evidence-lineage-case.ts";
 import {
   playerLocalEvidenceHoldEnvelopeStatement,
   type PlayerLocalEvidenceHoldUnsignedEnvelope,
 } from "../../player-local-runtime/evidence-hold-wire.ts";
+import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypto-backend.ts";
 
 const seed =
   "000102030405060708090a0b0c0d0e0f" +
@@ -95,6 +98,51 @@ function signedProposal(overrides: Partial<EvidenceLineageCaseReference> = {}) {
 }
 
 describe("evidence lineage case certificate", () => {
+  it("requires MoonBit and WebCrypto to agree on source envelopes", async () => {
+    const proposal = signedProposal();
+    const roster = parseEvidenceLineageCaseSourceRoster(JSON.stringify({
+      [sourceId]: {
+        scheme: "moonbit-ed25519-v1",
+        public_key: audit_browser_ed25519_public_key(seed),
+      },
+    }))!;
+    const synchronous = {
+      roster,
+      verifiers: { "moonbit-ed25519-v1": verifier },
+      digest,
+    };
+    const standard = createStandardWebCryptoBackend(crypto);
+    const asynchronous = {
+      roster,
+      verifiers: { "moonbit-ed25519-v1": standard },
+      digest: standard,
+    };
+
+    await expect(verifyEvidenceLineageCaseProposalDual(
+      proposal,
+      synchronous,
+      asynchronous,
+    )).resolves.toMatchObject({ ok: true });
+    await expect(verifyEvidenceLineageCaseSourceEnvelopeDual(
+      proposal.hold_envelope,
+      boundary,
+      sourceId,
+      synchronous,
+      asynchronous,
+    )).resolves.toMatchObject({ ok: true });
+    await expect(verifyEvidenceLineageCaseProposalDual(
+      proposal,
+      synchronous,
+      {
+        ...asynchronous,
+        digest: { hashString: async () => "0".repeat(64) },
+      },
+    )).resolves.toEqual({
+      ok: false,
+      reason: "crypto_backend_mismatch",
+    });
+  });
+
   it("derives a local hold resolution draft without source authentication", () => {
     const proposal = signedProposal();
     const operation = proposal.hold_envelope.operation;

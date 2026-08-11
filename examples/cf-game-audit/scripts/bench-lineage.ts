@@ -1,4 +1,10 @@
 import { summarizeLatency } from "../src/benchmark-metrics";
+import { verifyInventoryLineageAuthenticationTranscript } from "../src/inventory-lineage-proof";
+import { verifyInventoryCheckpointCertificateAuthentication } from "../src/inventory-checkpoint-certificate";
+import {
+  createStandardWebCryptoBackend,
+} from "../../player-local-runtime/crypto-backend";
+import type { VerifiedInventoryLineage } from "../src/moonbit";
 
 type AuditModule = typeof import("../../../_build/js/release/build/x/game_audit/worker/worker.js");
 
@@ -53,7 +59,7 @@ function generate(length: number): LineageFixture {
   return fixture;
 }
 
-function verify(fixture: LineageFixture): void {
+function verify(fixture: LineageFixture): VerifiedInventoryLineage {
   const result = JSON.parse(
     audit.audit_verify_inventory_lineage_proof_bundle(
       fixture.bundle_hex,
@@ -73,23 +79,56 @@ function verify(fixture: LineageFixture): void {
       fixture.anchor_last_event,
       fixture.anchor_lineage_root,
     ),
-  ) as { ok: boolean; error?: string };
+  ) as VerifiedInventoryLineage | { ok: false; error?: string };
   if (!result.ok) throw new Error(result.error ?? "lineage verification failed");
+  return result;
 }
 
+const standardBackend = createStandardWebCryptoBackend(crypto);
 const results = [];
 for (const length of LENGTHS) {
   const fixture = generate(length);
-  verify(fixture);
+  const warmVerification = verify(fixture);
+  const warmStandard = await verifyInventoryLineageAuthenticationTranscript(
+    warmVerification,
+    standardBackend,
+  );
+  if (!warmStandard.ok) throw new Error(warmStandard.reason);
+  const warmCheckpoint =
+    await verifyInventoryCheckpointCertificateAuthentication(
+      warmVerification.checkpoint_authentication,
+      standardBackend,
+    );
+  if (!warmCheckpoint.ok) throw new Error(warmCheckpoint.reason);
   const generation: number[] = [];
   const verification: number[] = [];
+  const standardAuthentication: number[] = [];
+  const standardCheckpointAuthentication: number[] = [];
+  const standardTotalAuthentication: number[] = [];
   for (let index = 0; index < ITERATIONS; index++) {
     let started = performance.now();
     const generated = generate(length);
     generation.push(performance.now() - started);
     started = performance.now();
-    verify(generated);
+    const verified = verify(generated);
     verification.push(performance.now() - started);
+    const standardStarted = performance.now();
+    started = performance.now();
+    const standardCheckpoint =
+      await verifyInventoryCheckpointCertificateAuthentication(
+        verified.checkpoint_authentication,
+        standardBackend,
+      );
+    standardCheckpointAuthentication.push(performance.now() - started);
+    if (!standardCheckpoint.ok) throw new Error(standardCheckpoint.reason);
+    started = performance.now();
+    const standard = await verifyInventoryLineageAuthenticationTranscript(
+      verified,
+      standardBackend,
+    );
+    standardAuthentication.push(performance.now() - started);
+    standardTotalAuthentication.push(performance.now() - standardStarted);
+    if (!standard.ok) throw new Error(standard.reason);
   }
   results.push({
     transfer_count: length,
@@ -99,6 +138,13 @@ for (const length of LENGTHS) {
     ) / 1_000,
     generation_ms: summarizeLatency(generation),
     verification_ms: summarizeLatency(verification),
+    standard_authentication_ms: summarizeLatency(standardAuthentication),
+    standard_checkpoint_certificate_ms: summarizeLatency(
+      standardCheckpointAuthentication,
+    ),
+    standard_total_authentication_ms: summarizeLatency(
+      standardTotalAuthentication,
+    ),
   });
 }
 

@@ -38,8 +38,20 @@ export interface LineageDecisionDigestAdapter {
   hashString(value: string): string;
 }
 
+export interface AsyncLineageDecisionDigestAdapter {
+  hashString(value: string): Promise<string>;
+}
+
 export interface LineageDecisionSignatureVerifier {
   verify(publicKey: string, digest: string, signature: string): boolean;
+}
+
+export interface AsyncLineageDecisionSignatureVerifier {
+  verify(
+    publicKey: string,
+    digest: string,
+    signature: string,
+  ): Promise<boolean>;
 }
 
 export interface LineageDecisionArbiter {
@@ -53,6 +65,10 @@ export type LineageDecisionArbiterRoster = Readonly<
 
 export type LineageDecisionVerifierRegistry = Readonly<
   Record<string, LineageDecisionSignatureVerifier>
+>;
+
+export type AsyncLineageDecisionVerifierRegistry = Readonly<
+  Record<string, AsyncLineageDecisionSignatureVerifier>
 >;
 
 export type LineageDecisionCertificateRejection =
@@ -86,6 +102,20 @@ export interface VerifyLineageDecisionCertificateOptions {
   verifiers: LineageDecisionVerifierRegistry;
   digest: LineageDecisionDigestAdapter;
 }
+
+export interface VerifyLineageDecisionCertificateAsyncOptions {
+  expectedScope: LineageDecisionScope;
+  expectedUnit: string;
+  nowMs: number;
+  maxClockSkewMs: number;
+  roster: LineageDecisionArbiterRoster;
+  verifiers: AsyncLineageDecisionVerifierRegistry;
+  digest: AsyncLineageDecisionDigestAdapter;
+}
+
+export type DualVerifiedLineageDecisionCertificate =
+  | VerifiedLineageDecisionCertificate
+  | { ok: false; reason: "crypto_backend_mismatch" };
 
 export function decodeLineageDecisionCertificate(
   value: unknown,
@@ -150,9 +180,8 @@ export function parseLineageDecisionArbiterRoster(
   return Object.keys(roster).length > 0 ? roster : undefined;
 }
 
-export function lineageDecisionStatementDigest(
+export function canonicalLineageDecisionStatement(
   statement: LineageDecisionStatement,
-  digest: LineageDecisionDigestAdapter,
 ): string {
   const fields = [
     statement.version === 1
@@ -175,7 +204,21 @@ export function lineageDecisionStatementDigest(
     statement.finalizedAtMs,
   ];
   if (statement.version === 2) fields.push(statement.evidenceCaseId!);
-  return digest.hashString(JSON.stringify(fields));
+  return JSON.stringify(fields);
+}
+
+export function lineageDecisionStatementDigest(
+  statement: LineageDecisionStatement,
+  digest: LineageDecisionDigestAdapter,
+): string {
+  return digest.hashString(canonicalLineageDecisionStatement(statement));
+}
+
+export function lineageDecisionStatementDigestAsync(
+  statement: LineageDecisionStatement,
+  digest: AsyncLineageDecisionDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalLineageDecisionStatement(statement));
 }
 
 export function verifyLineageDecisionCertificate(
@@ -222,6 +265,77 @@ export function verifyLineageDecisionCertificate(
   const lifecycle = certificateLifecycle(statement);
   if (!lifecycle) return { ok: false, reason: "invalid_lifecycle" };
   return { ok: true, decisionId, lifecycle, certificate };
+}
+
+export async function verifyLineageDecisionCertificateAsync(
+  certificate: LineageDecisionCertificate,
+  options: VerifyLineageDecisionCertificateAsyncOptions,
+): Promise<VerifiedLineageDecisionCertificate> {
+  const statement = certificate.statement;
+  const authentication = certificate.authentication;
+  if (!validStatementShape(statement) || !validAuthentication(authentication)) {
+    return { ok: false, reason: "invalid_certificate" };
+  }
+  if (statement.scope !== options.expectedScope) {
+    return { ok: false, reason: "wrong_scope" };
+  }
+  if (statement.unit !== options.expectedUnit) {
+    return { ok: false, reason: "wrong_unit" };
+  }
+  const arbiter = options.roster[authentication.arbiterId];
+  if (!arbiter) return { ok: false, reason: "unknown_arbiter" };
+  if (arbiter.scheme !== authentication.scheme) {
+    return { ok: false, reason: "arbiter_scheme_mismatch" };
+  }
+  const verifier = options.verifiers[authentication.scheme];
+  if (!verifier) {
+    return { ok: false, reason: "unsupported_authentication_scheme" };
+  }
+  const decisionId = await lineageDecisionStatementDigestAsync(
+    statement,
+    options.digest,
+  );
+  if (
+    !/^[0-9a-f]{128}$/.test(authentication.signature) ||
+    !await verifier.verify(
+      arbiter.publicKey,
+      decisionId,
+      authentication.signature,
+    )
+  ) return { ok: false, reason: "invalid_signature" };
+  if (statement.revision !== statement.expectedRevision + 1) {
+    return { ok: false, reason: "invalid_revision" };
+  }
+  const skew = Math.max(0, options.maxClockSkewMs);
+  if (statement.issuedAtMs > options.nowMs + skew) {
+    return { ok: false, reason: "certificate_from_future" };
+  }
+  if (statement.expiresAtMs < options.nowMs - skew) {
+    return { ok: false, reason: "certificate_expired" };
+  }
+  const lifecycle = certificateLifecycle(statement);
+  if (!lifecycle) return { ok: false, reason: "invalid_lifecycle" };
+  return { ok: true, decisionId, lifecycle, certificate };
+}
+
+export async function verifyLineageDecisionCertificateDual(
+  certificate: LineageDecisionCertificate,
+  synchronous: VerifyLineageDecisionCertificateOptions,
+  asynchronous: VerifyLineageDecisionCertificateAsyncOptions,
+): Promise<DualVerifiedLineageDecisionCertificate> {
+  const first = verifyLineageDecisionCertificate(certificate, synchronous);
+  if (!first.ok) return first;
+  const second = await verifyLineageDecisionCertificateAsync(
+    certificate,
+    asynchronous,
+  );
+  if (
+    !second.ok || second.decisionId !== first.decisionId ||
+    second.lifecycle !== first.lifecycle
+  ) {
+    return { ok: false, reason: "crypto_backend_mismatch" };
+  }
+  return first;
 }
 
 function certificateLifecycle(

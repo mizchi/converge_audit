@@ -8,9 +8,11 @@ import {
 import {
   lineageDecisionStatementDigest,
   verifyLineageDecisionCertificate,
+  verifyLineageDecisionCertificateDual,
   type LineageDecisionCertificate,
   type LineageDecisionStatement,
 } from "../src/lineage-decision-certificate";
+import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypto-backend";
 
 const ARBITER_SEED =
   "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf" +
@@ -79,6 +81,42 @@ function verify(value: LineageDecisionCertificate, nowMs = NOW) {
 }
 
 describe("lineage decision certificate", () => {
+  it("requires the synchronous and WebCrypto backends to agree", async () => {
+    const value = certificate(provisionalRevocation());
+    const common = {
+      expectedScope: "reference-game" as const,
+      expectedUnit: "dungeon-1",
+      nowMs: NOW,
+      maxClockSkewMs: 250,
+      roster,
+    };
+    const standard = createStandardWebCryptoBackend(crypto);
+    const standardVerifiers = {
+      "moonbit-ed25519-v1": standard,
+    };
+
+    await expect(verifyLineageDecisionCertificateDual(
+      value,
+      { ...common, verifiers, digest },
+      { ...common, verifiers: standardVerifiers, digest: standard },
+    )).resolves.toMatchObject({
+      ok: true,
+      lifecycle: "appeal_open",
+    });
+    await expect(verifyLineageDecisionCertificateDual(
+      value,
+      { ...common, verifiers, digest },
+      {
+        ...common,
+        verifiers: standardVerifiers,
+        digest: { hashString: async () => "0".repeat(64) },
+      },
+    )).resolves.toEqual({
+      ok: false,
+      reason: "crypto_backend_mismatch",
+    });
+  });
+
   it("accepts an authenticated provisional revocation", () => {
     expect(verify(certificate(provisionalRevocation()))).toMatchObject({
       ok: true,

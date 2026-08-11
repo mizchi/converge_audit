@@ -8,9 +8,11 @@ import {
 import {
   evidenceCaseDismissalStatementDigest,
   verifyEvidenceCaseDismissalCertificate,
+  verifyEvidenceCaseDismissalCertificateDual,
   type EvidenceCaseDismissalCertificate,
   type EvidenceCaseDismissalStatement,
 } from "../src/evidence-case-dismissal-certificate";
+import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypto-backend";
 
 const seed =
   "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf" +
@@ -69,6 +71,39 @@ function verify(value: EvidenceCaseDismissalCertificate) {
 }
 
 describe("evidence case dismissal certificate", () => {
+  it("requires the synchronous and WebCrypto backends to agree", async () => {
+    const value = certificate(statement());
+    const common = {
+      expectedScope: "reference-game" as const,
+      expectedUnit: "dungeon-1",
+      nowMs: now,
+      maxClockSkewMs: 0,
+      roster,
+    };
+    const standard = createStandardWebCryptoBackend(crypto);
+    const standardVerifiers = {
+      "moonbit-ed25519-v1": standard,
+    };
+
+    await expect(verifyEvidenceCaseDismissalCertificateDual(
+      value,
+      { ...common, verifiers, digest },
+      { ...common, verifiers: standardVerifiers, digest: standard },
+    )).resolves.toMatchObject({ ok: true });
+    await expect(verifyEvidenceCaseDismissalCertificateDual(
+      value,
+      { ...common, verifiers, digest },
+      {
+        ...common,
+        verifiers: standardVerifiers,
+        digest: { hashString: async () => "0".repeat(64) },
+      },
+    )).resolves.toEqual({
+      ok: false,
+      reason: "crypto_backend_mismatch",
+    });
+  });
+
   it("accepts a signed exact case dismissal", () => {
     expect(verify(certificate(statement()))).toMatchObject({
       ok: true,

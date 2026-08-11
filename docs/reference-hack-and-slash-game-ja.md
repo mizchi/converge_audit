@@ -259,8 +259,11 @@ quorumの代用ではない。owner keyは自己主権run identityを証明す�
 結び付けるものではない。reference実装のowner proof生成とWorker受信は標準WebCryptoへ移行し、移行時の
 差分検出のためMoonBit verifierも併用している。reference checkpoint/journalもsealed保存とWorker受理時に
 標準WebCryptoとMoonBitの一致を要求する。reference固有のreceipt/head/transfer/listing/checkpoint receipt IDも
-SQLite更新・authority応答前に両backendの一致を要求する。一方、同期生成側の`experimental_crypto`と汎用
-open-world lineage proof/裁定certificateのhash・署名検証経路は未移行である。productionでは認証済みaccountへの
+SQLite更新・authority応答前に両backendの一致を要求する。open-world lineage proofの保存IDとlineage
+decision/evidence dismissal certificate、evidence-source proposal/resolution envelopeもdual gateへ接続済みである。
+open-world lineage bundleのowner-key binding・transfer署名に加え、compact listingとmulti-asset checkpointの
+authority checkpoint・replay-witness attestationもcanonical transcriptから標準WebCryptoで独立再検証する。
+一方、同期生成側の`experimental_crypto`とsemantic root再計算は未移行である。productionでは認証済みaccountへの
 鍵登録、OS keystore/secure enclaveへの昇格、鍵回復・rotation・失効を別途実装する。
 
 ## Cloudflare配置

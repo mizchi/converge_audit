@@ -383,7 +383,15 @@ test "worker bridge verifies real-crypto current-owner inventory proof" {
     result["ok"] is True &&
     result["current_owner_id"] is String("bob") &&
     result["version"] is Number(1.0, ..) &&
-    result["previous_checkpoint"] is String("creation-checkpoint") else {
+    result["previous_checkpoint"] is String("creation-checkpoint") &&
+    result["checkpoint_authentication"] is Object(authentication) &&
+    authentication["attestation_count"] is Number(3.0, ..) &&
+    authentication["checks"]
+    is Array(
+      [Object(authority_check), Object(witness_check), Object(_), Object(_)]
+    ) &&
+    authority_check["kind"] is String("authority_checkpoint") &&
+    witness_check["kind"] is String("replay_witness_attestation") else {
     fail("expected current-owner proof verification")
   }
   let stale_owner = audit_verify_inventory_listing_proof_bundle(
@@ -442,6 +450,27 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     result["current_owner_id"] is String("bob") &&
     result["transfer_count"] is Number(1.0, ..) &&
     result["transfer_events"] is Array([String(transfer_event), ..]) &&
+    result["authentication_checks"]
+    is Array(
+      [
+        Object(sender_binding),
+        Object(recipient_binding),
+        Object(sender_transfer),
+        Object(recipient_transfer),
+      ]
+    ) &&
+    sender_binding["kind"] is String("sender_binding") &&
+    recipient_binding["kind"] is String("recipient_binding") &&
+    sender_transfer["kind"] is String("sender_transfer") &&
+    recipient_transfer["kind"] is String("recipient_transfer") &&
+    result["checkpoint_authentication"] is Object(authentication) &&
+    authentication["attestation_count"] is Number(3.0, ..) &&
+    authentication["checks"]
+    is Array(
+      [Object(authority_check), Object(witness_check), Object(_), Object(_)]
+    ) &&
+    authority_check["kind"] is String("authority_checkpoint") &&
+    witness_check["kind"] is String("replay_witness_attestation") &&
     transfer_event != "" else {
     fail("expected historical inventory lineage verification")
   }
@@ -498,6 +527,14 @@ test "worker bridge verifies one real-crypto atomic multi-asset checkpoint" {
     result["ok"] is True &&
     result["asset_count"] is Number(2.0, ..) &&
     result["write_set_digest"] is String(write_set_digest) &&
+    result["checkpoint_authentication"] is Object(authentication) &&
+    authentication["attestation_count"] is Number(3.0, ..) &&
+    authentication["checks"]
+    is Array(
+      [Object(authority_check), Object(witness_check), Object(_), Object(_)]
+    ) &&
+    authority_check["kind"] is String("authority_checkpoint") &&
+    witness_check["kind"] is String("replay_witness_attestation") &&
     write_set_digest != "" else {
     fail("expected atomic multi-asset inventory verification")
   }

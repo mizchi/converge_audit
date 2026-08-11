@@ -1,4 +1,6 @@
 import type {
+  AsyncLineageDecisionDigestAdapter,
+  AsyncLineageDecisionVerifierRegistry,
   LineageDecisionArbiterRoster,
   LineageDecisionDigestAdapter,
   LineageDecisionScope,
@@ -47,6 +49,16 @@ export interface VerifyEvidenceCaseDismissalCertificateOptions {
   digest: LineageDecisionDigestAdapter;
 }
 
+export interface VerifyEvidenceCaseDismissalCertificateAsyncOptions {
+  expectedScope: LineageDecisionScope;
+  expectedUnit: string;
+  nowMs: number;
+  maxClockSkewMs: number;
+  roster: LineageDecisionArbiterRoster;
+  verifiers: AsyncLineageDecisionVerifierRegistry;
+  digest: AsyncLineageDecisionDigestAdapter;
+}
+
 export type VerifiedEvidenceCaseDismissalCertificate =
   | {
     ok: true;
@@ -54,6 +66,10 @@ export type VerifiedEvidenceCaseDismissalCertificate =
     certificate: EvidenceCaseDismissalCertificate;
   }
   | { ok: false; reason: EvidenceCaseDismissalCertificateRejection };
+
+export type DualVerifiedEvidenceCaseDismissalCertificate =
+  | VerifiedEvidenceCaseDismissalCertificate
+  | { ok: false; reason: "crypto_backend_mismatch" };
 
 export function decodeEvidenceCaseDismissalCertificate(
   value: unknown,
@@ -81,11 +97,10 @@ export function decodeEvidenceCaseDismissalCertificate(
     : undefined;
 }
 
-export function evidenceCaseDismissalStatementDigest(
+export function canonicalEvidenceCaseDismissalStatement(
   statement: EvidenceCaseDismissalStatement,
-  digest: LineageDecisionDigestAdapter,
 ): string {
-  return digest.hashString(JSON.stringify([
+  return JSON.stringify([
     "converge-audit-evidence-case-dismissal-statement-v1",
     statement.version,
     statement.scope,
@@ -94,7 +109,21 @@ export function evidenceCaseDismissalStatementDigest(
     statement.reasonCode,
     statement.issuedAtMs,
     statement.expiresAtMs,
-  ]));
+  ]);
+}
+
+export function evidenceCaseDismissalStatementDigest(
+  statement: EvidenceCaseDismissalStatement,
+  digest: LineageDecisionDigestAdapter,
+): string {
+  return digest.hashString(canonicalEvidenceCaseDismissalStatement(statement));
+}
+
+export function evidenceCaseDismissalStatementDigestAsync(
+  statement: EvidenceCaseDismissalStatement,
+  digest: AsyncLineageDecisionDigestAdapter,
+): Promise<string> {
+  return digest.hashString(canonicalEvidenceCaseDismissalStatement(statement));
 }
 
 export function verifyEvidenceCaseDismissalCertificate(
@@ -137,6 +166,72 @@ export function verifyEvidenceCaseDismissalCertificate(
     return { ok: false, reason: "certificate_expired" };
   }
   return { ok: true, dismissalId, certificate };
+}
+
+export async function verifyEvidenceCaseDismissalCertificateAsync(
+  certificate: EvidenceCaseDismissalCertificate,
+  options: VerifyEvidenceCaseDismissalCertificateAsyncOptions,
+): Promise<VerifiedEvidenceCaseDismissalCertificate> {
+  const statement = certificate.statement;
+  const authentication = certificate.authentication;
+  if (!validStatement(statement) || !validAuthentication(authentication)) {
+    return { ok: false, reason: "invalid_certificate" };
+  }
+  if (statement.scope !== options.expectedScope) {
+    return { ok: false, reason: "wrong_scope" };
+  }
+  if (statement.unit !== options.expectedUnit) {
+    return { ok: false, reason: "wrong_unit" };
+  }
+  const arbiter = options.roster[authentication.arbiterId];
+  if (!arbiter) return { ok: false, reason: "unknown_arbiter" };
+  if (arbiter.scheme !== authentication.scheme) {
+    return { ok: false, reason: "arbiter_scheme_mismatch" };
+  }
+  const verifier = options.verifiers[authentication.scheme];
+  if (!verifier) {
+    return { ok: false, reason: "unsupported_authentication_scheme" };
+  }
+  const dismissalId = await evidenceCaseDismissalStatementDigestAsync(
+    statement,
+    options.digest,
+  );
+  if (
+    !/^[0-9a-f]{128}$/.test(authentication.signature) ||
+    !await verifier.verify(
+      arbiter.publicKey,
+      dismissalId,
+      authentication.signature,
+    )
+  ) return { ok: false, reason: "invalid_signature" };
+  const skew = Math.max(0, options.maxClockSkewMs);
+  if (statement.issuedAtMs > options.nowMs + skew) {
+    return { ok: false, reason: "certificate_from_future" };
+  }
+  if (statement.expiresAtMs < options.nowMs - skew) {
+    return { ok: false, reason: "certificate_expired" };
+  }
+  return { ok: true, dismissalId, certificate };
+}
+
+export async function verifyEvidenceCaseDismissalCertificateDual(
+  certificate: EvidenceCaseDismissalCertificate,
+  synchronous: VerifyEvidenceCaseDismissalCertificateOptions,
+  asynchronous: VerifyEvidenceCaseDismissalCertificateAsyncOptions,
+): Promise<DualVerifiedEvidenceCaseDismissalCertificate> {
+  const first = verifyEvidenceCaseDismissalCertificate(
+    certificate,
+    synchronous,
+  );
+  if (!first.ok) return first;
+  const second = await verifyEvidenceCaseDismissalCertificateAsync(
+    certificate,
+    asynchronous,
+  );
+  if (!second.ok || second.dismissalId !== first.dismissalId) {
+    return { ok: false, reason: "crypto_backend_mismatch" };
+  }
+  return first;
 }
 
 function validStatement(value: EvidenceCaseDismissalStatement): boolean {

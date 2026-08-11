@@ -2729,6 +2729,58 @@ fn worker_inventory_listing_refusal_code(
 }
 
 ///|
+fn worker_checkpoint_certificate_authentication_check(
+  kind : String,
+  certificate_index : Int,
+  public_key : @bft.PublicKey,
+  canonical_statement : String,
+  digest : @bft.Digest,
+  signature : @bft.Signature,
+) -> Json {
+  Json::object({
+    "kind": Json::string(kind),
+    "certificate_index": Json::number(certificate_index.to_double()),
+    "public_key": Json::string(public_key.0),
+    "canonical_statement": Json::string(canonical_statement),
+    "digest": Json::string(digest.0),
+    "signature": Json::string(signature.0),
+  })
+}
+
+///|
+fn worker_checkpoint_certificate_authentication_transcript(
+  signed_checkpoint : @checkpoint.SignedCheckpoint,
+  attestations : Array[@attestation.SignedAttestation],
+) -> Json {
+  let checks = [
+    worker_checkpoint_certificate_authentication_check(
+      "authority_checkpoint",
+      0,
+      signed_checkpoint.authority_key,
+      @checkpoint.serialize_checkpoint(signed_checkpoint.checkpoint),
+      signed_checkpoint.digest,
+      signed_checkpoint.signature,
+    ),
+  ]
+  for index, signed in attestations {
+    checks.push(
+      worker_checkpoint_certificate_authentication_check(
+        "replay_witness_attestation",
+        index + 1,
+        signed.signer_key,
+        @attestation.serialize_attestation(signed.attestation),
+        signed.digest,
+        signed.signature,
+      ),
+    )
+  }
+  Json::object({
+    "attestation_count": Json::number(attestations.length().to_double()),
+    "checks": Json::array(checks),
+  })
+}
+
+///|
 /// Production bridge for the current-owner marketplace proof boundary.
 pub fn audit_verify_inventory_listing_proof_bundle(
   bundle_hex : String,
@@ -2773,7 +2825,15 @@ pub fn audit_verify_inventory_listing_proof_bundle(
       rejected_ancestor~,
       limits=@wire.InventoryListingWireLimits::default(),
     ) {
-    InventoryListingVerified(verified) =>
+    InventoryListingVerified(verified) => {
+      let decoded = match
+        @wire.decode_inventory_listing_proof_bundle(
+          input,
+          limits=@wire.InventoryListingWireLimits::default(),
+        ) {
+        Ok(value) => value
+        Err(_) => return worker_error("listing_transcript_decode_failed")
+      }
       Json::object({
         "ok": Json::boolean(true),
         "complete": Json::boolean(true),
@@ -2792,8 +2852,13 @@ pub fn audit_verify_inventory_listing_proof_bundle(
         "required_approvals": Json::number(
           verified.required_approvals().to_double(),
         ),
+        "checkpoint_authentication": worker_checkpoint_certificate_authentication_transcript(
+          decoded.signed_checkpoint,
+          decoded.attestations,
+        ),
         "bundle_bytes": Json::number(input.length().to_double()),
       }).stringify()
+    }
     InventoryListingRefused(reason) =>
       Json::object({
         "ok": Json::boolean(false),
@@ -2959,6 +3024,83 @@ fn worker_inventory_lineage_refusal_code(
 }
 
 ///|
+fn worker_inventory_lineage_authentication_check(
+  kind : String,
+  transfer_index : Int,
+  public_key : @bft.PublicKey,
+  canonical_statement : String,
+  digest : @bft.Digest,
+  signature : @bft.Signature,
+) -> Json {
+  Json::object({
+    "kind": Json::string(kind),
+    "transfer_index": Json::number(transfer_index.to_double()),
+    "public_key": Json::string(public_key.0),
+    "canonical_statement": Json::string(canonical_statement),
+    "digest": Json::string(digest.0),
+    "signature": Json::string(signature.0),
+  })
+}
+
+///|
+fn worker_inventory_lineage_authentication_checks(
+  transfers : Array[@inventory.AuthenticatedAssetLineageTransfer],
+) -> Array[Json] {
+  let checks : Array[Json] = []
+  for transfer_index, entry in transfers {
+    let signed = entry.signed_transfer
+    checks.push(
+      worker_inventory_lineage_authentication_check(
+        "sender_binding",
+        transfer_index,
+        entry.sender_binding.authority_key,
+        @inventory.serialize_asset_owner_key_binding(
+          entry.sender_binding.binding,
+        ),
+        entry.sender_binding.digest,
+        entry.sender_binding.signature,
+      ),
+    )
+    checks.push(
+      worker_inventory_lineage_authentication_check(
+        "recipient_binding",
+        transfer_index,
+        entry.recipient_binding.authority_key,
+        @inventory.serialize_asset_owner_key_binding(
+          entry.recipient_binding.binding,
+        ),
+        entry.recipient_binding.digest,
+        entry.recipient_binding.signature,
+      ),
+    )
+    let canonical_transfer = @inventory.serialize_asset_lineage_transfer_authorization(
+      signed.authorization,
+    )
+    checks.push(
+      worker_inventory_lineage_authentication_check(
+        "sender_transfer",
+        transfer_index,
+        signed.authorization.sender_key,
+        canonical_transfer,
+        signed.digest,
+        signed.sender_signature,
+      ),
+    )
+    checks.push(
+      worker_inventory_lineage_authentication_check(
+        "recipient_transfer",
+        transfer_index,
+        signed.authorization.recipient_key,
+        canonical_transfer,
+        signed.digest,
+        signed.recipient_signature,
+      ),
+    )
+  }
+  checks
+}
+
+///|
 /// Verify a bounded historical suffix against an explicit server-retained
 /// anchor and the exact monotonic inventory checkpoint boundary.
 pub fn audit_verify_inventory_lineage_proof_bundle(
@@ -3018,6 +3160,14 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
       limits=@wire.InventoryLineageWireLimits::default(),
     ) {
     InventoryLineageCentralVerified(verified) => {
+      let decoded = match
+        @wire.decode_inventory_lineage_proof_bundle(
+          input,
+          limits=@wire.InventoryLineageWireLimits::default(),
+        ) {
+        Ok(value) => value
+        Err(_) => return worker_error("lineage_transcript_decode_failed")
+      }
       let events = verified
         .transfer_events()
         .map(fn(event) { Json::string(event.0) })
@@ -3051,6 +3201,15 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
         "transfer_count": Json::number(verified.transfer_count().to_double()),
         "transfer_events": Json::array(events),
         "transitions": Json::array(transitions),
+        "authentication_checks": Json::array(
+          worker_inventory_lineage_authentication_checks(
+            decoded.lineage.transfers,
+          ),
+        ),
+        "checkpoint_authentication": worker_checkpoint_certificate_authentication_transcript(
+          decoded.listing.signed_checkpoint,
+          decoded.listing.attestations,
+        ),
         "final_owner_id": Json::string(final_anchor.owner_id),
         "final_version": Json::number(final_anchor.version.to_double()),
         "final_last_event": Json::string(final_anchor.last_event.0),
@@ -3364,6 +3523,14 @@ pub fn audit_verify_inventory_checkpoint_proof_bundle(
       limits=@wire.InventoryCheckpointWireLimits::default(),
     ) {
     InventoryCheckpointCentralVerified(verified) => {
+      let decoded = match
+        @wire.decode_inventory_checkpoint_proof_bundle(
+          input,
+          limits=@wire.InventoryCheckpointWireLimits::default(),
+        ) {
+        Ok(value) => value
+        Err(_) => return worker_error("checkpoint_transcript_decode_failed")
+      }
       let assets = verified
         .records()
         .map(fn(record) {
@@ -3391,6 +3558,10 @@ pub fn audit_verify_inventory_checkpoint_proof_bundle(
         "approval_count": Json::number(verified.approval_count().to_double()),
         "required_approvals": Json::number(
           verified.required_approvals().to_double(),
+        ),
+        "checkpoint_authentication": worker_checkpoint_certificate_authentication_transcript(
+          decoded.signed_checkpoint,
+          decoded.attestations,
         ),
         "bundle_bytes": Json::number(input.length().to_double()),
       }).stringify()

@@ -370,8 +370,14 @@ player/authority wire custodyのreference contractは`Implemented + Proven/Model
 標準WebCryptoでowner proofを生成し、Workerで標準WebCrypto + MoonBit dual verifierを通す。reference gameの
 checkpoint/journalはMoonBit所有のMerkle framingを標準WebCryptoへ渡し、browser sealed保存前とWorker replay
 受理時にdual commitmentを要求する。origin receipt、ownership head、transfer、listing、checkpoint receiptの
-派生IDもSQLite更新またはauthority応答前に両backendの一致を要求する。汎用open-world lineage proofと裁定
-certificateなど、残るWorker暗号経路は未監査backendのままである。
+派生IDもSQLite更新またはauthority応答前に両backendの一致を要求する。汎用open-world lineage proofの保存IDと
+reference/open-worldのlineage decision、reference evidence dismissal certificateも同じdual gateを通す。opaque
+evidence-source proposal/resolution envelopeもmessage/reference/case digestとsource署名のdual gateを通す。
+open-world lineage bundleも各transferのauthority owner-key binding 2件とsender/recipient署名2件を
+canonical transcriptとして抽出し、4件×transferを標準WebCryptoで独立再検証する。さらにcompact listing、
+multi-asset checkpoint、lineageの全経路でauthority checkpointと全replay-witness attestationを同じ
+certificate transcriptとして抽出し、状態変更前に標準WebCryptoで再検証する。semantic root再計算は
+未監査backendのままである。
 production profileでは全route/Queueを拒否するため、production security gate全体は`Partial`。詳細は
 [鍵ライフサイクル契約](./key-lifecycle-ja.md)を参照する。
 
@@ -451,5 +457,6 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 | reference owner proof | item精算・二者transfer・listing・cancelは同じcanonical文を標準WebCryptoとMoonBitの両方が受理した場合だけ業務状態を更新する | `AssetOwnership.qnt` auth guard + WebCrypto/MoonBit相互運用test + workerd integration | Model checked + Tested locally。暗号強度そのものは未証明 | `just formal-check` + `pnpm --dir examples/cf-game-audit test` |
 | reference checkpoint commitment | game replayは一度だけ行い、MoonBit所有のMerkle framingを使う標準WebCryptoとMoonBitがevent root/state/genesis/chain/envelope digestで一致した場合だけ保存する | pure async adapter + 0/1/odd/power-of-two/30/Unicode相互運用test + broken-backend negative control + workerd integration | Tested locally。既存replay/finality predicateはMoonBit proof対象、backend等価性と暗号強度は未証明 | `moon test` + `pnpm --dir examples/cf-game-audit test` |
 | reference derived asset identity | origin receiptからownership head、transfer、listingまでのcanonical ID chainとcheckpoint receiptは標準WebCryptoとMoonBitが一致した場合だけSQLite更新またはauthority応答へ進む | pure sync/async ID adapter相互運用test + broken-backend negative control + workerd integration | Tested locally。既存ownership遷移はQuintでmodel checked、backend等価性と暗号強度は未証明 | `just formal-check` + `pnpm --dir examples/cf-game-audit test` |
+| lineage derived identity and adjudication | open-world lineage proofの保存ID、authority checkpoint + replay-witness certificate、4件×transferの内部認証、reference/open-world decision、reference dismissal、evidence-source proposal/resolutionは同期MoonBit backendと非同期WebCrypto backendがdigest・署名で一致した場合だけ永続化する | MoonBit canonical authentication transcript + cached async WebCrypto verifier + broken-backend negative control + workerd integration | Tested locally。lineage状態遷移はQuintでmodel checked、semantic root再計算と暗号強度は未解決 | `just formal-check` + `pnpm --dir examples/cf-game-audit test` |
 | remote checkpoint/witness infrastructure | Worker、direct authority RPC、durable retry、replay Queue、両Secret、公開route | current `a3c07778-037d-40cf-b2e9-5ad55afdec91`、direct 20-run + deferred alarm smoke artifacts | Deployed + authority ACK 20/20、現行version direct/deferred各1/1 | [Cloudflare実測](./cloudflare-game-audit-ja.md) |
 | production crypto | signature/hashが攻撃耐性を持つ | security audit未実施 | unresolved | audited backendなしにproduction claimを禁止 |

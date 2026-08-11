@@ -197,15 +197,19 @@ revokeした場合は、両方がappealされるまで再許可しない。decis
 低コストfast pathになる。challenge・高価値・witness fork時のbounded lineage slow pathは接続済みで、
 全frame logではなくcurrent authenticated recordへ到達するtransfer証拠だけを検証する。
 
-local generated-JS実暗号benchmark（20反復、同一開発機）では次の値だった。これはremote Worker RTTを
-含まず、比較用の小標本である。
+local generated-JS実暗号benchmark（2026-08-11、20反復、同一開発機）では次の値だった。これはremote
+Worker RTTを含まず、比較用の小標本である。transfer authは4件×transferのtranscriptを検査するが、同じ
+owner-key bindingはcacheして重複hash/signature検証を避ける。certificateはauthority checkpoint 1件と
+replay-witness attestation 3件を検査する固定費である。
 
-| transfer数 | bundle bytes | verify mean | verify p95 |
-| ---: | ---: | ---: | ---: |
-| 1 | 4,313 | 33.001 ms | 34.207 ms |
-| 8 | 12,727 | 115.017 ms | 115.789 ms |
-| 32 | 41,670 | 398.702 ms | 403.495 ms |
-| 64 | 80,326 | 814.079 ms | 824.046 ms |
+| transfer数 | bundle bytes | MoonBit verify mean / p95 | WebCrypto transfer mean / p95 | WebCrypto certificate mean / p95 | WebCrypto合計 mean / p95 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 4,313 | 35.997 / 40.298 ms | 0.237 / 0.527 ms | 0.399 / 0.404 ms | 0.638 / 0.934 ms |
+| 8 | 12,727 | 124.665 / 140.684 ms | 0.700 / 0.822 ms | 0.337 / 0.589 ms | 1.038 / 1.412 ms |
+| 32 | 41,670 | 457.344 / 505.579 ms | 2.338 / 3.388 ms | 0.285 / 0.331 ms | 2.625 / 3.670 ms |
+| 64 | 80,326 | 841.785 / 893.452 ms | 4.182 / 4.971 ms | 0.341 / 0.518 ms | 4.524 / 5.494 ms |
+
+64 transferでcheckpoint certificateを含む追加認証の平均は既存MoonBit verifyの約0.54%だった。
 
 `pnpm --dir examples/cf-game-audit bench:lineage`で再測定できる。binding table導入前の64件
 104,360 bytes / 1,139.736 msから、80,326 bytes / 773.854 msへ減少した（各1反復の比較）。
@@ -447,6 +451,7 @@ pnpm bench:witness
 | reference item/transfer/listing/cancelのowner proofを標準暗号で受理する | browser WebCrypto SHA-256/Ed25519 + Worker WebCrypto/MoonBit dual verifier + workerd integration | Tested locally |
 | reference checkpoint/journalを標準暗号でも検証する | MoonBit canonical Merkle preimage + level-parallel WebCrypto + single game replay dual commitment + browser pre-persist gate | Tested locally。remote再計測はPending |
 | reference receipt/head/transfer/listing/checkpoint receipt IDを標準暗号でも検証する | canonical sync/async ID adapter + Worker pre-transaction/pre-response dual gate + broken-backend negative control | Tested locally。remote再計測はPending |
+| lineage proof内部認証・ID・裁定certificate・evidence-source envelopeを標準暗号でも検証する | authority checkpoint + replay-witness transcript、4件×transferのMoonBit canonical transcript、open-world proof ID、decision/dismissal、source proposal/resolutionのdual verifier + pre-transaction gate | Tested locally。semantic root再計算とremote再計測はPending |
 | production cryptoである | unaudited experimental adapter | Unmet |
 
 checkpoint transportはinternal DO RPCを通常の認証済みchannelとして扱い、Queue consumerを

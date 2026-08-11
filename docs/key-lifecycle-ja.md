@@ -16,7 +16,11 @@ Workerのcheckpoint配送認証は標準WebCryptoと既存MoonBit verifierの二
 reference gameのitem精算・transfer・listing・cancelのowner proofも同じ二重検証へ接続済みだが、
 reference checkpoint/journalもsealed保存とWorker受理時に標準WebCryptoとの一致を要求する。reference固有の
 authority receipt、ownership head、transfer/listing ID、checkpoint receiptも永続化または応答前に両backendの
-一致を要求する。ただし汎用open-world lineage proofや裁定certificateには`experimental_crypto`が残る。従ってend-to-endの
+一致を要求する。open-world lineage proofの保存IDとlineage decision/evidence dismissal certificateも両backendの
+一致を要求し、evidence-source proposal/resolution envelopeもmessage/reference/case digestとsource署名を二重検証する。
+open-world lineage bundle内部もowner-key bindingとsender/recipient transfer署名を二重検証する。embedded
+compact listingとmulti-asset checkpointもauthority checkpointおよび全replay-witness attestationを
+状態変更前に二重検証する。ただしsemantic root再計算には`experimental_crypto`が残る。従ってend-to-endの
 production暗号を接続したという主張ではなく、production profileのWorkerはfail-closedになる。
 
 ## 1. 汎用契約とgame固有policyの境界
@@ -226,7 +230,8 @@ aimbot、roster管理者の悪意、暗号実装のconstant-time性、端末at-r
 checkpoint配送は、MoonBitが生成するcanonical bytesを標準WebCryptoでhash/signature検証した後、既存MoonBit
 verifierも同じopaque capabilityへ到達した場合だけwitness collection、source seal、receiver mutationへ進む。
 producer/witness署名生成も同じMoonBit serializerと交換可能な非同期signerを使い、生成署名を送信前に自己検証する。
-収集中の正当な`under_quorum`にはexact-bound partial capabilityを発行する。未解決なのは、
-汎用open-world lineage proofや裁定certificateに残るWorker同期hash/verifierの標準backend化、上記SQL relationのCloudflare/端末DB migration、
+収集中の正当な`under_quorum`にはexact-bound partial capabilityを発行する。inventory listing/checkpoint/lineageの
+authority checkpointとreplay-witness attestationも同じ標準/MoonBit二重検証を通す。未解決なのは、
+semantic root再計算に残るWorker同期hashの標準backend化、上記SQL relationのCloudflare/端末DB migration、
 authority署名鍵の外部custody、timestamp trust、backend/providerの運用監査である。
 browser custodyだけを根拠にIssue #9全体を完了扱いしてはならない。

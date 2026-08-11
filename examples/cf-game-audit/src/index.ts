@@ -31,20 +31,26 @@ import {
 import {
   decodeLineageDecisionCertificate,
   parseLineageDecisionArbiterRoster,
-  verifyLineageDecisionCertificate,
+  verifyLineageDecisionCertificateDual,
   type LineageDecisionLifecycle,
 } from "./lineage-decision-certificate";
 import {
   evidenceLineageCaseHoldResolutionDraft,
   parseEvidenceLineageCaseSourceRoster,
-  verifyEvidenceLineageCaseProposal,
-  verifyEvidenceLineageCaseSourceEnvelope,
+  verifyEvidenceLineageCaseProposalDual,
+  verifyEvidenceLineageCaseSourceEnvelopeDual,
   type EvidenceLineageCaseReference,
 } from "../../player-local-runtime/evidence-lineage-case";
 import {
   decodeEvidenceCaseDismissalCertificate,
-  verifyEvidenceCaseDismissalCertificate,
+  verifyEvidenceCaseDismissalCertificateDual,
 } from "./evidence-case-dismissal-certificate";
+import {
+  inventoryLineageProofDigest,
+  inventoryLineageProofDigestAsync,
+  verifyInventoryLineageAuthenticationTranscript,
+} from "./inventory-lineage-proof";
+import { verifyInventoryCheckpointCertificateAuthentication } from "./inventory-checkpoint-certificate";
 import type { AuditDigestAdapter } from "../game/audit/journal";
 import {
   decodeGameCheckpointVerificationRequest,
@@ -587,6 +593,9 @@ const ACTIVE_WORKER_CRYPTO_BACKEND: AuditCryptoBackendDescriptor =
   });
 const standardWorkerCryptoBackend =
   createStandardWebCryptoBackend(crypto);
+const standardReferenceGameLineageDecisionVerifiers = Object.freeze({
+  "moonbit-ed25519-v1": standardWorkerCryptoBackend,
+});
 const standardReferenceGameDigest = createAsyncAuditDigestAdapter(
   standardWorkerCryptoBackend,
   referenceGameMerkleFraming,
@@ -4316,15 +4325,24 @@ export class GameAuditShard extends DurableObject<Env> {
     if (!roster) {
       return jsonError("evidence_hold_source_roster_not_configured", 503);
     }
-    const verified = await verifyEvidenceLineageCaseProposal(body.value, {
-      roster,
-      verifiers: referenceGameLineageDecisionVerifiers,
-      digest: referenceGameDigest,
-    });
+    const verified = await verifyEvidenceLineageCaseProposalDual(
+      body.value,
+      {
+        roster,
+        verifiers: referenceGameLineageDecisionVerifiers,
+        digest: referenceGameDigest,
+      },
+      {
+        roster,
+        verifiers: standardReferenceGameLineageDecisionVerifiers,
+        digest: standardWorkerCryptoBackend,
+      },
+    );
     if (!verified.ok) {
       return jsonResponse(
         { ok: false, decision: verified.reason },
-        verified.reason === "invalid_proposal" ? 400 : 403,
+        verified.reason === "crypto_backend_mismatch" ? 500 :
+          verified.reason === "invalid_proposal" ? 400 : 403,
       );
     }
     const target = verified.proposal.target;
@@ -4501,17 +4519,32 @@ export class GameAuditShard extends DurableObject<Env> {
       return jsonError("lineage_arbiter_roster_not_configured", 503);
     }
     const dismissedAt = Date.now();
-    const verified = verifyEvidenceCaseDismissalCertificate(certificate, {
-      expectedScope: "reference-game",
-      expectedUnit: unit,
-      nowMs: dismissedAt,
-      maxClockSkewMs,
-      roster,
-      verifiers: referenceGameLineageDecisionVerifiers,
-      digest: referenceGameDigest,
-    });
+    const verified = await verifyEvidenceCaseDismissalCertificateDual(
+      certificate,
+      {
+        expectedScope: "reference-game",
+        expectedUnit: unit,
+        nowMs: dismissedAt,
+        maxClockSkewMs,
+        roster,
+        verifiers: referenceGameLineageDecisionVerifiers,
+        digest: referenceGameDigest,
+      },
+      {
+        expectedScope: "reference-game",
+        expectedUnit: unit,
+        nowMs: dismissedAt,
+        maxClockSkewMs,
+        roster,
+        verifiers: standardReferenceGameLineageDecisionVerifiers,
+        digest: standardWorkerCryptoBackend,
+      },
+    );
     if (!verified.ok) {
-      return jsonResponse({ ok: false, decision: verified.reason }, 403);
+      return jsonResponse(
+        { ok: false, decision: verified.reason },
+        verified.reason === "crypto_backend_mismatch" ? 500 : 403,
+      );
     }
     const statement = certificate.statement;
     const existing = this.referenceGameEvidenceCaseDismissalAt(
@@ -4735,7 +4768,7 @@ export class GameAuditShard extends DurableObject<Env> {
     if (!roster) {
       return jsonError("evidence_hold_source_roster_not_configured", 503);
     }
-    const verified = await verifyEvidenceLineageCaseSourceEnvelope(
+    const verified = await verifyEvidenceLineageCaseSourceEnvelopeDual(
       envelope,
       referenceGameEvidenceCaseBoundary(evidenceCase),
       evidenceCase.source_id,
@@ -4744,10 +4777,18 @@ export class GameAuditShard extends DurableObject<Env> {
         verifiers: referenceGameLineageDecisionVerifiers,
         digest: referenceGameDigest,
       },
+      {
+        roster,
+        verifiers: standardReferenceGameLineageDecisionVerifiers,
+        digest: standardWorkerCryptoBackend,
+      },
     );
     if (!verified.ok) {
-      return jsonResponse({ ok: false, decision: verified.reason },
-        verified.reason === "invalid_proposal" ? 400 : 403);
+      return jsonResponse(
+        { ok: false, decision: verified.reason },
+        verified.reason === "crypto_backend_mismatch" ? 500 :
+          verified.reason === "invalid_proposal" ? 400 : 403,
+      );
     }
     const operation = verified.envelope.operation;
     const resolution = operation.kind === "resolve"
@@ -4974,20 +5015,32 @@ export class GameAuditShard extends DurableObject<Env> {
       return jsonError("lineage_arbiter_roster_not_configured", 503);
     }
     const decidedAt = Date.now();
-    const verifiedCertificate = verifyLineageDecisionCertificate(certificate, {
-      expectedScope: "reference-game",
-      expectedUnit: unit,
-      nowMs: decidedAt,
-      maxClockSkewMs,
-      roster,
-      verifiers: referenceGameLineageDecisionVerifiers,
-      digest: referenceGameDigest,
-    });
+    const verifiedCertificate = await verifyLineageDecisionCertificateDual(
+      certificate,
+      {
+        expectedScope: "reference-game",
+        expectedUnit: unit,
+        nowMs: decidedAt,
+        maxClockSkewMs,
+        roster,
+        verifiers: referenceGameLineageDecisionVerifiers,
+        digest: referenceGameDigest,
+      },
+      {
+        expectedScope: "reference-game",
+        expectedUnit: unit,
+        nowMs: decidedAt,
+        maxClockSkewMs,
+        roster,
+        verifiers: standardReferenceGameLineageDecisionVerifiers,
+        digest: standardWorkerCryptoBackend,
+      },
+    );
     if (!verifiedCertificate.ok) {
       return jsonResponse({
         ok: false,
         decision: verifiedCertificate.reason,
-      }, 403);
+      }, verifiedCertificate.reason === "crypto_backend_mismatch" ? 500 : 403);
     }
     const statement = certificate.statement;
     const assetId = statement.assetId;
@@ -5604,12 +5657,23 @@ export class GameAuditShard extends DurableObject<Env> {
     ) {
       return jsonError("invalid_asset_lineage_proof", 400);
     }
-    const proofDigest = referenceGameDigest.hashString(JSON.stringify([
-      "converge-audit-inventory-lineage-proof-v1",
+    const proofIdentity = {
       unit,
       assetId,
       lineageBundleHex,
-    ]));
+    };
+    const proofDigest = inventoryLineageProofDigest(
+      proofIdentity,
+      referenceGameDigest,
+    );
+    if (
+      await inventoryLineageProofDigestAsync(
+        proofIdentity,
+        standardWorkerCryptoBackend,
+      ) !== proofDigest
+    ) {
+      return jsonError("inventory_lineage_crypto_backend_mismatch", 500);
+    }
     const duplicate = this.verifiedAssetLineageProofAt(proofDigest);
     if (duplicate) {
       return jsonResponse({
@@ -5706,6 +5770,34 @@ export class GameAuditShard extends DurableObject<Env> {
         proof_error: verification.error,
         asset_id: assetId,
       }, 403);
+    }
+    const standardCheckpointAuthentication =
+      await verifyInventoryCheckpointCertificateAuthentication(
+        verification.checkpoint_authentication,
+        standardWorkerCryptoBackend,
+      );
+    if (!standardCheckpointAuthentication.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_checkpoint_certificate_crypto_backend_mismatch",
+        check_index: standardCheckpointAuthentication.checkIndex,
+        crypto_error: standardCheckpointAuthentication.reason,
+        asset_id: assetId,
+      }, 500);
+    }
+    const standardAuthentication =
+      await verifyInventoryLineageAuthenticationTranscript(
+        verification,
+        standardWorkerCryptoBackend,
+      );
+    if (!standardAuthentication.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_lineage_crypto_backend_mismatch",
+        check_index: standardAuthentication.checkIndex,
+        crypto_error: standardAuthentication.reason,
+        asset_id: assetId,
+      }, 500);
     }
     if (
       verification.asset_id !== assetId ||
@@ -5905,20 +5997,32 @@ export class GameAuditShard extends DurableObject<Env> {
       return jsonError("lineage_arbiter_roster_not_configured", 503);
     }
     const decidedAt = Date.now();
-    const verifiedCertificate = verifyLineageDecisionCertificate(certificate, {
-      expectedScope: "verified-asset",
-      expectedUnit: unit,
-      nowMs: decidedAt,
-      maxClockSkewMs,
-      roster,
-      verifiers: referenceGameLineageDecisionVerifiers,
-      digest: referenceGameDigest,
-    });
+    const verifiedCertificate = await verifyLineageDecisionCertificateDual(
+      certificate,
+      {
+        expectedScope: "verified-asset",
+        expectedUnit: unit,
+        nowMs: decidedAt,
+        maxClockSkewMs,
+        roster,
+        verifiers: referenceGameLineageDecisionVerifiers,
+        digest: referenceGameDigest,
+      },
+      {
+        expectedScope: "verified-asset",
+        expectedUnit: unit,
+        nowMs: decidedAt,
+        maxClockSkewMs,
+        roster,
+        verifiers: standardReferenceGameLineageDecisionVerifiers,
+        digest: standardWorkerCryptoBackend,
+      },
+    );
     if (!verifiedCertificate.ok) {
       return jsonResponse({
         ok: false,
         decision: verifiedCertificate.reason,
-      }, 403);
+      }, verifiedCertificate.reason === "crypto_backend_mismatch" ? 500 : 403);
     }
     const statement = certificate.statement;
     if (statement.version === 2) {
@@ -6359,6 +6463,19 @@ export class GameAuditShard extends DurableObject<Env> {
         proof_error: verification.error,
       }, 403);
     }
+    const standardCheckpointAuthentication =
+      await verifyInventoryCheckpointCertificateAuthentication(
+        verification.checkpoint_authentication,
+        standardWorkerCryptoBackend,
+      );
+    if (!standardCheckpointAuthentication.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_checkpoint_certificate_crypto_backend_mismatch",
+        check_index: standardCheckpointAuthentication.checkIndex,
+        crypto_error: standardCheckpointAuthentication.reason,
+      }, 500);
+    }
     if (
       verification.asset_count !== assets.length ||
       verification.assets.length !== assets.length ||
@@ -6690,6 +6807,23 @@ export class GameAuditShard extends DurableObject<Env> {
           asset_id: assetId,
           seller_id: sellerId,
         }, 403);
+      }
+      const standardCheckpointAuthentication =
+        await verifyInventoryCheckpointCertificateAuthentication(
+          verification.checkpoint_authentication,
+          standardWorkerCryptoBackend,
+        );
+      if (!standardCheckpointAuthentication.ok) {
+        return jsonResponse({
+          ok: false,
+          allowed: false,
+          decision:
+            "inventory_checkpoint_certificate_crypto_backend_mismatch",
+          check_index: standardCheckpointAuthentication.checkIndex,
+          crypto_error: standardCheckpointAuthentication.reason,
+          asset_id: assetId,
+          seller_id: sellerId,
+        }, 500);
       }
       const sameHead = verification.checkpoint_digest ===
         creation.inventory_checkpoint_digest;
