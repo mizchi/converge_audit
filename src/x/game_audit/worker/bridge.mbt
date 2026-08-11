@@ -3176,6 +3176,9 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
         .map(fn(transition) {
           Json::object({
             "asset_id": Json::string(transition.asset_id),
+            "origin_receipt_digest": Json::string(
+              transition.origin_receipt_digest.0,
+            ),
             "from_owner": Json::string(transition.from_owner),
             "to_owner": Json::string(transition.to_owner),
             "expected_version": Json::number(
@@ -3192,12 +3195,17 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
           })
         })
       let final_anchor = verified.final_anchor()
+      let initial_anchor = verified.initial_anchor()
       Json::object({
         "ok": Json::boolean(true),
         "complete": Json::boolean(true),
         "checkpoint_digest": Json::string(verified.checkpoint_digest().0),
         "asset_id": Json::string(verified.asset_id()),
         "current_owner_id": Json::string(verified.current_owner_id()),
+        "initial_owner_id": Json::string(initial_anchor.owner_id),
+        "initial_version": Json::number(initial_anchor.version.to_double()),
+        "initial_last_event": Json::string(initial_anchor.last_event.0),
+        "initial_lineage_root": Json::string(initial_anchor.lineage_root.0),
         "transfer_count": Json::number(verified.transfer_count().to_double()),
         "transfer_events": Json::array(events),
         "transitions": Json::array(transitions),

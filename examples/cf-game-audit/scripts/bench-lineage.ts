@@ -1,5 +1,6 @@
 import { summarizeLatency } from "../src/benchmark-metrics";
 import { verifyInventoryLineageAuthenticationTranscript } from "../src/inventory-lineage-proof";
+import { verifyInventoryLineageSemantics } from "../src/inventory-lineage-semantics";
 import { verifyInventoryCheckpointCertificateAuthentication } from "../src/inventory-checkpoint-certificate";
 import {
   createStandardWebCryptoBackend,
@@ -100,10 +101,16 @@ for (const length of LENGTHS) {
       standardBackend,
     );
   if (!warmCheckpoint.ok) throw new Error(warmCheckpoint.reason);
+  const warmSemantics = await verifyInventoryLineageSemantics(
+    warmVerification,
+    standardBackend,
+  );
+  if (!warmSemantics.ok) throw new Error(warmSemantics.reason);
   const generation: number[] = [];
   const verification: number[] = [];
   const standardAuthentication: number[] = [];
   const standardCheckpointAuthentication: number[] = [];
+  const standardSemanticRoots: number[] = [];
   const standardTotalAuthentication: number[] = [];
   for (let index = 0; index < ITERATIONS; index++) {
     let started = performance.now();
@@ -127,8 +134,15 @@ for (const length of LENGTHS) {
       standardBackend,
     );
     standardAuthentication.push(performance.now() - started);
-    standardTotalAuthentication.push(performance.now() - standardStarted);
     if (!standard.ok) throw new Error(standard.reason);
+    started = performance.now();
+    const semantics = await verifyInventoryLineageSemantics(
+      verified,
+      standardBackend,
+    );
+    standardSemanticRoots.push(performance.now() - started);
+    standardTotalAuthentication.push(performance.now() - standardStarted);
+    if (!semantics.ok) throw new Error(semantics.reason);
   }
   results.push({
     transfer_count: length,
@@ -142,7 +156,8 @@ for (const length of LENGTHS) {
     standard_checkpoint_certificate_ms: summarizeLatency(
       standardCheckpointAuthentication,
     ),
-    standard_total_authentication_ms: summarizeLatency(
+    standard_semantic_roots_ms: summarizeLatency(standardSemanticRoots),
+    standard_total_verification_ms: summarizeLatency(
       standardTotalAuthentication,
     ),
   });

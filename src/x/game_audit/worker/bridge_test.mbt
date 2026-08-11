@@ -448,8 +448,14 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
   guard @json.parse(verified) is Object(result) &&
     result["ok"] is True &&
     result["current_owner_id"] is String("bob") &&
+    result["initial_owner_id"] is String(initial_owner_id) &&
+    result["initial_version"] is Number(initial_version, ..) &&
+    result["initial_last_event"] is String(initial_last_event) &&
+    result["initial_lineage_root"] is String(initial_lineage_root) &&
     result["transfer_count"] is Number(1.0, ..) &&
     result["transfer_events"] is Array([String(transfer_event), ..]) &&
+    result["transitions"] is Array([Object(semantic_transition)]) &&
+    semantic_transition["origin_receipt_digest"] is String(origin_digest) &&
     result["authentication_checks"]
     is Array(
       [
@@ -471,6 +477,11 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     ) &&
     authority_check["kind"] is String("authority_checkpoint") &&
     witness_check["kind"] is String("replay_witness_attestation") &&
+    initial_owner_id == anchor_owner_id &&
+    initial_version.to_int() == anchor_version.to_int() &&
+    initial_last_event == anchor_last_event &&
+    initial_lineage_root == anchor_lineage_root &&
+    origin_digest != "" &&
     transfer_event != "" else {
     fail("expected historical inventory lineage verification")
   }

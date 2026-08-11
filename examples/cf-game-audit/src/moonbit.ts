@@ -399,6 +399,7 @@ export type InventoryCheckpointVerification =
 
 export interface VerifiedInventoryLineageTransition {
   asset_id: string;
+  origin_receipt_digest: string;
   from_owner: string;
   to_owner: string;
   expected_version: number;
@@ -429,6 +430,10 @@ export interface VerifiedInventoryLineage {
   checkpoint_digest: string;
   asset_id: string;
   current_owner_id: string;
+  initial_owner_id: string;
+  initial_version: number;
+  initial_last_event: string;
+  initial_lineage_root: string;
   transfer_count: number;
   transfer_events: string[];
   transitions: VerifiedInventoryLineageTransition[];

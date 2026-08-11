@@ -50,6 +50,7 @@ import {
   inventoryLineageProofDigestAsync,
   verifyInventoryLineageAuthenticationTranscript,
 } from "./inventory-lineage-proof";
+import { verifyInventoryLineageSemantics } from "./inventory-lineage-semantics";
 import { verifyInventoryCheckpointCertificateAuthentication } from "./inventory-checkpoint-certificate";
 import type { AuditDigestAdapter } from "../game/audit/journal";
 import {
@@ -5796,6 +5797,19 @@ export class GameAuditShard extends DurableObject<Env> {
         decision: "inventory_lineage_crypto_backend_mismatch",
         check_index: standardAuthentication.checkIndex,
         crypto_error: standardAuthentication.reason,
+        asset_id: assetId,
+      }, 500);
+    }
+    const standardSemantics = await verifyInventoryLineageSemantics(
+      verification,
+      standardWorkerCryptoBackend,
+    );
+    if (!standardSemantics.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_lineage_semantic_backend_mismatch",
+        transition_index: standardSemantics.transitionIndex,
+        semantic_error: standardSemantics.reason,
         asset_id: assetId,
       }, 500);
     }
