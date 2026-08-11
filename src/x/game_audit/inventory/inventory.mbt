@@ -576,6 +576,12 @@ pub fn inventory_proof_matches_origin_receipt(
   proof : InventoryProof,
   origin : @market.ItemReceipt,
 ) -> Bool {
+  let initial_state_matches = proof.record.version != 0 ||
+    (
+      proof.record.owner_id == origin.recipient_id &&
+      proof.record.last_event == origin.source_event &&
+      proof.record.lineage_root == inventory_origin_lineage_root(hasher, origin)
+    )
   @market.validate_item_receipt(origin) == @market.ReceiptValid &&
   proof.record.asset_id == origin.asset_id &&
   proof.record.item_type == origin.item_type &&
@@ -583,7 +589,8 @@ pub fn inventory_proof_matches_origin_receipt(
   proof.record.origin_source_event == origin.source_event &&
   proof.record.origin_output_index == origin.output_index &&
   proof.record.origin_receipt_digest ==
-  inventory_origin_receipt_digest(hasher, origin)
+  inventory_origin_receipt_digest(hasher, origin) &&
+  initial_state_matches
 }
 
 ///|

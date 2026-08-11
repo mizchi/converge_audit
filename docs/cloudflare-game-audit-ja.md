@@ -200,32 +200,37 @@ revokeした場合は、両方がappealされるまで再許可しない。decis
 local generated-JS実暗号benchmark（2026-08-11、20反復、同一開発機）では次の値だった。これはremote
 Worker RTTを含まず、比較用の小標本である。transfer authは4件×transferのtranscriptを検査するが、同じ
 owner-key bindingはcacheして重複hash/signature検証を避ける。certificateはauthority checkpoint 1件と
-replay-witness attestation 3件を検査する固定費である。semanticはanchorから終端までのparent/version/owner/eventを
-追跡し、各lineage transition rootを標準SHA-256で再計算する。
+replay-witness attestation 3件を検査する固定費である。membershipは終端recordからauthenticated-map rootを、
+semanticはorigin receipt/initial lineage rootとanchorから終端までのparent/version/owner/eventを追跡し、
+それぞれ標準SHA-256で再計算する。manifestはgame manifest、authority、全witness roster、fault boundから
+replay-witness session manifestを独立再計算する。
 
-| transfer数 | bundle bytes | MoonBit verify mean / p95 | WebCrypto transfer mean / p95 | certificate mean / p95 | semantic root mean / p95 | 標準検証合計 mean / p95 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 4,313 | 34.561 / 35.922 ms | 0.187 / 0.207 ms | 0.302 / 0.407 ms | 0.031 / 0.042 ms | 0.522 / 0.610 ms |
-| 8 | 12,727 | 123.532 / 128.811 ms | 0.773 / 1.585 ms | 0.326 / 0.444 ms | 0.078 / 0.099 ms | 1.178 / 2.033 ms |
-| 32 | 41,670 | 444.800 / 457.249 ms | 2.394 / 3.212 ms | 0.340 / 0.511 ms | 0.252 / 0.344 ms | 2.986 / 4.162 ms |
-| 64 | 80,326 | 993.273 / 1,193.332 ms | 5.693 / 7.261 ms | 0.451 / 0.629 ms | 0.568 / 0.848 ms | 6.714 / 8.687 ms |
+| transfer数 | bundle bytes | MoonBit verify mean / p95 | WebCrypto transfer mean / p95 | certificate mean / p95 | manifest mean / p95 | membership mean / p95 | semantic root mean / p95 | 標準検証合計 mean / p95 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 4,313 | 35.655 / 37.103 ms | 0.173 / 0.197 ms | 0.296 / 0.353 ms | 0.036 / 0.047 ms | 0.072 / 0.087 ms | 0.055 / 0.072 ms | 0.635 / 0.703 ms |
+| 8 | 12,727 | 130.204 / 144.900 ms | 0.720 / 0.899 ms | 0.304 / 0.385 ms | 0.038 / 0.044 ms | 0.079 / 0.094 ms | 0.112 / 0.132 ms | 1.256 / 1.540 ms |
+| 32 | 41,670 | 566.852 / 723.929 ms | 3.426 / 5.818 ms | 0.478 / 1.151 ms | 0.218 / 1.247 ms | 0.195 / 0.615 ms | 0.368 / 0.530 ms | 4.688 / 7.776 ms |
+| 64 | 80,326 | 979.906 / 1,383.957 ms | 6.214 / 9.135 ms | 0.670 / 1.338 ms | 0.085 / 0.227 ms | 1.338 / 0.254 ms | 0.581 / 0.965 ms | 8.891 / 14.972 ms |
 
-64 transferでlineage transition root再計算だけならMoonBit verifyの約0.057%、標準検証全体でも約0.68%だった。
+manifest再計算のp50は0.035〜0.054 msでtransfer数に依存しなかった。64 transferで標準検証全体は
+MoonBit verifyの約0.91%だった。64件membershipのmeanには24.292 msの単発外れ値が入り、p50は0.104 msである。
 
 `pnpm --dir examples/cf-game-audit bench:lineage`で再測定できる。binding table導入前の64件
 104,360 bytes / 1,139.736 msから、80,326 bytes / 773.854 msへ減少した（各1反復の比較）。
 
 local workerd上で、asset件数ごとに固定した実暗号fixtureを別々のDOへ投入し、multi-asset bundleのHTTP
 検証とSQLite atomic commitを各3反復した小標本は次のとおりである。fixture生成と初期replayは計測外で、
-`verify`はMoonBit decode・署名/quorum・全Merkle proof、`SQLite`はtransaction内のCAS/history/batch更新、
-`E2E`はendpoint往復を含む。workerdのms timerが粗いため、短いSQLite値の0 msは無処理ではなく分解能未満を表す。
+`MoonBit verify`はMoonBit decode・署名/quorum・全Merkle proof、`standard verify`は同じcertificate、
+session manifest、全origin commitment、全authenticated-map proof/public state rootの独立再計算、`SQLite`はtransaction内の
+CAS/history/batch更新、`E2E`はendpoint往復を含む。workerdのms timerが粗いため、短い値の0 msは
+無処理ではなく分解能未満を表す。
 
-| assets | bundle bytes | verify mean / p95 | SQLite mean / p95 | E2E mean / p95 |
-| ---: | ---: | ---: | ---: | ---: |
-| 1 | 3,266 | 20.667 / 23 ms | 0.000 / 0 ms | 24.000 / 27 ms |
-| 8 | 21,794 | 22.333 / 24 ms | 0.000 / 0 ms | 26.000 / 27 ms |
-| 32 | 123,980 | 33.667 / 36 ms | 0.667 / 1 ms | 39.333 / 42 ms |
-| 64 | 338,606 | 55.333 / 59 ms | 1.667 / 2 ms | 65.667 / 70 ms |
+| assets | bundle bytes | MoonBit verify mean | standard verify mean | SQLite mean | E2E mean |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 3,266 | 18.000 ms | 0.333 ms | 0.000 ms | 21.667 ms |
+| 8 | 21,794 | 20.667 ms | 0.667 ms | 0.000 ms | 24.667 ms |
+| 32 | 123,980 | 41.000 ms | 1.000 ms | 1.000 ms | 48.000 ms |
+| 64 | 338,606 | 73.333 ms | 2.000 ms | 1.333 ms | 84.333 ms |
 
 `pnpm --dir examples/cf-game-audit bench:inventory-checkpoint`で1/8/32/64件を再測定できる。共有certificateを
 1回だけ検証するため、asset数増加の主な追加費用はproof decode/Merkle verificationとSQLite行更新になる。
@@ -452,7 +457,7 @@ pnpm bench:witness
 | reference item/transfer/listing/cancelのowner proofを標準暗号で受理する | browser WebCrypto SHA-256/Ed25519 + Worker WebCrypto/MoonBit dual verifier + workerd integration | Tested locally |
 | reference checkpoint/journalを標準暗号でも検証する | MoonBit canonical Merkle preimage + level-parallel WebCrypto + single game replay dual commitment + browser pre-persist gate | Tested locally。remote再計測はPending |
 | reference receipt/head/transfer/listing/checkpoint receipt IDを標準暗号でも検証する | canonical sync/async ID adapter + Worker pre-transaction/pre-response dual gate + broken-backend negative control | Tested locally。remote再計測はPending |
-| lineage proof内部認証・ID・裁定certificate・evidence-source envelopeを標準暗号でも検証する | authority checkpoint + replay-witness transcript、4件×transferのMoonBit canonical transcript、anchor-bound lineage transition root再計算、open-world proof ID、decision/dismissal、source proposal/resolutionのdual verifier + pre-transaction gate | Tested locally。origin root、authenticated-map/public state rootとremote再計測はPending |
+| inventory proof内部認証・ID・裁定certificate・evidence-source envelope・中央で復元可能な意味論rootを標準暗号でも検証する | authority checkpoint + replay-witness transcript/session manifest、4件×transferのMoonBit canonical transcript、origin receipt/initial root、authenticated-map/public state root、anchor-bound lineage transition root再計算、open-world proof ID、decision/dismissal、source proposal/resolutionのdual verifier + pre-transaction gate | Tested locally。event/asset-delta rootはcompact bundleに全ログを含めず`n-f` replay witnessへ意味論検証を委譲。暗号監査、remote再計測はPending |
 | production cryptoである | unaudited experimental adapter | Unmet |
 
 checkpoint transportはinternal DO RPCを通常の認証済みchannelとして扱い、Queue consumerを

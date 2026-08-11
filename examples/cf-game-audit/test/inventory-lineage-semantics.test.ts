@@ -12,6 +12,14 @@ const authoritySeed =
 const participantSeed =
   "202122232425262728292a2b2c2d2e2f" +
   "303132333435363738393a3b3c3d3e3f";
+const unicodeOrigin = {
+  asset_id: "asset-雪😀",
+  recipient_id: "alice-猫",
+  item_type: "raid-token",
+  quantity: 1,
+  source_event: "loot-event",
+  output_index: 0,
+};
 
 async function verifiedUnicodeLineage() {
   const fixture = JSON.parse(audit_benchmark_make_inventory_lineage_proof_bundle(
@@ -68,6 +76,7 @@ describe("inventory lineage semantic roots", () => {
     await expect(verifyInventoryLineageSemantics(
       verification,
       createStandardWebCryptoBackend(crypto),
+      unicodeOrigin,
     )).resolves.toEqual({ ok: true, transitionCount: 2 });
   });
 
@@ -86,6 +95,7 @@ describe("inventory lineage semantic roots", () => {
     await expect(verifyInventoryLineageSemantics(
       brokenChain,
       standard,
+      unicodeOrigin,
     )).resolves.toEqual({
       ok: false,
       reason: "transition_mismatch",
@@ -93,10 +103,25 @@ describe("inventory lineage semantic roots", () => {
     });
     await expect(verifyInventoryLineageSemantics(
       verification,
-      { hashString: async () => "0".repeat(64) },
+      {
+        hashString: async (value) =>
+          value.includes("inventory-asset-lineage-transition-v1")
+            ? "0".repeat(64)
+            : standard.hashString(value),
+      },
+      unicodeOrigin,
     )).resolves.toEqual({
       ok: false,
       reason: "root_mismatch",
+      transitionIndex: 0,
+    });
+    await expect(verifyInventoryLineageSemantics(
+      verification,
+      standard,
+      { ...unicodeOrigin, item_type: "forged-token" },
+    )).resolves.toEqual({
+      ok: false,
+      reason: "origin_mismatch",
       transitionIndex: 0,
     });
   });

@@ -1,7 +1,9 @@
 import { summarizeLatency } from "../src/benchmark-metrics";
 import { verifyInventoryLineageAuthenticationTranscript } from "../src/inventory-lineage-proof";
 import { verifyInventoryLineageSemantics } from "../src/inventory-lineage-semantics";
+import { verifyInventoryMembershipSemantics } from "../src/inventory-membership-semantics";
 import { verifyInventoryCheckpointCertificateAuthentication } from "../src/inventory-checkpoint-certificate";
+import { verifyInventoryCheckpointSemantics } from "../src/inventory-checkpoint-semantics";
 import {
   createStandardWebCryptoBackend,
 } from "../../player-local-runtime/crypto-backend";
@@ -24,6 +26,14 @@ const PLAYER_SEED =
   "303132333435363738393a3b3c3d3e3f";
 const ITERATIONS = Number(process.env.AUDIT_LINEAGE_BENCH_ITERATIONS ?? 20);
 const LENGTHS = [1, 8, 32, 64];
+const BENCH_ORIGIN = {
+  asset_id: "asset-1",
+  recipient_id: "alice",
+  item_type: "raid-token",
+  quantity: 1,
+  source_event: "loot-event",
+  output_index: 0,
+};
 
 interface LineageFixture {
   ok: true;
@@ -101,15 +111,32 @@ for (const length of LENGTHS) {
       standardBackend,
     );
   if (!warmCheckpoint.ok) throw new Error(warmCheckpoint.reason);
+  const warmCheckpointSemantics = await verifyInventoryCheckpointSemantics(
+    warmVerification.checkpoint_semantics,
+    standardBackend,
+  );
+  if (!warmCheckpointSemantics.ok) {
+    throw new Error(warmCheckpointSemantics.reason);
+  }
+  const warmMembership = await verifyInventoryMembershipSemantics(
+    warmVerification.inventory_membership,
+    standardBackend,
+    warmVerification.public_state_root,
+    [BENCH_ORIGIN],
+  );
+  if (!warmMembership.ok) throw new Error(warmMembership.reason);
   const warmSemantics = await verifyInventoryLineageSemantics(
     warmVerification,
     standardBackend,
+    BENCH_ORIGIN,
   );
   if (!warmSemantics.ok) throw new Error(warmSemantics.reason);
   const generation: number[] = [];
   const verification: number[] = [];
   const standardAuthentication: number[] = [];
   const standardCheckpointAuthentication: number[] = [];
+  const standardCheckpointSemantics: number[] = [];
+  const standardMembership: number[] = [];
   const standardSemanticRoots: number[] = [];
   const standardTotalAuthentication: number[] = [];
   for (let index = 0; index < ITERATIONS; index++) {
@@ -129,6 +156,22 @@ for (const length of LENGTHS) {
     standardCheckpointAuthentication.push(performance.now() - started);
     if (!standardCheckpoint.ok) throw new Error(standardCheckpoint.reason);
     started = performance.now();
+    const checkpointSemantics = await verifyInventoryCheckpointSemantics(
+      verified.checkpoint_semantics,
+      standardBackend,
+    );
+    standardCheckpointSemantics.push(performance.now() - started);
+    if (!checkpointSemantics.ok) throw new Error(checkpointSemantics.reason);
+    started = performance.now();
+    const membership = await verifyInventoryMembershipSemantics(
+      verified.inventory_membership,
+      standardBackend,
+      verified.public_state_root,
+      [BENCH_ORIGIN],
+    );
+    standardMembership.push(performance.now() - started);
+    if (!membership.ok) throw new Error(membership.reason);
+    started = performance.now();
     const standard = await verifyInventoryLineageAuthenticationTranscript(
       verified,
       standardBackend,
@@ -139,6 +182,7 @@ for (const length of LENGTHS) {
     const semantics = await verifyInventoryLineageSemantics(
       verified,
       standardBackend,
+      BENCH_ORIGIN,
     );
     standardSemanticRoots.push(performance.now() - started);
     standardTotalAuthentication.push(performance.now() - standardStarted);
@@ -156,6 +200,10 @@ for (const length of LENGTHS) {
     standard_checkpoint_certificate_ms: summarizeLatency(
       standardCheckpointAuthentication,
     ),
+    standard_checkpoint_semantics_ms: summarizeLatency(
+      standardCheckpointSemantics,
+    ),
+    standard_inventory_membership_ms: summarizeLatency(standardMembership),
     standard_semantic_roots_ms: summarizeLatency(standardSemanticRoots),
     standard_total_verification_ms: summarizeLatency(
       standardTotalAuthentication,

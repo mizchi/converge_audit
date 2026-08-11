@@ -2,6 +2,7 @@ import {
   "mizchi/converge_audit" @bft,
   "mizchi/converge_audit/audit/merkle",
   "mizchi/converge_audit/x/game_audit/crypto",
+  "mizchi/converge_audit/x/game_audit/witness_manifest",
 }
 
 supported_targets = "+js+wasm+wasm-gc"
@@ -19,6 +20,7 @@ options(
         "audit_browser_ed25519_public_key",
         "audit_browser_ed25519_sign",
         "audit_browser_ed25519_verify",
+        "audit_browser_replay_witness_session_manifest_statement",
       ],
     },
   },

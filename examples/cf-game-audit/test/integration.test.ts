@@ -4666,7 +4666,7 @@ describe.sequential("Cloudflare game audit shard", () => {
         2,
         replay.asset_id,
         "alice",
-        "carol",
+        "alice",
         replay.item_type,
         replay.quantity,
         replay.source_event,
@@ -4684,7 +4684,7 @@ describe.sequential("Cloudflare game audit shard", () => {
         },
         body: JSON.stringify({
           asset_id: replay.asset_id,
-          seller_id: "carol",
+          seller_id: "alice",
           inventory_bundle_hex: regressingVersion.bundle_hex,
           inventory_checkpoint_digest: regressingVersion.checkpoint_digest,
           inventory_game_manifest_digest: regressingVersion.game_manifest_digest,

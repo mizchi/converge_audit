@@ -208,7 +208,10 @@ authenticated-map path 64 stepsを既定上限とする。今回のreal-crypto s
 
 inventory checkpoint v1は1,048,576 bytes、64 proofs、64 witnesses、64 attestations、各proof path
 64 stepsを既定上限とする。canonical性はbundle全体のCBOR再encode一致とasset IDのstrict ascendingで
-判定し、共有checkpoint/witnessを1回だけ認証する。
+判定し、共有checkpoint/witnessを1回だけ認証する。inventory listing/checkpoint/lineageではさらに
+game manifest、authority、全witness roster、fault boundからsession manifestを標準SHA-256で再計算する。
+`event_root`と`asset_delta_root`の全ログはcompact bundleに含めず、`n-f` replay-witness certificateへ
+意味論検証を委譲するため、中央で再計算したrootとしては扱わない。
 
 総byte数はCBOR parserより先に確認する。ただし総byte上限だけでは、短い入力に巨大な宣言長を
 埋めた場合のinteger overflowや巨大allocationを防げない。protocol側preflight scannerが

@@ -2781,6 +2781,127 @@ fn worker_checkpoint_certificate_authentication_transcript(
 }
 
 ///|
+fn worker_inventory_checkpoint_semantic_transcript(
+  signed_checkpoint : @checkpoint.SignedCheckpoint,
+  game_manifest_digest : @bft.Digest,
+  witnesses : Array[@witness_manifest.ReplayWitnessIdentity],
+  max_faults : Int,
+) -> Json {
+  let roster = witnesses.map(fn(witness) {
+    Json::object({
+      "id": Json::string(witness.id),
+      "key": Json::string(witness.key.0),
+    })
+  })
+  let manifest_check = Json::object({
+    "kind": Json::string("replay_witness_session_manifest"),
+    "check_index": Json::number(0.0),
+    "canonical_statement": Json::string(
+      @witness_manifest.serialize_replay_witness_session_manifest(
+        game_manifest_digest~,
+        referee_key=signed_checkpoint.authority_key,
+        witnesses~,
+        max_faults~,
+      ),
+    ),
+    "expected_digest": Json::string(
+      signed_checkpoint.checkpoint.manifest_digest.0,
+    ),
+  })
+  Json::object({
+    "manifest_digest": Json::string(
+      signed_checkpoint.checkpoint.manifest_digest.0,
+    ),
+    "event_root": Json::string(signed_checkpoint.checkpoint.event_root.0),
+    "asset_delta_root": Json::string(
+      signed_checkpoint.checkpoint.asset_delta_root.0,
+    ),
+    "game_manifest_digest": Json::string(game_manifest_digest.0),
+    "referee_key": Json::string(signed_checkpoint.authority_key.0),
+    "witness_count": Json::number(witnesses.length().to_double()),
+    "witnesses": Json::array(roster),
+    "max_faults": Json::number(max_faults.to_double()),
+    "hash_check_count": Json::number(1.0),
+    "hash_checks": Json::array([manifest_check]),
+    "delegated_roots": Json::array([
+      Json::string("event_root"),
+      Json::string("asset_delta_root"),
+    ]),
+  })
+}
+
+///|
+fn worker_inventory_membership_record(record : @inventory.AssetRecord) -> Json {
+  Json::object({
+    "asset_id": Json::string(record.asset_id),
+    "owner_id": Json::string(record.owner_id),
+    "item_type": Json::string(record.item_type),
+    "quantity": Json::number(record.quantity.to_double()),
+    "origin_source_event": Json::string(record.origin_source_event.0),
+    "origin_output_index": Json::number(record.origin_output_index.to_double()),
+    "origin_receipt_digest": Json::string(record.origin_receipt_digest.0),
+    "version": Json::number(record.version.to_double()),
+    "last_event": Json::string(record.last_event.0),
+    "lineage_root": Json::string(record.lineage_root.0),
+  })
+}
+
+///|
+fn worker_inventory_membership_step(step : @authmap.AuthMapStep) -> Json {
+  match step {
+    @authmap.AuthMapStep::DescendedLeft(
+      parent_key,
+      parent_value,
+      sibling_digest
+    ) =>
+      Json::object({
+        "direction": Json::string("left"),
+        "parent_key": Json::string(parent_key),
+        "parent_value": Json::string(parent_value),
+        "sibling_digest": Json::string(sibling_digest.0),
+      })
+    @authmap.AuthMapStep::DescendedRight(
+      parent_key,
+      parent_value,
+      sibling_digest
+    ) =>
+      Json::object({
+        "direction": Json::string("right"),
+        "parent_key": Json::string(parent_key),
+        "parent_value": Json::string(parent_value),
+        "sibling_digest": Json::string(sibling_digest.0),
+      })
+  }
+}
+
+///|
+fn worker_inventory_membership_proof(proof : @inventory.InventoryProof) -> Json {
+  Json::object({
+    "record": worker_inventory_membership_record(proof.record),
+    "key": Json::string(proof.map_proof.key),
+    "value": Json::string(proof.map_proof.value),
+    "left_digest": Json::string(proof.map_proof.left_digest.0),
+    "right_digest": Json::string(proof.map_proof.right_digest.0),
+    "entry_count": Json::number(proof.map_proof.entry_count.to_double()),
+    "path": Json::array(
+      proof.map_proof.path.map(worker_inventory_membership_step),
+    ),
+  })
+}
+
+///|
+fn worker_inventory_membership_transcript(
+  expected_root : @bft.Digest,
+  proofs : Array[@inventory.InventoryProof],
+) -> Json {
+  Json::object({
+    "expected_root": Json::string(expected_root.0),
+    "proof_count": Json::number(proofs.length().to_double()),
+    "proofs": Json::array(proofs.map(worker_inventory_membership_proof)),
+  })
+}
+
+///|
 /// Production bridge for the current-owner marketplace proof boundary.
 pub fn audit_verify_inventory_listing_proof_bundle(
   bundle_hex : String,
@@ -2855,6 +2976,16 @@ pub fn audit_verify_inventory_listing_proof_bundle(
         "checkpoint_authentication": worker_checkpoint_certificate_authentication_transcript(
           decoded.signed_checkpoint,
           decoded.attestations,
+        ),
+        "checkpoint_semantics": worker_inventory_checkpoint_semantic_transcript(
+          decoded.signed_checkpoint,
+          decoded.game_manifest_digest,
+          decoded.witnesses,
+          decoded.max_faults,
+        ),
+        "inventory_membership": worker_inventory_membership_transcript(
+          decoded.signed_checkpoint.checkpoint.public_state_root,
+          [decoded.proof],
         ),
         "bundle_bytes": Json::number(input.length().to_double()),
       }).stringify()
@@ -3202,10 +3333,16 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
         "checkpoint_digest": Json::string(verified.checkpoint_digest().0),
         "asset_id": Json::string(verified.asset_id()),
         "current_owner_id": Json::string(verified.current_owner_id()),
+        "public_state_root": Json::string(
+          decoded.listing.signed_checkpoint.checkpoint.public_state_root.0,
+        ),
         "initial_owner_id": Json::string(initial_anchor.owner_id),
         "initial_version": Json::number(initial_anchor.version.to_double()),
         "initial_last_event": Json::string(initial_anchor.last_event.0),
         "initial_lineage_root": Json::string(initial_anchor.lineage_root.0),
+        "initial_origin_receipt_digest": Json::string(
+          initial_anchor.origin_receipt_digest.0,
+        ),
         "transfer_count": Json::number(verified.transfer_count().to_double()),
         "transfer_events": Json::array(events),
         "transitions": Json::array(transitions),
@@ -3217,6 +3354,16 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
         "checkpoint_authentication": worker_checkpoint_certificate_authentication_transcript(
           decoded.listing.signed_checkpoint,
           decoded.listing.attestations,
+        ),
+        "checkpoint_semantics": worker_inventory_checkpoint_semantic_transcript(
+          decoded.listing.signed_checkpoint,
+          decoded.listing.game_manifest_digest,
+          decoded.listing.witnesses,
+          decoded.listing.max_faults,
+        ),
+        "inventory_membership": worker_inventory_membership_transcript(
+          decoded.listing.signed_checkpoint.checkpoint.public_state_root,
+          [decoded.listing.proof],
         ),
         "final_owner_id": Json::string(final_anchor.owner_id),
         "final_version": Json::number(final_anchor.version.to_double()),
@@ -3570,6 +3717,16 @@ pub fn audit_verify_inventory_checkpoint_proof_bundle(
         "checkpoint_authentication": worker_checkpoint_certificate_authentication_transcript(
           decoded.signed_checkpoint,
           decoded.attestations,
+        ),
+        "checkpoint_semantics": worker_inventory_checkpoint_semantic_transcript(
+          decoded.signed_checkpoint,
+          decoded.game_manifest_digest,
+          decoded.witnesses,
+          decoded.max_faults,
+        ),
+        "inventory_membership": worker_inventory_membership_transcript(
+          decoded.signed_checkpoint.checkpoint.public_state_root,
+          decoded.proofs,
         ),
         "bundle_bytes": Json::number(input.length().to_double()),
       }).stringify()

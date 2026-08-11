@@ -52,6 +52,8 @@ import {
 } from "./inventory-lineage-proof";
 import { verifyInventoryLineageSemantics } from "./inventory-lineage-semantics";
 import { verifyInventoryCheckpointCertificateAuthentication } from "./inventory-checkpoint-certificate";
+import { verifyInventoryCheckpointSemantics } from "./inventory-checkpoint-semantics";
+import { verifyInventoryMembershipSemantics } from "./inventory-membership-semantics";
 import type { AuditDigestAdapter } from "../game/audit/journal";
 import {
   decodeGameCheckpointVerificationRequest,
@@ -5786,6 +5788,40 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id: assetId,
       }, 500);
     }
+    const standardCheckpointSemantics = await verifyInventoryCheckpointSemantics(
+      verification.checkpoint_semantics,
+      standardWorkerCryptoBackend,
+    );
+    if (!standardCheckpointSemantics.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_checkpoint_semantic_backend_mismatch",
+        semantic_error: standardCheckpointSemantics.reason,
+        asset_id: assetId,
+      }, 500);
+    }
+    const standardMembership = await verifyInventoryMembershipSemantics(
+      verification.inventory_membership,
+      standardWorkerCryptoBackend,
+      verification.public_state_root,
+      [{
+        asset_id: creation.asset_id,
+        recipient_id: creation.initial_owner_id,
+        item_type: creation.item_type,
+        quantity: creation.quantity,
+        source_event: creation.source_event,
+        output_index: creation.output_index,
+      }],
+    );
+    if (!standardMembership.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_membership_semantic_backend_mismatch",
+        proof_index: standardMembership.proofIndex,
+        semantic_error: standardMembership.reason,
+        asset_id: assetId,
+      }, 500);
+    }
     const standardAuthentication =
       await verifyInventoryLineageAuthenticationTranscript(
         verification,
@@ -5803,6 +5839,14 @@ export class GameAuditShard extends DurableObject<Env> {
     const standardSemantics = await verifyInventoryLineageSemantics(
       verification,
       standardWorkerCryptoBackend,
+      {
+        asset_id: creation.asset_id,
+        recipient_id: creation.initial_owner_id,
+        item_type: creation.item_type,
+        quantity: creation.quantity,
+        source_event: creation.source_event,
+        output_index: creation.output_index,
+      },
     );
     if (!standardSemantics.ok) {
       return jsonResponse({
@@ -6477,6 +6521,7 @@ export class GameAuditShard extends DurableObject<Env> {
         proof_error: verification.error,
       }, 403);
     }
+    const standardVerificationStarted = performance.now();
     const standardCheckpointAuthentication =
       await verifyInventoryCheckpointCertificateAuthentication(
         verification.checkpoint_authentication,
@@ -6490,6 +6535,40 @@ export class GameAuditShard extends DurableObject<Env> {
         crypto_error: standardCheckpointAuthentication.reason,
       }, 500);
     }
+    const standardCheckpointSemantics = await verifyInventoryCheckpointSemantics(
+      verification.checkpoint_semantics,
+      standardWorkerCryptoBackend,
+    );
+    if (!standardCheckpointSemantics.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_checkpoint_semantic_backend_mismatch",
+        semantic_error: standardCheckpointSemantics.reason,
+      }, 500);
+    }
+    const standardMembership = await verifyInventoryMembershipSemantics(
+      verification.inventory_membership,
+      standardWorkerCryptoBackend,
+      verification.public_state_root,
+      expectedAssets.map((asset) => ({
+        asset_id: asset.asset_id,
+        recipient_id: asset.initial_owner_id,
+        item_type: asset.item_type,
+        quantity: asset.quantity,
+        source_event: asset.source_event,
+        output_index: asset.output_index,
+      })),
+    );
+    if (!standardMembership.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_membership_semantic_backend_mismatch",
+        proof_index: standardMembership.proofIndex,
+        semantic_error: standardMembership.reason,
+      }, 500);
+    }
+    const standardVerificationMs = performance.now() -
+      standardVerificationStarted;
     if (
       verification.asset_count !== assets.length ||
       verification.assets.length !== assets.length ||
@@ -6678,6 +6757,8 @@ export class GameAuditShard extends DurableObject<Env> {
       required_approvals: verification.required_approvals,
       bundle_bytes: verification.bundle_bytes,
       verification_ms: Math.round(verificationMs * 1_000) / 1_000,
+      standard_verification_ms:
+        Math.round(standardVerificationMs * 1_000) / 1_000,
       sqlite_ms: Math.round(sqliteMs * 1_000) / 1_000,
     }, 201);
   }
@@ -6835,6 +6916,45 @@ export class GameAuditShard extends DurableObject<Env> {
             "inventory_checkpoint_certificate_crypto_backend_mismatch",
           check_index: standardCheckpointAuthentication.checkIndex,
           crypto_error: standardCheckpointAuthentication.reason,
+          asset_id: assetId,
+          seller_id: sellerId,
+        }, 500);
+      }
+      const standardCheckpointSemantics =
+        await verifyInventoryCheckpointSemantics(
+          verification.checkpoint_semantics,
+          standardWorkerCryptoBackend,
+        );
+      if (!standardCheckpointSemantics.ok) {
+        return jsonResponse({
+          ok: false,
+          allowed: false,
+          decision: "inventory_checkpoint_semantic_backend_mismatch",
+          semantic_error: standardCheckpointSemantics.reason,
+          asset_id: assetId,
+          seller_id: sellerId,
+        }, 500);
+      }
+      const standardMembership = await verifyInventoryMembershipSemantics(
+        verification.inventory_membership,
+        standardWorkerCryptoBackend,
+        verification.public_state_root,
+        [{
+          asset_id: creation.asset_id,
+          recipient_id: creation.initial_owner_id,
+          item_type: creation.item_type,
+          quantity: creation.quantity,
+          source_event: creation.source_event,
+          output_index: creation.output_index,
+        }],
+      );
+      if (!standardMembership.ok) {
+        return jsonResponse({
+          ok: false,
+          allowed: false,
+          decision: "inventory_membership_semantic_backend_mismatch",
+          proof_index: standardMembership.proofIndex,
+          semantic_error: standardMembership.reason,
           asset_id: assetId,
           seller_id: sellerId,
         }, 500);

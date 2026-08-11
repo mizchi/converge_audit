@@ -1,3 +1,9 @@
+import {
+  type InventoryOriginReceipt,
+  inventoryOriginCommitments,
+  inventoryOriginReceiptValid,
+} from "./inventory-origin-semantics";
+
 export interface InventoryLineageSemanticTransition {
   asset_id: string;
   origin_receipt_digest: string;
@@ -17,6 +23,7 @@ export interface InventoryLineageSemanticTranscript {
   initial_version: number;
   initial_last_event: string;
   initial_lineage_root: string;
+  initial_origin_receipt_digest: string;
   transfer_count: number;
   transitions: InventoryLineageSemanticTransition[];
   final_owner_id: string;
@@ -35,6 +42,7 @@ export type VerifyInventoryLineageSemanticsResult =
       ok: false;
       reason:
         | "invalid_transcript"
+        | "origin_mismatch"
         | "transition_mismatch"
         | "root_mismatch";
       transitionIndex: number;
@@ -91,6 +99,7 @@ function transitionStructurallyValid(
 export async function verifyInventoryLineageSemantics(
   transcript: InventoryLineageSemanticTranscript,
   digest: AsyncInventoryLineageSemanticDigest,
+  origin: InventoryOriginReceipt,
 ): Promise<VerifyInventoryLineageSemanticsResult> {
   if (
     !textFieldValid(transcript.asset_id) ||
@@ -99,6 +108,8 @@ export async function verifyInventoryLineageSemantics(
     !versionValid(transcript.initial_version) ||
     !textFieldValid(transcript.initial_last_event) ||
     !digestValid(transcript.initial_lineage_root) ||
+    !digestValid(transcript.initial_origin_receipt_digest) ||
+    !inventoryOriginReceiptValid(origin) ||
     !Number.isSafeInteger(transcript.transfer_count) ||
     transcript.transfer_count <= 0 ||
     transcript.transfer_count > 64 ||
@@ -112,6 +123,19 @@ export async function verifyInventoryLineageSemantics(
     return { ok: false, reason: "invalid_transcript", transitionIndex: 0 };
   }
 
+  const originCommitments = await inventoryOriginCommitments(origin, digest);
+  if (
+    origin.asset_id !== transcript.asset_id ||
+    transcript.initial_origin_receipt_digest !==
+      originCommitments.receiptDigest ||
+    (transcript.initial_version === 0 &&
+      (transcript.initial_owner_id !== origin.recipient_id ||
+        transcript.initial_last_event !== origin.source_event ||
+        transcript.initial_lineage_root !== originCommitments.lineageRoot))
+  ) {
+    return { ok: false, reason: "origin_mismatch", transitionIndex: 0 };
+  }
+
   let owner = transcript.initial_owner_id;
   let version = transcript.initial_version;
   let lastEvent = transcript.initial_last_event;
@@ -121,6 +145,7 @@ export async function verifyInventoryLineageSemantics(
     if (
       !transitionStructurallyValid(transition) ||
       transition.asset_id !== transcript.asset_id ||
+      transition.origin_receipt_digest !== originCommitments.receiptDigest ||
       transition.from_owner !== owner ||
       transition.expected_version !== version ||
       transition.previous_event !== lastEvent ||

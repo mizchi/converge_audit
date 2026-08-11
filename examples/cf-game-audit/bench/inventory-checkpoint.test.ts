@@ -69,6 +69,7 @@ interface InventoryCheckpointFixture {
 
 interface CommitMetrics {
   verification_ms: number;
+  standard_verification_ms: number;
   sqlite_ms: number;
 }
 
@@ -194,6 +195,7 @@ async function benchmarkOnce(assetCount: number, iteration: number) {
   return {
     bundleBytes: checkpoint.bundle_bytes,
     verificationMs: metrics.verification_ms,
+    standardVerificationMs: metrics.standard_verification_ms,
     sqliteMs: metrics.sqlite_ms,
     endToEndMs,
   };
@@ -203,6 +205,7 @@ it("benchmarks atomic inventory checkpoints", async () => {
   const results = [];
   for (const assetCount of LENGTHS) {
     const verification: number[] = [];
+    const standardVerification: number[] = [];
     const sqlite: number[] = [];
     const endToEnd: number[] = [];
     let bundleBytes = 0;
@@ -210,6 +213,7 @@ it("benchmarks atomic inventory checkpoints", async () => {
       const result = await benchmarkOnce(assetCount, iteration);
       bundleBytes = result.bundleBytes;
       verification.push(result.verificationMs);
+      standardVerification.push(result.standardVerificationMs);
       sqlite.push(result.sqliteMs);
       endToEnd.push(result.endToEndMs);
     }
@@ -217,6 +221,7 @@ it("benchmarks atomic inventory checkpoints", async () => {
       asset_count: assetCount,
       bundle_bytes: bundleBytes,
       verification_ms: summarizeLatency(verification),
+      standard_verification_ms: summarizeLatency(standardVerification),
       sqlite_ms: summarizeLatency(sqlite),
       end_to_end_ms: summarizeLatency(endToEnd),
     });

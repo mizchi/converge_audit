@@ -42,3 +42,33 @@ test "browser Ed25519 bridge rejects malformed wire values" {
   assert_eq(audit_browser_ed25519_sign("not-hex", "digest"), "")
   assert_false(audit_browser_ed25519_verify("not-hex", "digest", "not-hex"))
 }
+
+///|
+test "browser and server share replay-witness manifest framing" {
+  let left = audit_browser_replay_witness_session_manifest_statement(
+    "game-manifest",
+    "referee-key",
+    ["alice", "bob"],
+    ["alice-key", "bob-key"],
+    0,
+  )
+  let reordered = audit_browser_replay_witness_session_manifest_statement(
+    "game-manifest",
+    "referee-key",
+    ["bob", "alice"],
+    ["bob-key", "alice-key"],
+    0,
+  )
+  assert_true(left != "")
+  assert_eq(left, reordered)
+  assert_eq(
+    audit_browser_replay_witness_session_manifest_statement(
+      "game-manifest",
+      "referee-key",
+      ["alice"],
+      [],
+      0,
+    ),
+    "",
+  )
+}

@@ -9,6 +9,8 @@ import {
 // Values
 pub fn replay_witness_session_manifest(&@converge_audit.Hasher, game_manifest_digest~ : @converge_audit.Digest, referee_key~ : @converge_audit.PublicKey, witnesses~ : Array[ReplayWitnessIdentity], max_faults~ : Int) -> @converge_audit.Digest
 
+pub fn serialize_replay_witness_session_manifest(game_manifest_digest~ : @converge_audit.Digest, referee_key~ : @converge_audit.PublicKey, witnesses~ : Array[ReplayWitnessIdentity], max_faults~ : Int) -> String
+
 // Errors
 
 // Types and methods

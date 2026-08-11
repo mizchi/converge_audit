@@ -9,6 +9,8 @@
 
 - [ライブラリとして一般化する境界](./library-boundary-ja.md)
   - mechanism / policy / game semanticsの分離、package昇格条件、保証しないこと
+- [MoonBit JS共有検証アーキテクチャ](./moonbit-js-shared-verification-ja.md)
+  - client/server共有ロジック、verification plan、WebCrypto/I/O adapter、移行順序
 - [ゲーム監査prototypeの全体像](./game-audit-overview-ja.md)
   - 何を作ったか、三modeの違い、実装package、保証境界、残ロードマップ
 - [実装が満たすべき要求仕様](./game-audit-requirements-ja.md)

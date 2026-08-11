@@ -11,6 +11,8 @@ production custodyの限界は[鍵ライフサイクル契約](../../docs/key-li
 `crypto-backend.ts`はhost I/O用の非同期SHA-256/Ed25519 contract、標準WebCrypto adapter、
 experimental/productionのfail-closed admissionを提供する。同期MoonBit adapterとは同じvector suiteで比較し、
 key lifecycleの純粋preflightを同期・非同期検証で共有する。
+`digest-verification-plan.ts`はMoonBitが生成したbounded canonical statement列を解釈せず、client/server共通の
+WebCrypto backendで並列hashする。domain framingやgame predicateはこのhost層へ再実装しない。
 
 物理adapterは未認証network payloadからwrite-setを組み立てず、
 `MoonBitCheckpointPolicy.prepareWriteSet`が返したDTOをCAS付きtransactionで適用する。

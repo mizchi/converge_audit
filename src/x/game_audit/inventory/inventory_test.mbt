@@ -303,6 +303,14 @@ test "authorized transfer updates owner version and authenticated proof" {
     origin_record.lineage_root,
     inventory_origin_lineage_root(hasher, receipt),
   )
+  let origin_proof = inventory.proof("asset-1").unwrap()
+  assert_false(
+    inventory_proof_matches_origin_receipt(
+      hasher,
+      { ..origin_proof, record: { ..origin_proof.record, owner_id: "mallory" } },
+      receipt,
+    ),
+  )
   let (transfer, transfer_effect) = replayed_transfer()
   let transition = asset_lineage_transition(origin_record, transfer)
   let transfer_plan = plan_or_fail(inventory, batch([]), [transfer], [

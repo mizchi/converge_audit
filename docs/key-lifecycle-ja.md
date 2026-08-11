@@ -20,9 +20,11 @@ authority receipt、ownership head、transfer/listing ID、checkpoint receiptも
 一致を要求し、evidence-source proposal/resolution envelopeもmessage/reference/case digestとsource署名を二重検証する。
 open-world lineage bundle内部もowner-key bindingとsender/recipient transfer署名を二重検証する。embedded
 compact listingとmulti-asset checkpointもauthority checkpointおよび全replay-witness attestationを
-状態変更前に二重検証し、lineage transition rootも検証済みanchorから標準SHA-256で再計算する。ただし
-origin receipt/rootとauthenticated-map membership/public state rootには`experimental_crypto`が残る。従ってend-to-endの
-production暗号を接続したという主張ではなく、production profileのWorkerはfail-closedになる。
+状態変更前に二重検証し、origin receipt/initial root、authenticated-map membership/public state root、
+lineage transition root、replay-witness session manifestも標準SHA-256で独立再計算する。event/asset-delta
+rootの意味論はcompact bundleから中央再計算せず、認証済み`n-f` replay witnessへ委譲する。また同期生成側には
+`experimental_crypto`が残る。従ってend-to-endのproduction暗号を接続したという
+主張ではなく、production profileのWorkerはfail-closedになる。
 
 ## 1. 汎用契約とgame固有policyの境界
 
@@ -232,8 +234,9 @@ checkpoint配送は、MoonBitが生成するcanonical bytesを標準WebCryptoで
 verifierも同じopaque capabilityへ到達した場合だけwitness collection、source seal、receiver mutationへ進む。
 producer/witness署名生成も同じMoonBit serializerと交換可能な非同期signerを使い、生成署名を送信前に自己検証する。
 収集中の正当な`under_quorum`にはexact-bound partial capabilityを発行する。inventory listing/checkpoint/lineageの
-authority checkpointとreplay-witness attestationも同じ標準/MoonBit二重検証を通す。未解決なのは、
-origin receipt/rootとauthenticated-map membership/public state rootに残るWorker同期hashの標準backend化、
+authority checkpointとreplay-witness attestationも同じ標準/MoonBit二重検証を通す。inventoryのorigin
+receipt/initial rootとauthenticated-map membership/public state rootも標準SHA-256で独立再計算する。未解決なのは、
+同期生成hashの標準backend化、event/asset-delta rootを担うwitnessの独立性と運用監査、
 上記SQL relationのCloudflare/端末DB migration、
 authority署名鍵の外部custody、timestamp trust、backend/providerの運用監査である。
 browser custodyだけを根拠にIssue #9全体を完了扱いしてはならない。

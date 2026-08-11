@@ -391,7 +391,22 @@ test "worker bridge verifies real-crypto current-owner inventory proof" {
       [Object(authority_check), Object(witness_check), Object(_), Object(_)]
     ) &&
     authority_check["kind"] is String("authority_checkpoint") &&
-    witness_check["kind"] is String("replay_witness_attestation") else {
+    witness_check["kind"] is String("replay_witness_attestation") &&
+    result["checkpoint_semantics"] is Object(semantics) &&
+    semantics["witness_count"] is Number(4.0, ..) &&
+    semantics["manifest_digest"] is String(_) &&
+    semantics["event_root"] is String(_) &&
+    semantics["asset_delta_root"] is String(_) &&
+    semantics["hash_check_count"] is Number(1.0, ..) &&
+    semantics["hash_checks"] is Array([Object(manifest_check)]) &&
+    manifest_check["kind"] is String("replay_witness_session_manifest") &&
+    manifest_check["check_index"] is Number(0.0, ..) &&
+    manifest_check["canonical_statement"] is String(_) &&
+    manifest_check["expected_digest"] is String(_) &&
+    semantics["delegated_roots"]
+    is Array([String("event_root"), String("asset_delta_root")]) &&
+    result["inventory_membership"] is Object(membership) &&
+    membership["proof_count"] is Number(1.0, ..) else {
     fail("expected current-owner proof verification")
   }
   let stale_owner = audit_verify_inventory_listing_proof_bundle(
@@ -452,6 +467,7 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     result["initial_version"] is Number(initial_version, ..) &&
     result["initial_last_event"] is String(initial_last_event) &&
     result["initial_lineage_root"] is String(initial_lineage_root) &&
+    result["initial_origin_receipt_digest"] is String(initial_origin_digest) &&
     result["transfer_count"] is Number(1.0, ..) &&
     result["transfer_events"] is Array([String(transfer_event), ..]) &&
     result["transitions"] is Array([Object(semantic_transition)]) &&
@@ -477,10 +493,15 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     ) &&
     authority_check["kind"] is String("authority_checkpoint") &&
     witness_check["kind"] is String("replay_witness_attestation") &&
+    result["checkpoint_semantics"] is Object(semantics) &&
+    semantics["witness_count"] is Number(4.0, ..) &&
+    result["inventory_membership"] is Object(membership) &&
+    membership["proof_count"] is Number(1.0, ..) &&
     initial_owner_id == anchor_owner_id &&
     initial_version.to_int() == anchor_version.to_int() &&
     initial_last_event == anchor_last_event &&
     initial_lineage_root == anchor_lineage_root &&
+    initial_origin_digest != "" &&
     origin_digest != "" &&
     transfer_event != "" else {
     fail("expected historical inventory lineage verification")
@@ -546,6 +567,10 @@ test "worker bridge verifies one real-crypto atomic multi-asset checkpoint" {
     ) &&
     authority_check["kind"] is String("authority_checkpoint") &&
     witness_check["kind"] is String("replay_witness_attestation") &&
+    result["checkpoint_semantics"] is Object(semantics) &&
+    semantics["witness_count"] is Number(4.0, ..) &&
+    result["inventory_membership"] is Object(membership) &&
+    membership["proof_count"] is Number(2.0, ..) &&
     write_set_digest != "" else {
     fail("expected atomic multi-asset inventory verification")
   }

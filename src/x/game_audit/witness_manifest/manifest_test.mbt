@@ -15,6 +15,17 @@ test "replay witness manifest is roster-order independent and policy-bound" {
   )
   assert_eq(
     left,
+    hasher.hash_string(
+      serialize_replay_witness_session_manifest(
+        game_manifest_digest=@bft.Digest("game-v1"),
+        referee_key=@bft.PublicKey("referee"),
+        witnesses~,
+        max_faults=0,
+      ),
+    ),
+  )
+  assert_eq(
+    left,
     replay_witness_session_manifest(
       hasher,
       game_manifest_digest=@bft.Digest("game-v1"),

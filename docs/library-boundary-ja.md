@@ -1,6 +1,6 @@
 # mizchi/converge_audit のライブラリ境界
 
-更新日: 2026-08-05
+更新日: 2026-08-11
 
 ## 結論
 
@@ -117,6 +117,12 @@ mode、routing、replay、marketplaceを含むためexample全体をcoreへ移�
 game Workerは既存Cloudflare API互換のcomposition endpointを維持する。新しい汎用host adapterは
 `audit/runtime/bridge`を直接利用し、game bundle全体を依存に持ち込まない。
 
+clientとserverの純粋ロジックはMoonBit JS buildを共有する。共有対象はcanonical serializer、predicate、
+state transition、host暗号へ渡すverification planであり、clientの判定結果そのものではない。serverは
+同じMoonBit処理を受信bundleから独立に実行する。TypeScriptはWebCryptoとI/Oへ限定し、独立した
+canonical実装はruntimeではなくdifferential testに残す。詳細は
+[MoonBit JS共有検証アーキテクチャ](./moonbit-js-shared-verification-ja.md)を参照する。
+
 ## Decision ledger
 
 | 項目 | 内容 |
@@ -126,4 +132,4 @@ game Workerは既存Cloudflare API互換のcomposition endpointを維持する�
 | model question | package identityと配置だけを変え、既存の安全性・liveness contractを保存できるか |
 | machine result | MoonBit test/proof、Quint/TLC正常・破損model、Node/Cloudflare integration suiteが移動後も通過 |
 | decision | mechanismをcompanion module `mizchi/converge_audit`へ抽出し、finalization/replay/trust値は`x/game_audit`へ残す |
-| lock | `just check-audit-boundary`, `moon test`, `just prove`, `just formal-check`, Node/Cloudflare adapter tests |
+| lock | `just check-audit-boundary`, `moon test`, `just prove`, `just formal-check`, Node/Cloudflare adapter tests、MoonBit plan/WebCrypto differential test |

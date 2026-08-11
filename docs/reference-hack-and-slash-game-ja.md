@@ -263,8 +263,10 @@ SQLite更新・authority応答前に両backendの一致を要求する。open-wo
 decision/evidence dismissal certificate、evidence-source proposal/resolution envelopeもdual gateへ接続済みである。
 open-world lineage bundleのowner-key binding・transfer署名に加え、compact listingとmulti-asset checkpointの
 authority checkpoint・replay-witness attestationもcanonical transcriptから標準WebCryptoで独立再検証する。
-lineage transition rootもUnicodeを含むMoonBit canonical framingと一致する標準SHA-256でanchorから再計算する。
-一方、同期生成側の`experimental_crypto`とorigin root・authenticated-map/public state root再計算は未移行である。productionでは認証済みaccountへの
+origin receipt/initial lineage root、authenticated-map membership/public state root、lineage transition rootも
+Unicodeを含むMoonBit canonical framingと一致する標準SHA-256で再計算し、replay-witness session manifestも
+全rosterとfault boundから再計算する。event/asset-delta rootの全ログはcompact proofへ含めず、認証済み
+`n-f` replay witnessへ意味論検証を委譲する。一方、同期生成側の`experimental_crypto`は未移行である。productionでは認証済みaccountへの
 鍵登録、OS keystore/secure enclaveへの昇格、鍵回復・rotation・失効を別途実装する。
 
 ## Cloudflare配置

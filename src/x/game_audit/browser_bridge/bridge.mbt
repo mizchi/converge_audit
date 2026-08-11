@@ -74,3 +74,32 @@ pub fn audit_browser_ed25519_verify(
     @bft.Signature(signature),
   )
 }
+
+///|
+/// Expose the same MoonBit-owned replay-witness manifest statement used by the
+/// server verifier. The browser hashes this statement with its WebCrypto
+/// adapter; it does not get to choose a different roster order or framing.
+pub fn audit_browser_replay_witness_session_manifest_statement(
+  game_manifest_digest : String,
+  referee_key : String,
+  witness_ids : Array[String],
+  witness_keys : Array[String],
+  max_faults : Int,
+) -> String {
+  if witness_ids.length() != witness_keys.length() {
+    return ""
+  }
+  let witnesses : Array[@witness_manifest.ReplayWitnessIdentity] = []
+  for index in 0..<witness_ids.length() {
+    witnesses.push({
+      id: witness_ids[index],
+      key: @bft.PublicKey(witness_keys[index]),
+    })
+  }
+  @witness_manifest.serialize_replay_witness_session_manifest(
+    game_manifest_digest=@bft.Digest(game_manifest_digest),
+    referee_key=@bft.PublicKey(referee_key),
+    witnesses~,
+    max_faults~,
+  )
+}

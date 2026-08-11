@@ -1,4 +1,6 @@
 import type { InventoryCheckpointCertificateAuthenticationTranscript } from "./inventory-checkpoint-certificate";
+import type { InventoryCheckpointSemanticTranscript } from "./inventory-checkpoint-semantics";
+import type { InventoryMembershipTranscript } from "./inventory-membership-semantics";
 
 type AuditModule = typeof import("../../../_build/js/release/build/x/game_audit/worker/worker.js");
 
@@ -332,6 +334,8 @@ export interface VerifiedInventoryListing {
   approval_count: number;
   required_approvals: number;
   checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
+  checkpoint_semantics: InventoryCheckpointSemanticTranscript;
+  inventory_membership: InventoryMembershipTranscript;
   bundle_bytes: number;
 }
 
@@ -384,6 +388,8 @@ export interface VerifiedInventoryCheckpoint {
   approval_count: number;
   required_approvals: number;
   checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
+  checkpoint_semantics: InventoryCheckpointSemanticTranscript;
+  inventory_membership: InventoryMembershipTranscript;
   bundle_bytes: number;
 }
 
@@ -430,15 +436,19 @@ export interface VerifiedInventoryLineage {
   checkpoint_digest: string;
   asset_id: string;
   current_owner_id: string;
+  public_state_root: string;
   initial_owner_id: string;
   initial_version: number;
   initial_last_event: string;
   initial_lineage_root: string;
+  initial_origin_receipt_digest: string;
   transfer_count: number;
   transfer_events: string[];
   transitions: VerifiedInventoryLineageTransition[];
   authentication_checks: InventoryLineageAuthenticationCheck[];
   checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
+  checkpoint_semantics: InventoryCheckpointSemanticTranscript;
+  inventory_membership: InventoryMembershipTranscript;
   final_owner_id: string;
   final_version: number;
   final_last_event: string;

@@ -18,6 +18,8 @@ pub fn audit_browser_merkle_root(Array[String]) -> String
 
 pub fn audit_browser_merkle_root_payload(Int, String) -> String
 
+pub fn audit_browser_replay_witness_session_manifest_statement(String, String, Array[String], Array[String], Int) -> String
+
 pub fn audit_browser_sha256(String) -> String
 
 // Errors

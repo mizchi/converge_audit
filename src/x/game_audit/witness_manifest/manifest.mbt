@@ -13,14 +13,15 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 }
 
 ///|
-/// Canonical manifest shared by the game replay kernel and witness collector.
-pub fn replay_witness_session_manifest(
-  hasher : &@bft.Hasher,
+/// Canonical statement shared by every target. Hashing is deliberately kept
+/// outside this serializer so JS adapters can execute the same verification
+/// plan with WebCrypto without reimplementing roster ordering or framing.
+pub fn serialize_replay_witness_session_manifest(
   game_manifest_digest~ : @bft.Digest,
   referee_key~ : @bft.PublicKey,
   witnesses~ : Array[ReplayWitnessIdentity],
   max_faults~ : Int,
-) -> @bft.Digest {
+) -> String {
   let buffer = StringBuilder::new()
   append_field(buffer, "replay-witness-session-v1")
   append_field(buffer, game_manifest_digest.0)
@@ -39,5 +40,24 @@ pub fn replay_witness_session_manifest(
     append_field(buffer, witness.id)
     append_field(buffer, witness.key.0)
   }
-  hasher.hash_string(buffer.to_string())
+  buffer.to_string()
+}
+
+///|
+/// Canonical manifest shared by the game replay kernel and witness collector.
+pub fn replay_witness_session_manifest(
+  hasher : &@bft.Hasher,
+  game_manifest_digest~ : @bft.Digest,
+  referee_key~ : @bft.PublicKey,
+  witnesses~ : Array[ReplayWitnessIdentity],
+  max_faults~ : Int,
+) -> @bft.Digest {
+  hasher.hash_string(
+    serialize_replay_witness_session_manifest(
+      game_manifest_digest~,
+      referee_key~,
+      witnesses~,
+      max_faults~,
+    ),
+  )
 }
