@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   audit_benchmark_make_checkpoint_delivery_authentication,
-} from "../../../_build/js/release/build/x/game_audit/worker/worker.js";
+} from "../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js";
 import {
   acknowledgeCheckpointOutboxSync,
   loadCheckpointRuntime,

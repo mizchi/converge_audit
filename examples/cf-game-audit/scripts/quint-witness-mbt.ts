@@ -5,6 +5,8 @@ import { join } from "node:path";
 import {
   audit_benchmark_make_checkpoint_delivery_authentication,
   audit_experimental_sign_checkpoint_delivery_approval,
+} from "../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js";
+import {
   audit_verify_checkpoint_delivery_authentication,
 } from "../../../_build/js/release/build/x/game_audit/worker/worker.js";
 

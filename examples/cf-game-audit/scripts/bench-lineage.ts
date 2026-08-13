@@ -10,14 +10,21 @@ import {
 } from "../../player-local-runtime/crypto-backend";
 import type { VerifiedInventoryLineage } from "../src/moonbit";
 
-type AuditModule = typeof import("../../../_build/js/release/build/x/game_audit/worker/worker.js");
+type FixtureModule = typeof import("../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js");
+type RuntimeModule = typeof import("../../../_build/js/release/build/x/game_audit/worker/worker.js");
 
-const audit = await import(
+const fixtureAudit = await import(
+  new URL(
+    "../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js",
+    import.meta.url,
+  ).href
+) as FixtureModule;
+const runtimeAudit = await import(
   new URL(
     "../../../_build/js/release/build/x/game_audit/worker/worker.js",
     import.meta.url,
   ).href
-) as AuditModule;
+) as RuntimeModule;
 
 const SEED =
   "000102030405060708090a0b0c0d0e0f" +
@@ -51,7 +58,7 @@ interface LineageFixture {
 
 function generate(length: number): LineageFixture {
   const fixture = JSON.parse(
-    audit.audit_benchmark_make_inventory_lineage_proof_bundle(
+    fixtureAudit.audit_benchmark_make_inventory_lineage_proof_bundle(
       SEED,
       PLAYER_SEED,
       "lineage-benchmark-session",
@@ -73,7 +80,7 @@ function generate(length: number): LineageFixture {
 
 function verify(fixture: LineageFixture): VerifiedInventoryLineage {
   const result = JSON.parse(
-    audit.audit_verify_inventory_lineage_proof_bundle(
+    runtimeAudit.audit_verify_inventory_lineage_proof_bundle(
       fixture.bundle_hex,
       "lineage-benchmark-session",
       fixture.authority_key,

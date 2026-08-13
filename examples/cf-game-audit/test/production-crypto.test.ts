@@ -5,7 +5,7 @@ import {
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
 import {
   audit_benchmark_make_checkpoint_delivery_authentication,
-} from "../../../_build/js/release/build/x/game_audit/worker/worker.js";
+} from "../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js";
 import {
   STANDARD_WEBCRYPTO_BACKEND_ID,
   createStandardWebCryptoBackend,

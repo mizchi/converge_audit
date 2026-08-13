@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { audit_benchmark_make_open_world_missing_slot_proof } from "../../../_build/js/release/build/x/game_audit/worker/worker.js";
+import { audit_benchmark_make_open_world_missing_slot_proof } from "../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js";
 import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypto-backend";
 import type { DependentDigestVerificationCheck } from "../../player-local-runtime/dependent-digest-verification-plan";
 import {

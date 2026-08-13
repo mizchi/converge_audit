@@ -482,7 +482,7 @@ pnpm bench:witness
 | remote peerからmode policyどおりquorumを収集する | 公開pull、端末ローカル署名submit、durable collection、deadline、collection-backed seal、HMAC-source fixed window、全mode apac-ne + PvP wnam/weur各20 run | 全mode remote E2E、outbound push・global fairnessはPending |
 | checkpoint outboxを配送しACKで完了する | direct DO RPC、lease/alarm retry、historical Duplicate ACK | Tested locally + remote 20/20、本番ACK-loss回復を観測 |
 | reference item/transfer/listing/cancelのowner proofを標準暗号で受理する | browser WebCrypto SHA-256/Ed25519 + Worker WebCrypto/MoonBit dual verifier + workerd integration | Tested locally |
-| reference checkpoint/journalを標準暗号でも検証する | MoonBit canonical Merkle preimage + level-parallel WebCrypto + single game replay dual commitment + browser pre-persist gate | Tested locally。remote再計測はPending |
+| reference checkpoint/journalを標準暗号で生成・検証する | MoonBit canonical Merkle preimage + level-parallel WebCrypto + serialized browser mutation + async snapshot restore + single game replay dual commitment | Tested locally。remote再計測はPending |
 | reference receipt/head/transfer/listing/checkpoint receipt IDを標準暗号でも検証する | canonical sync/async ID adapter + Worker pre-transaction/pre-response dual gate + broken-backend negative control | Tested locally。remote再計測はPending |
 | inventory proof内部認証・ID・裁定certificate・evidence-source envelope・中央で復元可能な意味論rootを標準暗号でも検証する | authority checkpoint + replay-witness transcript/session manifest、4件×transferのMoonBit canonical transcript、origin receipt/initial root、authenticated-map/public state root、anchor-bound lineage transition root再計算、open-world proof ID、decision/dismissal、source proposal/resolutionのdual verifier + pre-transaction gate | Tested locally。event/asset-delta rootはcompact bundleに全ログを含めず`n-f` replay witnessへ意味論検証を委譲。暗号監査、remote再計測はPending |
 | production cryptoである | unaudited experimental adapter | Unmet |
@@ -497,3 +497,7 @@ sealするpull型referenceを接続した。公開POSTにはhashed sourceごと�
 client指定の内部bucketを除去する。remoteでは単一egressの429回復後に並列quorumが100/100成立した。
 outbound push、異なる実source間の公平性、NAT/botnetを含むglobal fair queueは未接続であり、
 benchmark fixtureの秘密seedをproduction routeへ公開してはならない。
+production `worker` bridgeはseed-backed signerと`audit_benchmark_make_*`をlink exportせず、これらは
+別の`worker_fixture` artifactに限定する。build後のNode contract testはproduction moduleのexport一覧を検査する。
+browser側のgame event/checkpoint/boundary/closure生成とsnapshot復元検査は標準WebCryptoで非同期実行し、MoonBit bridgeは
+canonical Merkle preimageだけを供給する。tick確定は直列queueでhash完了後に行う。

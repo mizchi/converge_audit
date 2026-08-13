@@ -445,6 +445,15 @@ and independent transparency publication of the plan and seal link.
   production provider, and at-rest encryption remain deployment work.
 - Browser run keys are non-extractable WebCrypto `CryptoKey` values persisted in
   IndexedDB. This does not prove resistance to XSS or device compromise.
+- The production MoonBit `worker` bridge exports no seed-backed signer or
+  benchmark constructor. Deterministic seed fixtures are linked separately as
+  `worker_fixture` and are imported only by tests and benchmark scripts. A Node
+  bundle-contract test prevents those capabilities from returning to the
+  production bridge.
+- Browser game-event, checkpoint, and player-local closure commitments plus
+  snapshot restoration use MoonBit-owned canonical framing with asynchronous standard
+  WebCrypto SHA-256. A serialized mutation queue prevents ticks, authority
+  receipts, and restart from publishing state across an unfinished hash.
 - `experimental_crypto` remains unaudited. The `production` runtime profile
   fails closed unless a production-capable backend is actually connected.
 - Current game kernels do not model complete commercial PvP projectile/

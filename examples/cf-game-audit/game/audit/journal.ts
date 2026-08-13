@@ -10,6 +10,18 @@ export interface AuditDigestAdapter {
   merkleRoot(payloads: string[]): string;
 }
 
+export interface AsyncAuditDigestAdapter {
+  hashString(value: string): Promise<string>;
+  merkleRoot(payloads: string[]): Promise<string>;
+}
+
+export interface CreateGameAuditJournalInput {
+  seed: number;
+  playerId: string;
+  ownerPublicKey: string;
+  cadenceTicks: number;
+}
+
 export interface PendingAuditEvent {
   tick: number;
   canonicalPayload: string;
@@ -254,15 +266,9 @@ export function decodeCanonicalAuditEvent(
   }
 }
 
-export function createGameAuditJournal(
-  input: {
-    seed: number;
-    playerId: string;
-    ownerPublicKey: string;
-    cadenceTicks: number;
-  },
-  digest: AuditDigestAdapter,
-): GameAuditJournalState {
+function normalizeJournalInput(
+  input: CreateGameAuditJournalInput,
+): CreateGameAuditJournalInput {
   if (!Number.isSafeInteger(input.seed)) {
     throw new Error("audit seed must be a safe integer");
   }
@@ -275,13 +281,16 @@ export function createGameAuditJournal(
   if (!Number.isSafeInteger(input.cadenceTicks) || input.cadenceTicks <= 0) {
     throw new Error("audit cadence must be a positive safe integer");
   }
-  const seed = input.seed >>> 0;
-  const genesisDigest = digest.hashString(
-    canonicalAuditGenesis(seed, input.playerId, input.ownerPublicKey),
-  );
+  return { ...input, seed: input.seed >>> 0 };
+}
+
+function initialJournalState(
+  input: CreateGameAuditJournalInput,
+  genesisDigest: string,
+): GameAuditJournalState {
   return {
     version: 1,
-    seed,
+    seed: input.seed,
     playerId: input.playerId,
     ownerPublicKey: input.ownerPublicKey,
     cadenceTicks: input.cadenceTicks,
@@ -295,11 +304,49 @@ export function createGameAuditJournal(
   };
 }
 
-export function appendAuditTick(
+export function createGameAuditJournal(
+  input: CreateGameAuditJournalInput,
+  digest: AuditDigestAdapter,
+): GameAuditJournalState {
+  const normalized = normalizeJournalInput(input);
+  const genesisDigest = digest.hashString(
+    canonicalAuditGenesis(
+      normalized.seed,
+      normalized.playerId,
+      normalized.ownerPublicKey,
+    ),
+  );
+  return initialJournalState(normalized, genesisDigest);
+}
+
+export async function createGameAuditJournalAsync(
+  input: CreateGameAuditJournalInput,
+  digest: AsyncAuditDigestAdapter,
+): Promise<GameAuditJournalState> {
+  const normalized = normalizeJournalInput(input);
+  const genesisDigest = await digest.hashString(
+    canonicalAuditGenesis(
+      normalized.seed,
+      normalized.playerId,
+      normalized.ownerPublicKey,
+    ),
+  );
+  return initialJournalState(normalized, genesisDigest);
+}
+
+interface PreparedAuditAppend {
+  baseState: GameAuditJournalState;
+  pending: PendingAuditEvent[];
+  checkpointAssets?: string[];
+}
+
+function prepareAuditAppend(
   journal: GameAuditJournalState,
   tick: AuditTick,
-  digest: AuditDigestAdapter,
-): AppendAuditTickResult {
+): { ok: true; value: PreparedAuditAppend } | Extract<
+  AppendAuditTickResult,
+  { ok: false }
+> {
   if (tick.input.tick !== journal.nextTick) {
     return { ok: false, reason: "tick_mismatch" };
   }
@@ -334,53 +381,130 @@ export function appendAuditTick(
     pending,
   };
   if (pending.length < journal.cadenceTicks) {
-    return { ok: true, state: baseState };
+    return { ok: true, value: { baseState, pending } };
   }
-
   const checkpointAssets = pending.flatMap((event) => event.createdAssetIds).sort();
   if (new Set(checkpointAssets).size !== checkpointAssets.length) {
     return { ok: false, reason: "duplicate_asset" };
   }
+  return { ok: true, value: { baseState, pending, checkpointAssets } };
+}
+
+function checkpointEnvelopeFields(
+  journal: GameAuditJournalState,
+  tick: AuditTick,
+  prepared: PreparedAuditAppend & { checkpointAssets: string[] },
+  eventRoot: string,
+  stateDigest: string,
+) {
   const epoch = journal.checkpoints.length;
-  const previousCheckpoint = epoch === 0
-    ? journal.genesisDigest
-    : journal.checkpoints[epoch - 1].checkpointDigest;
-  const eventRoot = digest.merkleRoot(
-    pending.map((event) => event.canonicalPayload),
-  );
-  const stateDigest = digest.hashString(canonicalGameState(tick.state));
-  const envelopeFields = {
+  return {
     epoch,
-    firstTick: pending[0].tick,
+    firstTick: prepared.pending[0].tick,
     lastTick: tick.input.tick,
-    eventCount: pending.length,
+    eventCount: prepared.pending.length,
     eventRoot,
     stateDigest,
-    previousCheckpoint,
-    createdAssetIds: checkpointAssets,
+    previousCheckpoint: epoch === 0
+      ? journal.genesisDigest
+      : journal.checkpoints[epoch - 1].checkpointDigest,
+    createdAssetIds: prepared.checkpointAssets,
   };
-  const canonicalEnvelope = canonicalMicroCheckpointEnvelope(envelopeFields);
+}
+
+function commitPreparedCheckpoint(
+  journal: GameAuditJournalState,
+  prepared: PreparedAuditAppend & { checkpointAssets: string[] },
+  envelopeFields: ReturnType<typeof checkpointEnvelopeFields>,
+  canonicalEnvelope: string,
+  checkpointDigest: string,
+): AppendAuditTickResult {
   const checkpoint: GameMicroCheckpoint = {
     version: 1,
     ...envelopeFields,
-    checkpointDigest: digest.hashString(canonicalEnvelope),
+    checkpointDigest,
     canonicalEnvelope,
-    createdAssetIds: checkpointAssets,
   };
   return {
     ok: true,
     state: {
-      ...baseState,
+      ...prepared.baseState,
       pending: [],
       checkpoints: [...journal.checkpoints, checkpoint],
       retainedSegments: [...journal.retainedSegments, {
-        epoch,
-        checkpointDigest: checkpoint.checkpointDigest,
-        events: pending,
+        epoch: checkpoint.epoch,
+        checkpointDigest,
+        events: prepared.pending,
       }],
     },
     checkpoint,
   };
+}
+
+export function appendAuditTick(
+  journal: GameAuditJournalState,
+  tick: AuditTick,
+  digest: AuditDigestAdapter,
+): AppendAuditTickResult {
+  const result = prepareAuditAppend(journal, tick);
+  if (!result.ok) return result;
+  const prepared = result.value;
+  if (!prepared.checkpointAssets) {
+    return { ok: true, state: prepared.baseState };
+  }
+  const eventRoot = digest.merkleRoot(
+    prepared.pending.map((event) => event.canonicalPayload),
+  );
+  const stateDigest = digest.hashString(canonicalGameState(tick.state));
+  const sealed = { ...prepared, checkpointAssets: prepared.checkpointAssets };
+  const envelopeFields = checkpointEnvelopeFields(
+    journal,
+    tick,
+    sealed,
+    eventRoot,
+    stateDigest,
+  );
+  const canonicalEnvelope = canonicalMicroCheckpointEnvelope(envelopeFields);
+  return commitPreparedCheckpoint(
+    journal,
+    sealed,
+    envelopeFields,
+    canonicalEnvelope,
+    digest.hashString(canonicalEnvelope),
+  );
+}
+
+export async function appendAuditTickAsync(
+  journal: GameAuditJournalState,
+  tick: AuditTick,
+  digest: AsyncAuditDigestAdapter,
+): Promise<AppendAuditTickResult> {
+  const result = prepareAuditAppend(journal, tick);
+  if (!result.ok) return result;
+  const prepared = result.value;
+  if (!prepared.checkpointAssets) {
+    return { ok: true, state: prepared.baseState };
+  }
+  const [eventRoot, stateDigest] = await Promise.all([
+    digest.merkleRoot(prepared.pending.map((event) => event.canonicalPayload)),
+    digest.hashString(canonicalGameState(tick.state)),
+  ]);
+  const sealed = { ...prepared, checkpointAssets: prepared.checkpointAssets };
+  const envelopeFields = checkpointEnvelopeFields(
+    journal,
+    tick,
+    sealed,
+    eventRoot,
+    stateDigest,
+  );
+  const canonicalEnvelope = canonicalMicroCheckpointEnvelope(envelopeFields);
+  return commitPreparedCheckpoint(
+    journal,
+    sealed,
+    envelopeFields,
+    canonicalEnvelope,
+    await digest.hashString(canonicalEnvelope),
+  );
 }
 
 export function acknowledgeAuditCheckpoint(

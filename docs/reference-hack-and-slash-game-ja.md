@@ -74,19 +74,21 @@ provisionalであり、監査不成立なら最後のACK地点までinventory li
 - 30 leafを`mizchi/converge_audit/audit/merkle`のMerkle rootへ畳み込み、最終game state digestと前checkpointを
   micro checkpoint envelopeへ束縛する。
 - Merkle leaf/node/rootの長さ付きdomain separationはTypeScriptへ複製せず、`src/audit/merkle`がcanonical
-  preimageを定義する。リアルタイム生成はMoonBit SHA-256を使い、sealed checkpointはIndexedDB保存前に同じ
-  preimageを標準WebCryptoで再計算する。30 leafではleaf 30 + internal node 30 + root 1の計61 hashを、
-  levelごとに並列化して処理する。
+  preimageを定義する。MoonBitが生成するpreimageを標準WebCrypto SHA-256へ渡し、game event root、state digest、
+  checkpoint digestを最初から非同期生成する。30 leafではleaf 30 + internal node 30 + root 1の計61 hashを
+  levelごとに並列化し、event rootとstate digestも並列に処理する。
 - drop effectに含まれるasset IDを、そのtickを含むmicro checkpointへ明示的に束縛する。
 - sealed segmentのleafはroot生成後も保持し、challenge時のproof/replayに備える。
 - game stateとjournalを一つのsnapshotとしてIndexedDBへ保存する。保存は完全なmicro境界だけで行い、
-  reload時はevent root、checkpoint chain、最終state digestを再計算してから復帰する。
+  生成時は既にhash済みの境界をO(1)でcaptureする。reload時だけ同じ標準WebCrypto経路で保持中のevent root、
+  checkpoint chain、最終state digestをO(retained events)で再計算してから復帰する。これによりcheckpointごとの
+  全履歴再hashによる累積O(n²)を避ける。
 - browserはrunごとに標準WebCryptoでnon-extractable Ed25519 owner keyを生成し、`CryptoKey` handleを
   別のIndexedDB storeへ保存する。公開鍵は
   genesis digestへ含めるため、item精算直前に別鍵へ差し替えた自己整合ログは元のcheckpoint chainと一致しない。
 - item精算、transfer、listing、cancelのowner proofはcanonical文のSHA-256とEd25519署名を標準WebCryptoで
-  生成する。game event leaf、checkpoint、Merkle rootはMoonBitで同期生成した後、保存・authority受理境界で
-  標準WebCryptoとの一致を要求する。
+  生成する。game event leaf、checkpoint、Merkle root、player-local boundary/closureも標準WebCryptoで生成する。
+  checkpoint完了前にはstate/journalを公開せず、tick、authority receipt、再起動の更新を同じ直列queueで確定する。
 - origin item receipt、初期/移転後ownership head、transfer ID、listing ID、checkpoint receiptも、MoonBit側と
   標準WebCrypto側で同じcanonical文から同じIDへ到達した場合だけSQLite更新またはauthority応答へ進む。
 - micro未満の未保存tickはreload時に失われる。初期cadenceでは最大29 tick、約0.97秒である。
@@ -267,7 +269,9 @@ authority checkpoint・replay-witness attestationもcanonical transcriptから�
 origin receipt/initial lineage root、authenticated-map membership/public state root、lineage transition rootも
 Unicodeを含むMoonBit canonical framingと一致する標準SHA-256で再計算し、replay-witness session manifestも
 全rosterとfault boundから再計算する。event/asset-delta rootの全ログはcompact proofへ含めず、認証済み
-`n-f` replay witnessへ意味論検証を委譲する。一方、同期生成側の`experimental_crypto`は未移行である。productionでは認証済みaccountへの
+`n-f` replay witnessへ意味論検証を委譲する。seed-backed署名・fixture生成はproduction MoonBit bridgeから
+別のtest/benchmark artifactへ隔離し、browserのgame event/checkpoint/boundary/closure生成とsnapshot復元検査は
+非同期の標準WebCryptoへ移行した。ただしprovider/versionの独立監査を完了したという意味ではない。productionでは認証済みaccountへの
 鍵登録、OS keystore/secure enclaveへの昇格、鍵回復・rotation・失効を別途実装する。
 
 ## Cloudflare配置

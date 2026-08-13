@@ -128,10 +128,6 @@ export interface CheckpointDeliveryAuthenticationInput {
   authentication: CheckpointDeliveryAuthentication;
 }
 
-export type ExperimentalCheckpointDeliveryApprovalSigning =
-  | { ok: true; approval: CheckpointDeliveryApproval }
-  | { ok: false; error: string };
-
 export function sameCheckpointDeliveryAuthenticationPolicy(
   left: CheckpointDeliveryAuthenticationPolicy | undefined,
   right: CheckpointDeliveryAuthenticationPolicy | undefined,
@@ -651,25 +647,6 @@ export function openWorldObserverSigningStoreSnapshotSync(
     throw new Error(`MoonBit observer signing snapshot refused: ${result.error}`);
   }
   return result;
-}
-
-/**
- * Client-side bridge for the unaudited experimental Ed25519 implementation.
- * Keep the seed in the witness process; authority routes must never call this.
- */
-export async function signExperimentalCheckpointDeliveryApproval(input: {
-  witnessSeedHex: string;
-  witnessId: string;
-  statementDigest: string;
-}): Promise<ExperimentalCheckpointDeliveryApprovalSigning> {
-  const audit = await loadAuditModule();
-  return JSON.parse(
-    audit.audit_experimental_sign_checkpoint_delivery_approval(
-      input.witnessSeedHex,
-      input.witnessId,
-      input.statementDigest,
-    ),
-  ) as ExperimentalCheckpointDeliveryApprovalSigning;
 }
 
 export function verifyCheckpointDeliveryAuthenticationSync(

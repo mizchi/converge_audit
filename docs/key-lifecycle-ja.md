@@ -1,6 +1,6 @@
 # 署名鍵ライフサイクルと過去checkpoint検証契約
 
-更新日: 2026-08-13
+更新日: 2026-08-14
 
 ## 結論
 
@@ -30,9 +30,12 @@ open-world lineage bundle内部もowner-key bindingとsender/recipient transfer�
 compact listingとmulti-asset checkpointもauthority checkpointおよび全replay-witness attestationを
 状態変更前に二重検証し、origin receipt/initial root、authenticated-map membership/public state root、
 lineage transition root、replay-witness session manifestも標準SHA-256で独立再計算する。event/asset-delta
-rootの意味論はcompact bundleから中央再計算せず、認証済み`n-f` replay witnessへ委譲する。また同期生成側には
-`experimental_crypto`が残る。従ってend-to-endのproduction暗号を接続したという
-主張ではなく、production profileのWorkerはfail-closedになる。
+rootの意味論はcompact bundleから中央再計算せず、認証済み`n-f` replay witnessへ委譲する。seedを受け取る
+同期署名・benchmark fixture constructorは別の`worker_fixture` link artifactへ隔離し、production `worker`
+bridgeからexportと到達可能codeを除去した。browserのgame event/checkpoint、snapshot検査、player-local
+boundary/closure生成もMoonBit canonical framing + 非同期標準WebCryptoへ移行した。同期fixtureとbyte同値であり、
+hash完了前にcheckpointを公開しないことをtestで固定する。ただしprovider/versionの独立監査を完了したという
+主張ではなく、production profileはallowlist済み標準backend以外でfail-closedになる。
 
 ## 1. 汎用契約とgame固有policyの境界
 
@@ -259,11 +262,25 @@ aimbot、roster管理者の悪意、暗号実装のconstant-time性、端末at-r
 | implementation observation | 旧delivery policyは公開鍵をcurrent設定へ直接埋め、version/history/署名時刻を持たなかった。browser signerはseedを公開propertyに持っていた |
 | model question | exact key binding、署名時点validity、effective revocation、旧公開鍵historyのどれが必要か |
 | tool | MoonBit proof/Why3、Quint/TLC、Vitest + MoonBit/標準WebCrypto Ed25519 adapter。backend選択は時間遷移を持たない有限predicateなので新しいQuint modelではなくhost regression tableで固定 |
-| machine result | MoonBit 5 proof goals、key lifecycle Quint正常model反例なし、4 broken modelでbinding/validity/revocation/event atomicity反例、正常7 + history deletion 1 scenario、同期/非同期共通preflight、WebCrypto/MoonBit共通vector、Cloudflare SQLite/IndexedDB lifecycle transaction、secret-backed Worker signer custody、標準producer/witness署名生成、peer clientのretarget拒否、checkpoint配送・witness ingress・reference owner proof/checkpoint commitment/derived asset identityの標準/MoonBit二重検証、production gate、IndexedDB restart/migration、browser E2Eをtest。別のmigration Quint正常modelは反例なし、writer/cutoff/history/bindingを外した4 broken modelで反例、4 rollout scenarioを確認した。source relay/authority/player-localに加え、checkpoint producer/witness/source seal/receiverのv2生成・dual read、保存cutoff、rotation後のwitness key選択をworkerd/host testで固定した |
+| machine result | MoonBit 5 proof goals、key lifecycle Quint正常model反例なし、4 broken modelでbinding/validity/revocation/event atomicity反例、正常7 + history deletion 1 scenario、同期/非同期共通preflight、WebCrypto/MoonBit共通vector、Cloudflare SQLite/IndexedDB lifecycle transaction、secret-backed Worker signer custody、標準producer/witness署名生成、peer clientのretarget拒否、checkpoint配送・witness ingress・reference owner proof/checkpoint commitment/derived asset identityの標準/MoonBit二重検証、production gate、IndexedDB restart/migration、browser E2Eをtest。別のmigration Quint正常modelは反例なし、writer/cutoff/history/bindingを外した4 broken modelで反例、4 rollout scenarioを確認した。source relay/authority/player-localに加え、checkpoint producer/witness/source seal/receiverのv2生成・dual read、保存cutoff、rotation後のwitness key選択をworkerd/host testで固定した。production MoonBit bridgeにseed-backed/benchmark producer exportがないこと、browser game checkpoint/snapshot生成が標準非同期backendだけを使うことをbuild後のNode testで固定した |
 | witness | version bindingを外すとV2署名をV1として受理、validityを外すとV1終了境界の署名を受理、revocationを外すとeffective boundary上の署名を受理。event appendをmaterialized updateと分離するとrevision 2にevent 1しか残らない。旧recordを削除するとrotation後の正当なV1 checkpointを検証不能 |
 | domain wording | 鍵を更新しても過去の正当な戦利品を失効させない。一方、侵害期間に作られたcheckpointは後からmarketplaceで止められる |
 | decision | validityはverification timeでなくsigned issuance timeに適用する。revocationはretroactiveに設定可能なeffective boundaryとし、公開鍵historyを証拠保持期間中archiveする |
 | lock | `moon test/prove src/audit/key_lifecycle`、`KeyLifecycle*.qnt`、`KeyAuthenticationMigration*.qnt`、`just quint-scenarios`、`just quint-check`、`just quint-counterexamples`、`key-lifecycle.test.ts`、`evidence-case-resolution-relay.test.ts`、`evidence-resolution-relay-worker.test.ts`、`verification-key-lifecycle-store.test.ts`、`verification-key-lifecycle-indexeddb.node-test.ts`、`verification-key-signer-worker.test.ts`、`production-crypto.test.ts`、`device-key-custody.node-test.ts`、Playwright E2E |
+
+### game commitment backendの照合
+
+| 項目 | 内容 |
+| --- | --- |
+| source | Issue #9の「game event/checkpoint commitmentの同期experimental backendを置換または隔離する」要件 |
+| expected claim | production browserは標準backendだけでgame checkpointを生成し、非同期hashの途中状態や順序違反を公開しない |
+| implementation observation | 旧実装はMoonBit同期SHA-256でtickを即時commitし、IndexedDB保存前だけ標準WebCryptoで再検査していた |
+| model question | canonical bytesを変えずbackendだけを非同期化したとき、同期fixtureとの値同値性、tick順序、未完了checkpointの非公開性を維持できるか |
+| tool | 状態遷移を増やさないbackend置換なので新規Quint modelは作らず、同期/非同期同値test、遅延hash witness、直列command queue test、browser E2Eを使う |
+| machine result | 60 tick/2 checkpointが同期fixtureと完全一致し、遅延Merkle中は入力journal不変。queueは完了順を保持し、拒否後も次commandを実行する。snapshot保存はO(1) capture、全履歴hashはreload時のO(n)検査に限定した。production source contractは同期journal/snapshot adapterの再導入を拒否し、Playwright 3 scenarioが通過した |
+| domain wording | 描画は継続するが、監査上の1 tickはそのcheckpoint hashが完成するまで確定扱いにしない。authority ACKや再起動もその途中へ割り込ませない |
+| decision | MoonBitはcanonical Merkle framingを所有し、production browserのSHA-256は標準WebCryptoへ限定する。同期adapterはtest/replay fixture互換用に残す |
+| lock | `game-audit-journal.test.ts`、`game-audit-snapshot.test.ts`、`serialized-command-queue.test.ts`、`production-moonbit-bundle.node-test.ts`、Playwright E2E |
 
 checkpoint配送は、MoonBitが生成するcanonical bytesを標準WebCryptoでhash/signature検証した後、既存MoonBit
 verifierも同じopaque capabilityへ到達した場合だけwitness collection、source seal、receiver mutationへ進む。
@@ -271,6 +288,6 @@ producer/witness署名生成も同じMoonBit serializerと交換可能な非同�
 収集中の正当な`under_quorum`にはexact-bound partial capabilityを発行する。inventory listing/checkpoint/lineageの
 authority checkpointとreplay-witness attestationも同じ標準/MoonBit二重検証を通す。inventoryのorigin
 receipt/initial rootとauthenticated-map membership/public state rootも標準SHA-256で独立再計算する。未解決なのは、
-同期生成hashの標準backend化、event/asset-delta rootを担うwitnessの独立性と運用監査、mobile SQLite adapter、
+event/asset-delta rootを担うwitnessの独立性と運用監査、mobile SQLite adapter、
 timestamp trust、secret/HSM providerを含む実deploymentと運用監査である。reference Worker custodyと
 browser custodyだけを根拠にIssue #9全体を完了扱いしてはならない。

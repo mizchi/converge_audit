@@ -3,10 +3,14 @@ import {
   appendAuditTick,
   createGameAuditJournal,
   type AuditDigestAdapter,
+  type AsyncAuditDigestAdapter,
 } from "../game/audit/journal";
 import {
+  captureRunSnapshot,
   createRunSnapshot,
+  createRunSnapshotAsync,
   restoreRunSnapshot,
+  restoreRunSnapshotAsync,
 } from "../game/audit/snapshot";
 import { advanceGame, createInitialGame } from "../game/kernel";
 
@@ -21,6 +25,15 @@ const testDigest: AuditDigestAdapter = {
   },
   merkleRoot(payloads) {
     return this.hashString(JSON.stringify(["test-merkle-v1", ...payloads]));
+  },
+};
+
+const asyncTestDigest: AsyncAuditDigestAdapter = {
+  async hashString(value) {
+    return testDigest.hashString(value);
+  },
+  async merkleRoot(payloads) {
+    return testDigest.merkleRoot(payloads);
   },
 };
 
@@ -49,6 +62,49 @@ function runTo(ticks: number) {
 }
 
 describe("player-local run snapshot", () => {
+  it("captures an already sealed boundary without rehashing its history", () => {
+    const run = runTo(30);
+
+    expect(captureRunSnapshot(run.game, run.audit, 1234)).toEqual({
+      version: 1,
+      savedAtMs: 1234,
+      game: run.game,
+      audit: run.audit,
+    });
+  });
+
+  it("keeps asynchronous snapshot validation identical to the fixture path", async () => {
+    const run = runTo(30);
+    const synchronous = createRunSnapshot(
+      run.game,
+      run.audit,
+      1234,
+      testDigest,
+    );
+    const asynchronous = await createRunSnapshotAsync(
+      run.game,
+      run.audit,
+      1234,
+      asyncTestDigest,
+    );
+
+    expect(asynchronous).toEqual(synchronous);
+    await expect(restoreRunSnapshotAsync(
+      structuredClone(asynchronous),
+      asyncTestDigest,
+    )).resolves.toEqual({ ok: true, snapshot: asynchronous });
+  });
+
+  it("refuses a changed event through asynchronous snapshot validation", async () => {
+    const run = runTo(30);
+    const snapshot = createRunSnapshot(run.game, run.audit, 1234, testDigest);
+    const changed = structuredClone(snapshot);
+    changed.audit.retainedSegments[0].events[0].canonicalPayload += "tampered";
+
+    await expect(restoreRunSnapshotAsync(changed, asyncTestDigest)).resolves
+      .toEqual({ ok: false, reason: "event_root_mismatch" });
+  });
+
   it("round-trips only a complete micro-checkpoint boundary", () => {
     const run = runTo(30);
     const snapshot = createRunSnapshot(run.game, run.audit, 1234, testDigest);

@@ -1,0 +1,35 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/converge_audit/x/game_audit/worker_fixture"
+
+// Values
+pub fn audit_benchmark_make_anchor_envelope(String, String, String, Int, String) -> String
+
+pub fn audit_benchmark_make_checkpoint_delivery_authentication(String, String, Array[String], Array[String], Int, Int, Int, String, String, String, String, String, Int, String, String, String) -> String
+
+pub fn audit_benchmark_make_inventory_checkpoint_proof_bundle(String, String, String, String, Int, Array[String], Array[Int], Array[String], Array[Int], Array[String], Array[String], String) -> String
+
+pub fn audit_benchmark_make_inventory_lineage_proof_bundle(String, String, String, String, Int, String, String, String, String, Int, String, Int, Int) -> String
+
+pub fn audit_benchmark_make_inventory_listing_proof_bundle(String, String, String, String, Int, String, String, String, String, Int, String, Int, Int) -> String
+
+pub fn audit_benchmark_make_open_world_missing_slot_conflict_bundle(String, String, String, String, String) -> String
+
+pub fn audit_benchmark_make_open_world_missing_slot_proof(Int, Int) -> String
+
+pub fn audit_benchmark_make_open_world_multi_asset_pve_replay_bundle(String, String, String, String, Int) -> String
+
+pub fn audit_benchmark_make_open_world_pve_replay_bundle(String, String, String, String) -> String
+
+pub fn audit_benchmark_make_pve_replay_bundle(String, String, String) -> String
+
+pub fn audit_benchmark_make_pvp_replay_bundle(String, String, String) -> String
+
+pub fn audit_experimental_sign_checkpoint_delivery_approval(String, String, String) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

@@ -86,9 +86,16 @@ SHA-256/Ed25519 implementation for known-vector integration and realistic cost
 measurement; it is not a production-security claim. A device/mobile store,
 external signer credential, production socket/gossip transport, audited crypto
 backend, and durable head-history transaction remain integration work.
-`worker` exposes the narrow JS/wasm-gc bridge used by
-`examples/cf-game-audit`: benchmark fixture generation, full envelope opening,
-the proved classifiers, and real-crypto PvE/PvP/open-world bundle replay. `central_replay`
+`worker` exposes the production JS/wasm-gc bridge used by
+`examples/cf-game-audit`: canonical serialization, full envelope opening, the
+proved classifiers, and real-crypto PvE/PvP/open-world bundle verification. It
+does not link any seed-backed signing or benchmark-fixture export.
+`worker_fixture` is a separate test/benchmark artifact that wraps those
+seed-backed fixture constructors; production TypeScript and deployment bundles
+must not import it. The reference browser uses MoonBit canonical Merkle framing
+with an asynchronous standard WebCrypto backend for live game checkpoints;
+this does not change the generic module's experimental-crypto assurance label.
+`central_replay`
 decodes a bounded versioned bundle, authenticates every signed event through
 the audit adapter, reconstructs the complete transcript, and only reports success
 after the game checkpoint's manifest/event/public-state roots match; PvP also

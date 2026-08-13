@@ -3,11 +3,11 @@ import {
   type LatencySummary,
 } from "../src/benchmark-metrics";
 
-type AuditModule = typeof import("../../../_build/js/release/build/x/game_audit/worker/worker.js");
+type AuditModule = typeof import("../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js");
 
 const audit = await import(
   new URL(
-    "../../../_build/js/release/build/x/game_audit/worker/worker.js",
+    "../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js",
     import.meta.url,
   ).href
 ) as AuditModule;

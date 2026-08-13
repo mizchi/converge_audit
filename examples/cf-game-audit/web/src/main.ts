@@ -1,7 +1,7 @@
 import {
   acknowledgeAuditCheckpoint,
-  appendAuditTick,
-  createGameAuditJournal,
+  appendAuditTickAsync,
+  createGameAuditJournalAsync,
   type GameAuditJournalState,
   type GameMicroCheckpoint,
 } from "../../game/audit/journal";
@@ -9,7 +9,6 @@ import {
   buildGameCheckpointVerificationRequest,
   authenticateGameItemVerificationRequestAsync,
   buildGameItemVerificationRequest,
-  verifyGameCheckpointCommitmentsAsync,
   type UnsignedGameItemVerificationRequest,
   type GameItemVerificationRequest,
 } from "../../game/authority/item-verification";
@@ -28,7 +27,8 @@ import {
   cryptoRuntimeAdmission,
 } from "../../../player-local-runtime/crypto-backend";
 import { createAsyncAuditDigestAdapter } from "../../../player-local-runtime/merkle-digest";
-import { moonBitAuditDigest, moonBitMerkleFraming } from "./audit/moonbit";
+import { moonBitMerkleFraming } from "./audit/moonbit";
+import { SerializedCommandQueue } from "./audit/serialized-command-queue";
 import {
   requestGameAssetLineageStatus,
   requestGameCheckpointVerification,
@@ -39,7 +39,10 @@ import {
   type RequestGameCheckpointVerificationResult,
   type RequestGameItemVerificationResult,
 } from "./audit/authority-client";
-import { createRunSnapshot, restoreRunSnapshot } from "../../game/audit/snapshot";
+import {
+  captureRunSnapshot,
+  restoreRunSnapshotAsync,
+} from "../../game/audit/snapshot";
 import { DEFAULT_GAME_RULES } from "../../game/content";
 import type {
   AuditBoundary,
@@ -142,16 +145,16 @@ function runIdFromLocation(): string {
 
 let state = createInitialGame({ seed: seedFromLocation(), playerId: "local-player" });
 let runId = runIdFromLocation();
-function newAuditJournal(
+async function newAuditJournal(
   game: GameState,
   ownerPublicKey: string,
-): GameAuditJournalState {
-  return createGameAuditJournal({
+): Promise<GameAuditJournalState> {
+  return createGameAuditJournalAsync({
     seed: game.seed,
     playerId: game.player.id,
     ownerPublicKey,
     cadenceTicks: 30,
-  }, moonBitAuditDigest);
+  }, productionAuditDigest);
 }
 
 let deviceKey: ProductionReferenceGameDeviceKey;
@@ -172,6 +175,9 @@ const pendingMarketCancellations = new Set<string>();
 const failedMarketCancellations = new Map<string, string>();
 let verificationGeneration = 0;
 let authorityVerificationQueue = Promise.resolve();
+const localMutationQueue = new SerializedCommandQueue();
+let simulationDrainInFlight = false;
+let simulationFailed = false;
 seedInput.value = String(state.seed);
 
 function runStorageKey(game: GameState, selectedRunId = runId): string {
@@ -189,15 +195,14 @@ function addEventLine(line: string): void {
   eventLines.splice(12);
 }
 
-function playerLocalBoundary(
+async function playerLocalBoundary(
   storageKey: string,
   game: GameState,
-  audit: GameAuditJournalState,
-): AuditBoundary {
+): Promise<AuditBoundary> {
   return {
     protocol_version: 1,
     purpose: "reference-game-checkpoint-v1",
-    manifest_digest: moonBitAuditDigest.hashString(JSON.stringify([
+    manifest_digest: await productionAuditDigest.hashString(JSON.stringify([
       "reference-game-local-manifest-v1",
       DEFAULT_GAME_RULES,
     ])),
@@ -219,26 +224,30 @@ function playerLocalCheckpoint(
   };
 }
 
-function playerLocalClosure(
+async function playerLocalClosure(
   boundary: AuditBoundary,
   audit: GameAuditJournalState,
   checkpoint: GameMicroCheckpoint,
-): EpochClosureEvidence {
-  return {
-    boundary,
-    epoch: checkpoint.epoch,
-    roster_digest: moonBitAuditDigest.hashString(JSON.stringify([
+): Promise<EpochClosureEvidence> {
+  const [rosterDigest, certificateDigest] = await Promise.all([
+    productionAuditDigest.hashString(JSON.stringify([
       "reference-game-local-roster-v1",
       audit.playerId,
       audit.ownerPublicKey,
     ])),
-    frontier_digest: checkpoint.eventRoot,
-    certificate_digest: moonBitAuditDigest.hashString(JSON.stringify([
+    productionAuditDigest.hashString(JSON.stringify([
       "reference-game-local-closure-v1",
       checkpoint.checkpointDigest,
       checkpoint.eventRoot,
       checkpoint.stateDigest,
     ])),
+  ]);
+  return {
+    boundary,
+    epoch: checkpoint.epoch,
+    roster_digest: rosterDigest,
+    frontier_digest: checkpoint.eventRoot,
+    certificate_digest: certificateDigest,
   };
 }
 
@@ -247,7 +256,7 @@ async function openPlayerLocalRuntime(
   game: GameState,
   audit: GameAuditJournalState,
 ): Promise<BrowserPlayerLocalCheckpointRuntime> {
-  const boundary = playerLocalBoundary(storageKey, game, audit);
+  const boundary = await playerLocalBoundary(storageKey, game);
   const configuration: PlayerLocalStoreConfiguration = {
     boundary,
     genesis_digest: audit.genesisDigest,
@@ -263,7 +272,7 @@ async function openPlayerLocalRuntime(
     if (checkpoint.epoch <= retained.retention_anchor.epoch) continue;
     const sealed = await runtime.seal(
       playerLocalCheckpoint(boundary, checkpoint),
-      playerLocalClosure(boundary, audit, checkpoint),
+      await playerLocalClosure(boundary, audit, checkpoint),
       [LOCAL_AUTHORITY_ID],
     );
     if (sealed.decision !== "committed" && sealed.decision !== "duplicate") {
@@ -332,40 +341,25 @@ async function acknowledgePlayerLocalCheckpoint(
 
 function persistSealedRun(checkpoint: GameMicroCheckpoint): void {
   const key = runStorageKey(state);
-  const snapshot = createRunSnapshot(
-    state,
-    auditJournal,
-    Date.now(),
-    moonBitAuditDigest,
-  );
+  const snapshotGame = state;
+  const snapshotAudit = auditJournal;
+  const savedAtMs = Date.now();
   persistenceQueue = persistenceQueue
     .then(async () => {
-      const request = buildGameCheckpointVerificationRequest(
-        snapshot.audit,
-        checkpoint.epoch,
+      const snapshot = captureRunSnapshot(
+        snapshotGame,
+        snapshotAudit,
+        savedAtMs,
       );
-      const standardCommitment = await verifyGameCheckpointCommitmentsAsync(
-        request,
-        snapshot.game,
-        productionAuditDigest,
-        checkpoint.epoch === 0
-          ? undefined
-          : snapshot.audit.checkpoints[checkpoint.epoch - 1].checkpointDigest,
-      );
-      if (!standardCommitment.ok) {
-        throw new Error(
-          `standard checkpoint commitment refused: ${standardCommitment.reason}`,
-        );
-      }
       await snapshotStore.save(key, snapshot);
       const runtime = await localCheckpointRuntime;
       if (!runtime) {
         throw new Error("player-local checkpoint runtime is unavailable");
       }
-      const boundary = playerLocalBoundary(key, snapshot.game, snapshot.audit);
+      const boundary = await playerLocalBoundary(key, snapshot.game);
       const sealed = await runtime.seal(
         playerLocalCheckpoint(boundary, checkpoint),
-        playerLocalClosure(boundary, snapshot.audit, checkpoint),
+        await playerLocalClosure(boundary, snapshot.audit, checkpoint),
         [LOCAL_AUTHORITY_ID],
       );
       if (sealed.decision !== "committed" && sealed.decision !== "duplicate") {
@@ -396,11 +390,16 @@ async function restartGame(): Promise<void> {
   const nextState = createInitialGame({ seed, playerId: "local-player" });
   const key = runStorageKey(nextState, nextRunId);
   let nextDeviceKey: ProductionReferenceGameDeviceKey;
+  let nextAuditJournal: GameAuditJournalState;
   try {
     nextDeviceKey = await loadOrCreateProductionDeviceKey(
       snapshotStore,
       key,
       productionCryptoBackend,
+    );
+    nextAuditJournal = await newAuditJournal(
+      nextState,
+      nextDeviceKey.publicKey,
     );
   } catch (error) {
     reportPersistenceFailure(error);
@@ -408,30 +407,33 @@ async function restartGame(): Promise<void> {
     updateInterface();
     return;
   }
-  runId = nextRunId;
-  const url = new URL(location.href);
-  url.searchParams.set("seed", String(seed >>> 0));
-  url.searchParams.set("run", runId);
-  history.replaceState(null, "", url);
-  state = nextState;
-  deviceKey = nextDeviceKey;
-  auditJournal = newAuditJournal(state, deviceKey.publicKey);
-  replacePlayerLocalRuntime(key, state, auditJournal);
-  verificationGeneration += 1;
-  authorityVerificationQueue = Promise.resolve();
-  pendingItemVerifications.clear();
-  failedItemVerifications.clear();
-  pendingMarketListings.clear();
-  failedMarketListings.clear();
-  listedItems.clear();
-  listingNonces.clear();
-  lineageStatuses.clear();
-  pendingLineageStatusRequests.clear();
-  pendingMarketCancellations.clear();
-  failedMarketCancellations.clear();
-  previousState = state;
-  accumulated = 0;
-  eventLines.length = 0;
+  await localMutationQueue.run(() => {
+    runId = nextRunId;
+    const url = new URL(location.href);
+    url.searchParams.set("seed", String(seed >>> 0));
+    url.searchParams.set("run", runId);
+    history.replaceState(null, "", url);
+    state = nextState;
+    deviceKey = nextDeviceKey;
+    auditJournal = nextAuditJournal;
+    replacePlayerLocalRuntime(key, state, auditJournal);
+    verificationGeneration += 1;
+    authorityVerificationQueue = Promise.resolve();
+    pendingItemVerifications.clear();
+    failedItemVerifications.clear();
+    pendingMarketListings.clear();
+    failedMarketListings.clear();
+    listedItems.clear();
+    listingNonces.clear();
+    lineageStatuses.clear();
+    pendingLineageStatusRequests.clear();
+    pendingMarketCancellations.clear();
+    failedMarketCancellations.clear();
+    previousState = state;
+    accumulated = 0;
+    eventLines.length = 0;
+    simulationFailed = false;
+  });
   restartButton.disabled = false;
   updateInterface();
 }
@@ -514,47 +516,59 @@ async function verifyItemWithBackfill(
       checkpointRequest,
     );
     if (!result.ok) throw new Error(authorityFailureReason(result));
-    const acknowledged = acknowledgeAuditCheckpoint(
-      auditJournal,
-      result.receipt.checkpointDigest,
-    );
-    if (!acknowledged.ok) {
-      throw new Error(`checkpoint receipt refused locally: ${acknowledged.reason}`);
-    }
-    auditJournal = acknowledged.state;
-    await acknowledgePlayerLocalCheckpoint(result.receipt.checkpointDigest);
-    addEventLine(`authority checkpoint e${epoch} verified`);
-    updateInterface();
+    const applied = await localMutationQueue.run(async () => {
+      if (generation !== verificationGeneration) return false;
+      const acknowledged = acknowledgeAuditCheckpoint(
+        auditJournal,
+        result.receipt.checkpointDigest,
+      );
+      if (!acknowledged.ok) {
+        throw new Error(
+          `checkpoint receipt refused locally: ${acknowledged.reason}`,
+        );
+      }
+      auditJournal = acknowledged.state;
+      await acknowledgePlayerLocalCheckpoint(result.receipt.checkpointDigest);
+      addEventLine(`authority checkpoint e${epoch} verified`);
+      updateInterface();
+      return true;
+    });
+    if (!applied) return;
   }
 
   if (generation !== verificationGeneration) return;
   const result = await requestGameItemVerification(fetch, unit, request);
   if (!result.ok) throw new Error(authorityFailureReason(result));
-  const applied = applyItemVerification(state, result.receipt);
-  if (!applied.ok) {
-    throw new Error(`authority receipt refused locally: ${applied.reason}`);
-  }
-  const acknowledged = acknowledgeAuditCheckpoint(
-    auditJournal,
-    result.receipt.checkpointDigest,
-  );
-  if (!acknowledged.ok) {
-    throw new Error(`checkpoint receipt refused locally: ${acknowledged.reason}`);
-  }
-  state = applied.state;
-  auditJournal = acknowledged.state;
-  await acknowledgePlayerLocalCheckpoint(result.receipt.checkpointDigest);
-  failedItemVerifications.delete(assetId);
-  lineageStatuses.set(assetId, {
-    assetId,
-    eligibility: "eligible",
-    settlementStatus: "finalized",
-    openRevocations: 0,
-    lineageCases: [],
+  await localMutationQueue.run(async () => {
+    if (generation !== verificationGeneration) return;
+    const applied = applyItemVerification(state, result.receipt);
+    if (!applied.ok) {
+      throw new Error(`authority receipt refused locally: ${applied.reason}`);
+    }
+    const acknowledged = acknowledgeAuditCheckpoint(
+      auditJournal,
+      result.receipt.checkpointDigest,
+    );
+    if (!acknowledged.ok) {
+      throw new Error(
+        `checkpoint receipt refused locally: ${acknowledged.reason}`,
+      );
+    }
+    state = applied.state;
+    auditJournal = acknowledged.state;
+    await acknowledgePlayerLocalCheckpoint(result.receipt.checkpointDigest);
+    failedItemVerifications.delete(assetId);
+    lineageStatuses.set(assetId, {
+      assetId,
+      eligibility: "eligible",
+      settlementStatus: "finalized",
+      openRevocations: 0,
+      lineageCases: [],
+    });
+    addEventLine(
+      `authority verified ${assetId} (${result.receipt.authorityReceiptId.slice(0, 10)}…)`,
+    );
   });
-  addEventLine(
-    `authority verified ${assetId} (${result.receipt.authorityReceiptId.slice(0, 10)}…)`,
-  );
 }
 
 function scheduleItemVerification(assetId: string): void {
@@ -993,12 +1007,9 @@ function render(previous: GameState, current: GameState, alpha: number): void {
   context.shadowBlur = 0;
 }
 
-function frame(now: number): void {
-  accumulated += Math.min(250, now - lastFrame);
-  lastFrame = now;
+async function drainSimulationTicks(): Promise<number> {
   let steps = 0;
   while (accumulated >= TICK_MS && steps < MAX_CATCH_UP_TICKS) {
-    previousState = state;
     const input = {
       tick: state.tick + 1,
       horizontal: inputAxis(["ArrowLeft", "KeyA"], ["ArrowRight", "KeyD"]),
@@ -1006,15 +1017,16 @@ function frame(now: number): void {
     } as const;
     const result = advanceGame(state, input);
     if (!result.ok) throw new Error(result.reason);
-    state = result.state;
-    recordEffects(result.effects);
-    const audited = appendAuditTick(auditJournal, {
+    const audited = await appendAuditTickAsync(auditJournal, {
       input,
       effects: result.effects,
-      state,
-    }, moonBitAuditDigest);
+      state: result.state,
+    }, productionAuditDigest);
     if (!audited.ok) throw new Error(`audit journal refused tick: ${audited.reason}`);
+    previousState = state;
+    state = result.state;
     auditJournal = audited.state;
+    recordEffects(result.effects);
     if (audited.checkpoint) {
       recordCheckpoint(audited.checkpoint);
       persistSealedRun(audited.checkpoint);
@@ -1033,8 +1045,36 @@ function frame(now: number): void {
     steps += 1;
   }
   if (steps === MAX_CATCH_UP_TICKS) accumulated = Math.min(accumulated, TICK_MS);
-  if (steps > 0) updateInterface();
-  render(previousState, state, accumulated / TICK_MS);
+  return steps;
+}
+
+function scheduleSimulationDrain(): void {
+  if (simulationDrainInFlight || simulationFailed || accumulated < TICK_MS) {
+    return;
+  }
+  const generation = verificationGeneration;
+  simulationDrainInFlight = true;
+  void localMutationQueue.run(drainSimulationTicks)
+    .then((steps) => {
+      if (steps > 0) updateInterface();
+    })
+    .catch((error: unknown) => {
+      if (generation !== verificationGeneration) return;
+      simulationFailed = true;
+      const reason = error instanceof Error ? error.message : String(error);
+      addEventLine(`simulation stopped (fail-closed): ${reason}`);
+      updateInterface();
+    })
+    .finally(() => {
+      simulationDrainInFlight = false;
+    });
+}
+
+function frame(now: number): void {
+  accumulated += Math.min(250, now - lastFrame);
+  lastFrame = now;
+  scheduleSimulationDrain();
+  render(previousState, state, Math.min(1, accumulated / TICK_MS));
   requestAnimationFrame(frame);
 }
 
@@ -1047,16 +1087,19 @@ async function start(): Promise<void> {
       storageKey,
       productionCryptoBackend,
     );
+    auditJournal = await newAuditJournal(state, deviceKey.publicKey);
   } catch (error) {
     reportPersistenceFailure(error);
     auditStatusElement.textContent = "crypto unavailable (fail-closed)";
     return;
   }
-  auditJournal = newAuditJournal(state, deviceKey.publicKey);
   try {
     const stored = await snapshotStore.load(storageKey);
     if (stored !== undefined) {
-      const restored = restoreRunSnapshot(stored, moonBitAuditDigest);
+      const restored = await restoreRunSnapshotAsync(
+        stored,
+        productionAuditDigest,
+      );
       if (
         restored.ok &&
         restored.snapshot.audit.ownerPublicKey === deviceKey.publicKey

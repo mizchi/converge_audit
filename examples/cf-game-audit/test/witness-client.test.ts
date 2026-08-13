@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   audit_benchmark_make_checkpoint_delivery_authentication,
-} from "../../../_build/js/release/build/x/game_audit/worker/worker.js";
+} from "../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js";
 import {
   audit_browser_ed25519_public_key,
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";

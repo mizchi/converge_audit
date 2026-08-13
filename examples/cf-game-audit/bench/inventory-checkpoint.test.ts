@@ -10,7 +10,7 @@ import {
   audit_benchmark_make_anchor_envelope,
   audit_benchmark_make_inventory_checkpoint_proof_bundle,
   audit_benchmark_make_open_world_multi_asset_pve_replay_bundle,
-} from "../../../_build/js/release/build/x/game_audit/worker/worker.js";
+} from "../../../_build/js/release/build/x/game_audit/worker_fixture/worker_fixture.js";
 import worker, {
   type Env as AuditEnv,
   type ReplayJob,

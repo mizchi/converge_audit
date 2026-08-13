@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   acknowledgeAuditCheckpoint,
   appendAuditTick,
+  appendAuditTickAsync,
   createGameAuditJournal,
+  createGameAuditJournalAsync,
   type AuditDigestAdapter,
+  type AsyncAuditDigestAdapter,
   type GameAuditJournalState,
 } from "../game/audit/journal";
 import {
@@ -28,6 +31,15 @@ const testDigest: AuditDigestAdapter = {
 };
 
 const ownerPublicKey = "a".repeat(64);
+
+const asyncTestDigest: AsyncAuditDigestAdapter = {
+  async hashString(value) {
+    return testDigest.hashString(value);
+  },
+  async merkleRoot(payloads) {
+    return testDigest.merkleRoot(payloads);
+  },
+};
 
 function advanceAudited(
   game: GameState,
@@ -66,7 +78,87 @@ function runTicks(
   return { game, audit };
 }
 
+async function runTicksAsync(
+  count: number,
+  horizontal: Axis = 0,
+): Promise<{ game: GameState; audit: GameAuditJournalState }> {
+  let game = createInitialGame({ seed: 0x1234, playerId: "player-1" });
+  let audit = await createGameAuditJournalAsync({
+    seed: game.seed,
+    playerId: game.player.id,
+    ownerPublicKey,
+    cadenceTicks: 30,
+  }, asyncTestDigest);
+  for (let tick = 0; tick < count; tick += 1) {
+    const input = {
+      tick: game.tick + 1,
+      horizontal,
+      vertical: 0 as Axis,
+    };
+    const advanced = advanceGame(game, input);
+    if (!advanced.ok) throw new Error(advanced.reason);
+    const appended = await appendAuditTickAsync(audit, {
+      input,
+      effects: advanced.effects,
+      state: advanced.state,
+    }, asyncTestDigest);
+    if (!appended.ok) throw new Error(appended.reason);
+    game = advanced.state;
+    audit = appended.state;
+  }
+  return { game, audit };
+}
+
 describe("local game audit journal", () => {
+  it("keeps asynchronous production hashing byte-identical to the synchronous fixture", async () => {
+    const synchronous = runTicks(60, -1);
+    const asynchronous = await runTicksAsync(60, -1);
+
+    expect(asynchronous).toEqual(synchronous);
+  });
+
+  it("does not mutate or publish a checkpoint before asynchronous hashes settle", async () => {
+    const game = createInitialGame({ seed: 7, playerId: "player-1" });
+    const audit = await createGameAuditJournalAsync({
+      seed: game.seed,
+      playerId: game.player.id,
+      ownerPublicKey,
+      cadenceTicks: 1,
+    }, asyncTestDigest);
+    const input = { tick: 1, horizontal: 0 as Axis, vertical: 0 as Axis };
+    const advanced = advanceGame(game, input);
+    if (!advanced.ok) throw new Error(advanced.reason);
+    let releaseEventRoot: (() => void) | undefined;
+    const blockedDigest: AsyncAuditDigestAdapter = {
+      async hashString(value) {
+        return testDigest.hashString(value);
+      },
+      async merkleRoot(payloads) {
+        await new Promise<void>((resolve) => {
+          releaseEventRoot = resolve;
+        });
+        return testDigest.merkleRoot(payloads);
+      },
+    };
+
+    const appending = appendAuditTickAsync(audit, {
+      input,
+      effects: advanced.effects,
+      state: advanced.state,
+    }, blockedDigest);
+    await Promise.resolve();
+
+    expect(audit.nextTick).toBe(1);
+    expect(audit.checkpoints).toHaveLength(0);
+    expect(releaseEventRoot).toBeTypeOf("function");
+    releaseEventRoot?.();
+    const appended = await appending;
+    expect(appended.ok).toBe(true);
+    if (!appended.ok) throw new Error(appended.reason);
+    expect(appended.state.nextTick).toBe(2);
+    expect(appended.state.checkpoints).toHaveLength(1);
+  });
+
   it("seals one deterministic micro checkpoint for each 30 accepted ticks", () => {
     const first = runTicks(60).audit;
     const second = runTicks(60).audit;

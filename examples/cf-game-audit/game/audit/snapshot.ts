@@ -4,6 +4,7 @@ import {
   canonicalGameState,
   canonicalMicroCheckpointEnvelope,
   type AuditDigestAdapter,
+  type AsyncAuditDigestAdapter,
   type GameAuditJournalState,
   type GameMicroCheckpoint,
   type PendingAuditEvent,
@@ -209,26 +210,162 @@ export function restoreRunSnapshot(
   return { ok: true, snapshot };
 }
 
+export async function restoreRunSnapshotAsync(
+  value: unknown,
+  digest: AsyncAuditDigestAdapter,
+): Promise<RestoreRunSnapshotResult> {
+  if (
+    !isRecord(value) ||
+    value.version !== 1 ||
+    !isInteger(value.savedAtMs) ||
+    value.savedAtMs < 0 ||
+    !hasBasicGameShape(value.game) ||
+    !hasBasicAuditShape(value.audit)
+  ) {
+    return { ok: false, reason: "invalid_snapshot" };
+  }
+  const snapshot = value as unknown as RunSnapshot;
+  const { game, audit } = snapshot;
+  if (
+    audit.seed !== game.seed ||
+    audit.playerId !== game.player.id ||
+    audit.nextTick !== game.tick + 1 ||
+    audit.pending.length !== 0
+  ) {
+    return { ok: false, reason: "journal_game_mismatch" };
+  }
+  if (
+    audit.genesisDigest !== await digest.hashString(
+      canonicalAuditGenesis(audit.seed, audit.playerId, audit.ownerPublicKey),
+    ) ||
+    audit.checkpoints.length === 0 ||
+    audit.checkpoints.length !== audit.retainedSegments.length
+  ) {
+    return { ok: false, reason: "checkpoint_chain_mismatch" };
+  }
+
+  let expectedTick = 1;
+  let previousCheckpoint = audit.genesisDigest;
+  for (let epoch = 0; epoch < audit.checkpoints.length; epoch += 1) {
+    const checkpoint = audit.checkpoints[epoch];
+    const segment = audit.retainedSegments[epoch];
+    if (
+      !hasCheckpointShape(checkpoint) ||
+      !hasSegmentShape(segment) ||
+      checkpoint.epoch !== epoch ||
+      segment.epoch !== epoch ||
+      segment.checkpointDigest !== checkpoint.checkpointDigest ||
+      checkpoint.previousCheckpoint !== previousCheckpoint ||
+      checkpoint.eventCount !== audit.cadenceTicks ||
+      segment.events.length !== checkpoint.eventCount ||
+      checkpoint.firstTick !== expectedTick ||
+      checkpoint.lastTick !== expectedTick + checkpoint.eventCount - 1
+    ) {
+      return { ok: false, reason: "checkpoint_chain_mismatch" };
+    }
+    for (const event of segment.events) {
+      if (event.tick !== expectedTick) {
+        return { ok: false, reason: "checkpoint_chain_mismatch" };
+      }
+      expectedTick += 1;
+    }
+    const eventRoot = await digest.merkleRoot(
+      segment.events.map((event) => event.canonicalPayload),
+    );
+    if (eventRoot !== checkpoint.eventRoot) {
+      return { ok: false, reason: "event_root_mismatch" };
+    }
+    const createdAssetIds = segment.events
+      .flatMap((event) => event.createdAssetIds)
+      .sort();
+    if (
+      new Set(createdAssetIds).size !== createdAssetIds.length ||
+      JSON.stringify(createdAssetIds) !== JSON.stringify(checkpoint.createdAssetIds)
+    ) {
+      return { ok: false, reason: "checkpoint_chain_mismatch" };
+    }
+    const canonicalEnvelope = canonicalMicroCheckpointEnvelope(checkpoint);
+    if (
+      canonicalEnvelope !== checkpoint.canonicalEnvelope ||
+      await digest.hashString(canonicalEnvelope) !== checkpoint.checkpointDigest
+    ) {
+      return { ok: false, reason: "checkpoint_chain_mismatch" };
+    }
+    previousCheckpoint = checkpoint.checkpointDigest;
+  }
+
+  const latest = audit.checkpoints.at(-1)!;
+  if (latest.lastTick !== game.tick || expectedTick !== game.tick + 1) {
+    return { ok: false, reason: "journal_game_mismatch" };
+  }
+  try {
+    if (await digest.hashString(canonicalGameState(game)) !== latest.stateDigest) {
+      return { ok: false, reason: "state_digest_mismatch" };
+    }
+  } catch {
+    return { ok: false, reason: "invalid_snapshot" };
+  }
+  if (
+    audit.acknowledgedEpoch < -1 ||
+    audit.acknowledgedEpoch >= audit.checkpoints.length ||
+    audit.acknowledgedTick !== (audit.acknowledgedEpoch < 0
+      ? 0
+      : audit.checkpoints[audit.acknowledgedEpoch].lastTick)
+  ) {
+    return { ok: false, reason: "checkpoint_chain_mismatch" };
+  }
+  return { ok: true, snapshot };
+}
+
 export function createRunSnapshot(
   game: GameState,
   audit: GameAuditJournalState,
   savedAtMs: number,
   digest: AuditDigestAdapter,
 ): RunSnapshot {
+  const snapshot = captureRunSnapshot(game, audit, savedAtMs);
+  const restored = restoreRunSnapshot(snapshot, digest);
+  if (!restored.ok) {
+    throw new Error(`snapshot contract refused: ${restored.reason}`);
+  }
+  return snapshot;
+}
+
+/**
+ * Capture an in-memory state that was already committed by appendAuditTick.
+ * This intentionally performs no historical hashing; restore validates the
+ * complete persisted chain once at the trust boundary.
+ */
+export function captureRunSnapshot(
+  game: GameState,
+  audit: GameAuditJournalState,
+  savedAtMs: number,
+): RunSnapshot {
   if (
+    !Number.isSafeInteger(savedAtMs) ||
+    savedAtMs < 0 ||
     audit.pending.length !== 0 ||
     audit.checkpoints.length === 0 ||
     audit.checkpoints.at(-1)?.lastTick !== game.tick
   ) {
     throw new Error("snapshot requires a sealed checkpoint boundary");
   }
-  const snapshot: RunSnapshot = {
+  return {
     version: 1,
     savedAtMs,
     game,
     audit,
   };
-  const restored = restoreRunSnapshot(snapshot, digest);
+}
+
+export async function createRunSnapshotAsync(
+  game: GameState,
+  audit: GameAuditJournalState,
+  savedAtMs: number,
+  digest: AsyncAuditDigestAdapter,
+): Promise<RunSnapshot> {
+  const snapshot = captureRunSnapshot(game, audit, savedAtMs);
+  const restored = await restoreRunSnapshotAsync(snapshot, digest);
   if (!restored.ok) {
     throw new Error(`snapshot contract refused: ${restored.reason}`);
   }
