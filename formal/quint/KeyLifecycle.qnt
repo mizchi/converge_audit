@@ -19,6 +19,8 @@ module keyLifecycle {
     verificationKeys: Set[KeyVersion],
     revokedKeys: Set[KeyVersion],
     revokedFrom: KeyVersion -> Time,
+    lifecycleRevision: int,
+    lifecycleEventRevisions: Set[int],
     accepted: Set[Checkpoint],
     lastAcceptedExactBinding: bool,
     lastAcceptedIssuanceValid: bool,
@@ -29,6 +31,7 @@ module keyLifecycle {
   const enforceIssuanceValidity: bool
   const enforceEffectiveRevocation: bool
   const retainHistoricalKeys: bool
+  const appendLifecycleEvent: bool
 
   pure val Keys = Set(KeyV1, KeyV2)
   pure val Checkpoints = Set(
@@ -75,6 +78,8 @@ module keyLifecycle {
       verificationKeys: Set(KeyV1),
       revokedKeys: Set(),
       revokedFrom: Keys.mapBy(_ => T3),
+      lifecycleRevision: 1,
+      lifecycleEventRevisions: Set(1),
       accepted: Set(),
       lastAcceptedExactBinding: true,
       lastAcceptedIssuanceValid: true,
@@ -112,6 +117,11 @@ module keyLifecycle {
       currentKey: KeyV2,
       verificationKeys:
         if (retainHistoricalKeys) Set(KeyV1, KeyV2) else Set(KeyV2),
+      lifecycleRevision: 2,
+      lifecycleEventRevisions:
+        if (appendLifecycleEvent)
+        state.lifecycleEventRevisions.union(Set(2))
+        else state.lifecycleEventRevisions,
     },
   }
 
@@ -126,6 +136,11 @@ module keyLifecycle {
       ...state,
       revokedKeys: state.revokedKeys.union(Set(KeyV1)),
       revokedFrom: state.revokedFrom.set(KeyV1, T1),
+      lifecycleRevision: 3,
+      lifecycleEventRevisions:
+        if (appendLifecycleEvent)
+        state.lifecycleEventRevisions.union(Set(3))
+        else state.lifecycleEventRevisions,
     },
   }
 
@@ -166,8 +181,18 @@ module keyLifecycle {
     state.verificationKeys.subseteq(Keys),
     state.revokedKeys.subseteq(Keys),
     state.revokedFrom.keys() == Keys,
+    state.lifecycleRevision >= 1,
+    state.lifecycleRevision <= 3,
+    state.lifecycleEventRevisions.subseteq(Set(1, 2, 3)),
     state.accepted.subseteq(Checkpoints),
   }
+
+  val materializedKeyRevisionHasAppendOnlyEvent =
+    if (state.lifecycleRevision == 1)
+    state.lifecycleEventRevisions == Set(1)
+    else if (state.lifecycleRevision == 2)
+    state.lifecycleEventRevisions == Set(1, 2)
+    else state.lifecycleEventRevisions == Set(1, 2, 3)
 
   val acceptedCheckpointHasExactKeyBinding =
     state.lastAcceptedExactBinding
@@ -183,5 +208,6 @@ module keyLifecycle {
     acceptedCheckpointHasExactKeyBinding,
     acceptedCheckpointWasIssuedInKeyWindow,
     acceptedCheckpointPredatesEffectiveRevocation,
+    materializedKeyRevisionHasAppendOnlyEvent,
   }
 }

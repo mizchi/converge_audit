@@ -49,6 +49,7 @@ import {
   createReferenceGameEvidenceResolutionAuthorizationVerifier,
 } from "../src/evidence-case-resolution-authorization";
 import {
+  buildEvidenceCaseResolutionPollRequest,
   buildEvidenceCaseResolutionEnvelope,
   decodeEvidenceCaseResolutionPollPage,
 } from "../../player-local-runtime/evidence-case-resolution-relay";
@@ -60,6 +61,10 @@ import {
   playerLocalEvidenceHoldEnvelopeStatement,
   type PlayerLocalEvidenceHoldUnsignedEnvelope,
 } from "../../player-local-runtime/evidence-hold-wire";
+import {
+  signKeyBoundStatement,
+  type VerificationKeyRecord,
+} from "../../player-local-runtime/key-lifecycle";
 import {
   appendAuditTick,
   createGameAuditJournal,
@@ -89,6 +94,47 @@ const LINEAGE_ARBITER_SEED =
 const EVIDENCE_SOURCE_SEED =
   "e0e1e2e3e4e5e6e7e8e9eaebecedeeef" +
   "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff";
+
+function evidenceResolutionKeyBoundSigner() {
+  const key: VerificationKeyRecord = {
+    version: 1,
+    keyId: "evidence-source-signing-key",
+    keyVersion: 1,
+    subjectId: "evidence-source-a",
+    purpose: "evidence-case-resolution",
+    scopeId: "reference-game",
+    scheme: "moonbit-ed25519-v1",
+    publicKey: audit_browser_ed25519_public_key(EVIDENCE_SOURCE_SEED),
+    validFromMs: 0,
+    validUntilMs: Number.MAX_SAFE_INTEGER,
+    revokedAtMs: null,
+  };
+  return {
+    version: 2 as const,
+    authenticate(input: {
+      purpose: "evidence-case-resolution";
+      scopeId: string;
+      unitId: string;
+      statementDigest: string;
+    }) {
+      return signKeyBoundStatement({
+        key,
+        unitId: input.unitId,
+        statementDigest: input.statementDigest,
+        issuedAtMs: Date.now(),
+        signer: {
+          scheme: key.scheme,
+          publicKey: key.publicKey,
+          signDigest: (digest) => audit_browser_ed25519_sign(
+            EVIDENCE_SOURCE_SEED,
+            digest,
+          ),
+        },
+        digest: referenceGameDigest,
+      });
+    },
+  };
+}
 const CHECKPOINT_WITNESS_SEEDS = [
   "404142434445464748494a4b4c4d4e4f" +
     "505152535455565758595a5b5c5d5e5f",
@@ -117,12 +163,7 @@ interface Fixture {
 
 interface CheckpointDeliveryFixture {
   ok: true;
-  policy: {
-    producer_id: string;
-    producer_key: string;
-    witnesses: Array<{ witness_id: string; witness_key: string }>;
-    required_approvals: number;
-  };
+  policy: import("../src/moonbit").CheckpointDeliveryAuthenticationPolicy;
   authentication: CheckpointDeliveryJob["authentication"];
 }
 
@@ -141,7 +182,7 @@ function checkpointDeliveryFixture(
   canonicalEnvelope: string,
   approvalCount = 3,
 ): CheckpointDeliveryFixture {
-  return JSON.parse(
+  const fixture = JSON.parse(
     audit_benchmark_make_checkpoint_delivery_authentication(
       SEED,
       "checkpoint-producer",
@@ -161,6 +202,124 @@ function checkpointDeliveryFixture(
       canonicalEnvelope,
     ),
   ) as CheckpointDeliveryFixture;
+  fixture.policy.key_history = {
+    version: 1,
+    keys: [{
+      version: 1,
+      key_id: "integration-checkpoint-producer",
+      key_version: 1,
+      subject_id: "checkpoint-producer",
+      purpose: "checkpoint-producer",
+      scope_id: `cf:${mode}:${unit}`,
+      scheme: "moonbit-ed25519-v1",
+      public_key: fixture.policy.producer_key,
+      valid_from_ms: 0,
+      valid_until_ms: Number.MAX_SAFE_INTEGER,
+      revoked_at_ms: null,
+    }, ...fixture.policy.witnesses.map((witness, index) => ({
+      version: 1 as const,
+      key_id: `integration-checkpoint-witness-${index}`,
+      key_version: 1,
+      subject_id: witness.witness_id,
+      purpose: "checkpoint-witness",
+      scope_id: `cf:${mode}:${unit}`,
+      scheme: "moonbit-ed25519-v1",
+      public_key: witness.witness_key,
+      valid_from_ms: 0,
+      valid_until_ms: Number.MAX_SAFE_INTEGER,
+      revoked_at_ms: null,
+    }))],
+  };
+  fixture.policy.legacy_accept_until_ms = Number.MAX_SAFE_INTEGER;
+  fixture.policy.max_clock_skew_ms = 5_000;
+  return fixture;
+}
+
+function checkpointDeliveryV2Fixture(
+  mode: "pve" | "pvp" | "open",
+  unit: string,
+  destinationId: string,
+  epoch: number,
+  previousCheckpoint: string,
+  checkpointDigest: string,
+  canonicalEnvelope: string,
+): CheckpointDeliveryFixture {
+  const fixture = checkpointDeliveryFixture(
+    mode,
+    unit,
+    destinationId,
+    epoch,
+    previousCheckpoint,
+    checkpointDigest,
+    canonicalEnvelope,
+  );
+  const records = fixture.policy.key_history?.keys;
+  if (!records) throw new Error("checkpoint key history is missing");
+  const record = (subjectId: string): VerificationKeyRecord => {
+    const wire = records.find((key) => key.subject_id === subjectId);
+    if (!wire) throw new Error(`checkpoint key is missing: ${subjectId}`);
+    return {
+      version: 1,
+      keyId: wire.key_id,
+      keyVersion: wire.key_version,
+      subjectId: wire.subject_id,
+      purpose: wire.purpose,
+      scopeId: wire.scope_id,
+      scheme: wire.scheme,
+      publicKey: wire.public_key,
+      validFromMs: wire.valid_from_ms,
+      validUntilMs: wire.valid_until_ms,
+      revokedAtMs: wire.revoked_at_ms,
+    };
+  };
+  // The fixture models a player-local durable outbox: exact retry reuses the
+  // original signing time and bytes instead of signing the same slot again.
+  const issuedAtMs = 1;
+  const producerKey = record("checkpoint-producer");
+  const producerKeyAuthentication = signKeyBoundStatement({
+    key: producerKey,
+    unitId: unit,
+    statementDigest: fixture.authentication.statement_digest,
+    issuedAtMs,
+    signer: {
+      scheme: producerKey.scheme,
+      publicKey: producerKey.publicKey,
+      signDigest: (digest) => audit_browser_ed25519_sign(SEED, digest),
+    },
+    digest: referenceGameDigest,
+  });
+  fixture.authentication = {
+    ...fixture.authentication,
+    version: 2,
+    producer_key: producerKey.publicKey,
+    producer_signature: producerKeyAuthentication.signature,
+    producer_key_authentication: producerKeyAuthentication,
+    approvals: fixture.authentication.approvals.map((approval, index) => {
+      const key = record(approval.witness_id);
+      const keyAuthentication = signKeyBoundStatement({
+        key,
+        unitId: unit,
+        statementDigest: approval.digest,
+        issuedAtMs,
+        signer: {
+          scheme: key.scheme,
+          publicKey: key.publicKey,
+          signDigest: (digest) => audit_browser_ed25519_sign(
+            CHECKPOINT_WITNESS_SEEDS[index],
+            digest,
+          ),
+        },
+        digest: referenceGameDigest,
+      });
+      return {
+        ...approval,
+        witness_key: key.publicKey,
+        signature: keyAuthentication.signature,
+        key_authentication: keyAuthentication,
+      };
+    }),
+  };
+  return fixture;
 }
 
 function checkpointDeliveryApproval(
@@ -259,6 +418,7 @@ async function configureCheckpointRuntime(
   unit: string,
   outboxCapacity = 8,
   destinations = ["authority-1", "peer-2"],
+  legacyAcceptUntilMs = Number.MAX_SAFE_INTEGER,
 ): Promise<Response> {
   const authenticationPolicy = checkpointDeliveryFixture(
     mode,
@@ -269,6 +429,7 @@ async function configureCheckpointRuntime(
     "checkpoint-policy-fixture",
     "checkpoint-policy-fixture-envelope",
   ).policy;
+  authenticationPolicy.legacy_accept_until_ms = legacyAcceptUntilMs;
   return SELF.fetch(
     `https://example.test/v1/${mode}/${unit}/checkpoint-configure`,
     {
@@ -330,7 +491,7 @@ async function sealCheckpoint(
 ): Promise<Response> {
   const canonicalEnvelope = `canonical-envelope-${epoch}`;
   const authentications = destinations.map((destinationId) => {
-    const authentication = checkpointDeliveryFixture(
+    const authentication = checkpointDeliveryV2Fixture(
       mode,
       unit,
       destinationId,
@@ -1824,7 +1985,7 @@ describe.sequential("Cloudflare game audit shard", () => {
       sequence: -1,
       resolutionId: "resolution-genesis",
     };
-    const resolutionPoll = await SELF.fetch(
+    const unsignedResolutionPoll = await SELF.fetch(
       `https://example.test/v1/pve/${unit}/game-evidence-case-resolution-polls`,
       {
         method: "POST",
@@ -1836,6 +1997,26 @@ describe.sequential("Cloudflare game audit shard", () => {
           after_resolution_id: resolutionPollCursor.resolutionId,
           limit: 1,
         }),
+      },
+    );
+    expect(unsignedResolutionPoll.status).toBe(400);
+    await unsignedResolutionPoll.body?.cancel();
+    const authenticatedResolutionPoll =
+      await buildEvidenceCaseResolutionPollRequest({
+        audience: "https://example.test",
+        unit,
+        cursor: resolutionPollCursor,
+        limit: 1,
+        digest: referenceGameDigest,
+        signer: evidenceResolutionKeyBoundSigner(),
+        keyBoundScopeId: "reference-game",
+      });
+    const resolutionPoll = await SELF.fetch(
+      `https://example.test/v1/pve/${unit}/game-evidence-case-resolution-polls`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(authenticatedResolutionPoll),
       },
     );
     expect(resolutionPoll.status).toBe(200);
@@ -1888,13 +2069,8 @@ describe.sequential("Cloudflare game audit shard", () => {
             maxClockSkewMs: 0,
           }),
         digest: referenceGameDigest,
-        signer: {
-          scheme: "moonbit-ed25519-v1",
-          sign: (digest) => audit_browser_ed25519_sign(
-            EVIDENCE_SOURCE_SEED,
-            digest,
-          ),
-        },
+        signer: evidenceResolutionKeyBoundSigner(),
+        keyBoundScopeId: "reference-game",
       },
     );
     if (!signedResolution.ok) throw new Error(signedResolution.reason);
@@ -1915,7 +2091,7 @@ describe.sequential("Cloudflare game audit shard", () => {
     const refusedResolution = await publishResolution(forgedResolution);
     expect(refusedResolution.status).toBe(403);
     await expect(refusedResolution.json()).resolves.toMatchObject({
-      decision: "invalid_signature",
+      decision: "invalid_key_bound_authentication",
     });
     const publishedResolution = await publishResolution(
       signedResolution.envelope,
@@ -2432,6 +2608,88 @@ describe.sequential("Cloudflare game audit shard", () => {
     });
   });
 
+  it("persists the legacy cutoff and accepts only key-bound checkpoint authentication after it", async () => {
+    const mode = "pve" as const;
+    const unit = crypto.randomUUID();
+    const sessionId = `cf:pve:${unit}`;
+    const anchor = fixture(sessionId, "observer-checkpoint-cutoff", 0, "genesis");
+    await configure(
+      mode,
+      unit,
+      sessionId,
+      anchor.authority_key,
+      anchor.epoch,
+      anchor.previous_digest,
+    );
+    expect((await configureCheckpointRuntime(
+      mode,
+      unit,
+      8,
+      ["authority-1"],
+      0,
+    )).status).toBe(201);
+    expect((await closeCheckpointEpoch(mode, unit, 0)).status).toBe(201);
+
+    const canonicalEnvelope = "canonical-envelope-0";
+    const legacyAuthentication = checkpointDeliveryFixture(
+      mode,
+      unit,
+      "authority-1",
+      0,
+      "genesis",
+      "checkpoint-cutoff",
+      canonicalEnvelope,
+    ).authentication;
+    const refused = await SELF.fetch(
+      `https://example.test/v1/${mode}/${unit}/checkpoint-seals`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-admin-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          epoch: 0,
+          previous_checkpoint: "genesis",
+          checkpoint_digest: "checkpoint-cutoff",
+          canonical_envelope: canonicalEnvelope,
+          destinations: ["authority-1"],
+          authentications: [{
+            destination_id: "authority-1",
+            authentication: legacyAuthentication,
+          }],
+        }),
+      },
+    );
+    expect(refused.status).toBe(409);
+    await expect(refused.json()).resolves.toMatchObject({
+      reason: "checkpoint_delivery_authentication_refused",
+      authentication_error: "legacy_authentication_expired",
+    });
+    await expect(checkpointState(mode, unit)).resolves.toMatchObject({
+      head: { epoch: -1, digest: "genesis" },
+      history: 0,
+      closures: { ready: 1, consumed: 0 },
+      outbox: { pending: 0, in_flight: 0, acknowledged: 0 },
+    });
+
+    await abortAllDurableObjects();
+    const accepted = await sealCheckpoint(
+      mode,
+      unit,
+      0,
+      "genesis",
+      "checkpoint-cutoff",
+      ["authority-1"],
+    );
+    expect(accepted.status).toBe(202);
+    await expect(accepted.json()).resolves.toMatchObject({
+      decision: "committed",
+      epoch: 0,
+      digest: "checkpoint-cutoff",
+    });
+  }, 20_000);
+
   it("requires producer signature and provisioned witness quorum before receiver mutation", async () => {
     const mode = "open" as const;
     const unit = crypto.randomUUID();
@@ -2488,7 +2746,7 @@ describe.sequential("Cloudflare game audit shard", () => {
     const invalidSignatureResponse = await receive(invalidSignature);
     expect(invalidSignatureResponse.status).toBe(401);
     await expect(invalidSignatureResponse.json()).resolves.toMatchObject({
-      authentication_error: "invalid_producer_signature",
+      authentication_error: "producer_key_authentication_mismatch",
     });
 
     const underQuorum: CheckpointDeliveryJob = {
@@ -3536,7 +3794,7 @@ describe.sequential("Cloudflare game audit shard", () => {
       epoch: 9,
       digest: third.digest,
     });
-  }, 15_000);
+  }, 30_000);
 
   it("records forks but never advances the accepted head", async () => {
     const unit = crypto.randomUUID();

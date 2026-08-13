@@ -164,6 +164,18 @@ tests. It rechecks the complete job against the source's durable outbox before
 mutating a receiver. `REPLAY_QUEUE` is reserved for central transcript replay on
 the normal path.
 
+Checkpoint authentication uses an outer protocol version. Reference producer
+and witness writers emit only version 2, whose producer and every approval carry
+an exact key-bound authentication. `authentication_policy` must include
+`key_history`, `legacy_accept_until_ms`, and `max_clock_skew_ms`; configuration
+persists the same policy at the source shard and every receiver. Readers accept
+version 1 only while `now_ms < legacy_accept_until_ms`. Version 2 selects the
+exact `(key_id, key_version)` from compiled history and binds purpose, scope,
+unit, subject, and digest before either seal or receiver mutation. The legacy
+public keys in producer/witness roster entries remain only for draining version
+1 data; after rotation, version 2 uses the roster identity plus retained key
+history.
+
 ## Witness collection
 
 An administrator creates a collection with a producer-signed exact statement
@@ -183,6 +195,20 @@ Public approval routes derive a source bucket from Cloudflare's
 Client-provided internal bucket headers are stripped. This isolates one source
 with a fixed window but does not solve botnets, address churn, large NATs, or
 global fairness.
+
+The standalone witness command requires the witness's versioned public history
+in addition to the compatibility seed. It selects the highest-version active
+`checkpoint-witness` record for the requested witness ID, exact scope, and one
+fixed signing time; a future or effectively revoked version is not selected.
+The seed is imported into a non-extractable key and must match that record, not
+the legacy roster key.
+
+```sh
+AUDIT_BASE_URL=https://<worker>.workers.dev \
+AUDIT_WITNESS_SEED_HEX=<seed> \
+AUDIT_WITNESS_KEY_HISTORY='<verification-key-history-json>' \
+pnpm witness -- pvp <unit> <collection-id> <witness-id>
+```
 
 ## Evidence cases and source resolution
 
@@ -215,10 +241,70 @@ separate source relay:
 4. The player-local poller accepts the signed hash-chain envelope before
    changing the hold to resolved.
 
-The Worker never holds the source private key. Source outage, unsigned data, a
-stale cursor, or a conflict leaves both notice and active hold in place. A
-production source scheduler, credential-authenticated polling, and key custody
-remain pending.
+The authority Worker never holds the source private key. Source outage,
+unsigned data, a stale cursor, or a conflict leaves both notice and active hold
+in place. Poll requests are source-signed over the exact authority audience,
+unit, source ID, resolution cursor, and fixed page limit; the authority requires
+the configured source roster and both MoonBit and WebCrypto verification to
+agree.
+
+`wrangler.source-relay.jsonc` deploys the source side as a separate Worker and
+SQLite Durable Object. Its cron bootstraps the job and DO alarms run the actual
+cadence. Every claim has a durable lease and monotonically increasing attempt
+token. Failures use capped exponential backoff. Before publishing, the exact
+signed resolution envelope is persisted; a crash after authority commit but
+before local completion therefore retries identical bytes and consumes the
+authority's idempotent `duplicate` response before advancing the notice cursor.
+
+The relay receives signing capability through the `SOURCE_SIGNER` service
+binding rather than an environment private key. That internal service accepts
+authenticated `POST /v1/key-bound-sign` with purpose
+`evidence-case-resolution`, the configured key scope, the encounter unit, and
+the exact poll/envelope digest. It returns a versioned key-bound
+authentication. The caller credential is the
+`SOURCE_SIGNER_TOKEN`/`SIGNER_CALLER_TOKEN` secret shared only by these two
+Workers. New relay writes never use the legacy signing endpoint.
+
+`wrangler.key-signer.jsonc` provides the matching reference signer as a third,
+non-public Worker. It imports `SIGNING_KEY_SEED_HEX` from a secret binding into
+an `extractable=false` WebCrypto Ed25519 key, stores only public verification
+history and canonical lifecycle events in its SQLite Durable Object, and also
+offers `/v1/key-bound-sign`. Rotation and revocation use lifecycle revision CAS;
+the materialized key row and append-only event commit in one transaction. Keep
+`SIGNING_KEY_SEED_HEX`, `SIGNER_CALLER_TOKEN`, and `SIGNER_ADMIN_TOKEN` out of
+Wrangler `vars`; provision them with `wrangler secret put` or replace this
+Worker with an HSM-backed service implementing the same capability.
+
+`AUTHORITY` is a separate service binding. Configure `AUTHORITY_ORIGIN`,
+`EVIDENCE_SOURCE_ID`, `EVIDENCE_SOURCE_SCHEME`,
+`EVIDENCE_SOURCE_KEY_SCOPE_ID`, `EVIDENCE_UNIT`, the arbiter roster, and timing
+bounds. The authority also requires `EVIDENCE_HOLD_SOURCE_KEY_HISTORY`,
+`EVIDENCE_HOLD_SOURCE_KEY_SCOPE_ID`,
+`EVIDENCE_HOLD_LEGACY_ACCEPT_UNTIL_MS`, and
+`EVIDENCE_HOLD_KEY_MAX_CLOCK_SKEW_MS`. Provision the authenticated public
+history returned by `GET /v1/key-history/<key-id>`; do not fetch mutable history
+on each message. It is validated and compiled once per authority isolate, so
+verification uses an expected O(1) `(key_id, key_version)` lookup.
+
+The authority and player-local verifier are dual readers: legacy protocol-v1
+authentication is accepted only while `now_ms <
+EVIDENCE_HOLD_LEGACY_ACCEPT_UNTIL_MS`; key-bound v2 requires retained history
+and exact purpose/scope/unit/subject/digest binding. Invalid or missing
+migration settings make the authority endpoint fail closed. Already persisted
+pending envelopes keep their exact bytes across crash/retry.
+
+Validate the isolated bundles with:
+
+```sh
+pnpm run deploy:source-relay:dry
+pnpm run test:source-relay
+pnpm run deploy:key-signer:dry
+pnpm run test:key-signer
+```
+
+Source-resolution and checkpoint-delivery writers/readers are migrated to the
+same key-bound contract. Production HSM or secret-provider review remains
+deployment-owned.
 
 ## Lineage decisions and marketplace state
 
@@ -353,9 +439,10 @@ and independent transparency publication of the plan and seal link.
 - Remote witness pull/sign/submit and direct authority ACK have local and remote
   reference coverage. Outbound push, global/roster-aware fair queues, device
   retry, and botnet/NAT behavior remain deployment work.
-- The observer signing store is crash-safe in the Cloudflare reference.
-  Device/mobile persistence, external signer custody, and at-rest encryption
-  remain deployment work.
+- The observer signing store is crash-safe in the Cloudflare reference. A
+  separate secret-backed signer Worker now demonstrates external custody and
+  public-key lifecycle persistence. Device/mobile persistence, an HSM-backed
+  production provider, and at-rest encryption remain deployment work.
 - Browser run keys are non-extractable WebCrypto `CryptoKey` values persisted in
   IndexedDB. This does not prove resistance to XSS or device compromise.
 - `experimental_crypto` remains unaudited. The `production` runtime profile

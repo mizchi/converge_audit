@@ -1,11 +1,17 @@
 import {
   approveCheckpointWitnessCollectionWithLegacySeed,
+  selectCheckpointWitnessSigningKey,
   type AuditMode,
 } from "../src/witness-client";
+import {
+  compileVerificationKeyHistory,
+  decodeVerificationKeyHistory,
+} from "../../player-local-runtime/key-lifecycle";
 
 const [modeValue, unit, collectionId, witnessId] = process.argv.slice(2);
 const witnessSeedHex = process.env.AUDIT_WITNESS_SEED_HEX;
 const baseUrl = process.env.AUDIT_BASE_URL ?? "http://127.0.0.1:8787";
+const encodedKeyHistory = process.env.AUDIT_WITNESS_KEY_HISTORY;
 
 if (!isAuditMode(modeValue) || !unit || !collectionId || !witnessId) {
   throw new Error(
@@ -14,6 +20,20 @@ if (!isAuditMode(modeValue) || !unit || !collectionId || !witnessId) {
 }
 if (!witnessSeedHex) {
   throw new Error("AUDIT_WITNESS_SEED_HEX is required");
+}
+const keyRecords = decodeVerificationKeyHistory(encodedKeyHistory);
+if (!keyRecords) throw new Error("AUDIT_WITNESS_KEY_HISTORY is required");
+const compiled = compileVerificationKeyHistory(keyRecords);
+if (!compiled.ok) throw new Error(compiled.reason);
+const signingTimeMs = Date.now();
+const verificationKey = selectCheckpointWitnessSigningKey(
+  keyRecords,
+  witnessId,
+  `cf:${modeValue}:${unit}`,
+  signingTimeMs,
+);
+if (!verificationKey) {
+  throw new Error("active witness key is absent from key history");
 }
 
 const started = performance.now();
@@ -24,6 +44,11 @@ const result = await approveCheckpointWitnessCollectionWithLegacySeed({
   collectionId,
   witnessId,
   witnessSeedHex,
+  verificationKey,
+  keyHistory: compiled.history,
+  legacyAcceptUntilMs: 0,
+  maxClockSkewMs: 5_000,
+  now: () => signingTimeMs,
 });
 
 console.log(JSON.stringify({

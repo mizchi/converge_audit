@@ -9,6 +9,13 @@ import type {
   PlayerLocalEvidenceHoldKind,
   PlayerLocalEvidenceHoldResolution,
 } from "./contracts.ts";
+import {
+  verifyKeyBoundStatementAsync,
+  type CompiledVerificationKeyHistory,
+  type KeyBoundAuthentication,
+} from "./key-lifecycle.ts";
+
+const EVIDENCE_CASE_RESOLUTION_PURPOSE = "evidence-case-resolution";
 
 export type EvidenceLineageCaseScope = "reference-game" | "verified-asset";
 export type EvidenceLineageAncestorKind =
@@ -69,6 +76,9 @@ export type EvidenceLineageCaseRejection =
   | "invalid_proposal"
   | "unknown_source"
   | "source_scheme_mismatch"
+  | "legacy_authentication_expired"
+  | "verification_key_history_unavailable"
+  | "invalid_key_bound_authentication"
   | "unsupported_authentication_scheme"
   | "invalid_message_digest"
   | "invalid_signature"
@@ -78,18 +88,36 @@ export interface VerifyEvidenceLineageCaseProposalOptions {
   roster: EvidenceLineageCaseSourceRoster;
   verifiers: EvidenceLineageCaseVerifierRegistry;
   digest: EvidenceLineageCaseDigestAdapter;
+  keyHistory?: CompiledVerificationKeyHistory;
+  keyBoundScopeId?: string;
+  keyBoundUnitId?: string;
+  nowMs?: number;
+  maxClockSkewMs?: number;
+  legacyAcceptUntilMs?: number;
 }
 
 export interface VerifyEvidenceLineageCaseProposalAsyncOptions {
   roster: EvidenceLineageCaseSourceRoster;
   verifiers: EvidenceLineageCaseVerifierRegistry;
   digest: AsyncEvidenceLineageCaseDigestAdapter;
+  keyHistory?: CompiledVerificationKeyHistory;
+  keyBoundScopeId?: string;
+  keyBoundUnitId?: string;
+  nowMs?: number;
+  maxClockSkewMs?: number;
+  legacyAcceptUntilMs?: number;
 }
 
 interface VerifyEvidenceLineageCaseProposalAwaitableOptions {
   roster: EvidenceLineageCaseSourceRoster;
   verifiers: EvidenceLineageCaseVerifierRegistry;
   digest: { hashString(value: string): Awaitable<string> };
+  keyHistory?: CompiledVerificationKeyHistory;
+  keyBoundScopeId?: string;
+  keyBoundUnitId?: string;
+  nowMs?: number;
+  maxClockSkewMs?: number;
+  legacyAcceptUntilMs?: number;
 }
 
 export type VerifiedEvidenceLineageCaseProposal =
@@ -219,11 +247,62 @@ async function verifyEvidenceLineageCaseSourceEnvelopeWithCrypto(
     expectedSourceId,
   );
   if (!decoded.ok) return { ok: false, reason: "invalid_proposal" };
+  const authentication = recordValue(decoded.envelope.authentication);
+  if (!authentication) return { ok: false, reason: "invalid_proposal" };
+  const canonical = playerLocalEvidenceHoldEnvelopeStatement(decoded.envelope);
+  const messageDigest = await options.digest.hashString(canonical);
+  if (messageDigest !== decoded.envelope.message_digest) {
+    return { ok: false, reason: "invalid_message_digest" };
+  }
+  if (authentication.version === 1) {
+    if (
+      !options.keyHistory || !options.keyBoundScopeId ||
+      !options.keyBoundUnitId
+    ) {
+      return { ok: false, reason: "verification_key_history_unavailable" };
+    }
+    const verified = await verifyKeyBoundStatementAsync(
+      authentication as unknown as KeyBoundAuthentication,
+      {
+        purpose: EVIDENCE_CASE_RESOLUTION_PURPOSE,
+        scopeId: options.keyBoundScopeId,
+        unitId: options.keyBoundUnitId,
+        subjectId: expectedSourceId,
+        statementDigest: messageDigest,
+        nowMs: options.nowMs ?? Date.now(),
+        maxClockSkewMs: options.maxClockSkewMs ?? 0,
+        history: options.keyHistory,
+        digest: {
+          hashString: async (input) => await options.digest.hashString(input),
+        },
+        verifiers: Object.fromEntries(
+          Object.entries(options.verifiers).map(([scheme, verifier]) => [
+            scheme,
+            {
+              verify: async (
+                publicKey: string,
+                digest: string,
+                signature: string,
+              ) => await verifier.verify(publicKey, digest, signature),
+            },
+          ]),
+        ),
+      },
+    );
+    return verified.ok
+      ? { ok: true, envelope: decoded.envelope }
+      : { ok: false, reason: "invalid_key_bound_authentication" };
+  }
+  const nowMs = options.nowMs ?? Date.now();
+  const legacyAcceptUntilMs = options.legacyAcceptUntilMs ??
+    Number.MAX_SAFE_INTEGER;
+  if (nowMs >= legacyAcceptUntilMs) {
+    return { ok: false, reason: "legacy_authentication_expired" };
+  }
   const source = options.roster[expectedSourceId];
   if (!source) return { ok: false, reason: "unknown_source" };
-  const authentication = recordValue(decoded.envelope.authentication);
   if (
-    !authentication || !nonEmptyBounded(authentication.scheme, 128) ||
+    !nonEmptyBounded(authentication.scheme, 128) ||
     typeof authentication.signature !== "string" ||
     authentication.signature.length > 16_384
   ) return { ok: false, reason: "invalid_proposal" };
@@ -233,11 +312,6 @@ async function verifyEvidenceLineageCaseSourceEnvelopeWithCrypto(
   const verifier = options.verifiers[authentication.scheme];
   if (!verifier) {
     return { ok: false, reason: "unsupported_authentication_scheme" };
-  }
-  const canonical = playerLocalEvidenceHoldEnvelopeStatement(decoded.envelope);
-  const messageDigest = await options.digest.hashString(canonical);
-  if (messageDigest !== decoded.envelope.message_digest) {
-    return { ok: false, reason: "invalid_message_digest" };
   }
   if (!await verifier.verify(
     source.publicKey,
@@ -314,31 +388,13 @@ async function verifyEvidenceLineageCaseProposalWithCrypto(
 ): Promise<VerifiedEvidenceLineageCaseProposal> {
   const decoded = decodeProposal(value);
   if (!decoded) return { ok: false, reason: "invalid_proposal" };
-  const source = options.roster[decoded.target.sourceId];
-  if (!source) return { ok: false, reason: "unknown_source" };
-  const authentication = recordValue(decoded.envelope.authentication);
-  if (
-    !authentication || !nonEmptyBounded(authentication.scheme, 128) ||
-    typeof authentication.signature !== "string" ||
-    authentication.signature.length > 16_384
-  ) return { ok: false, reason: "invalid_proposal" };
-  if (source.scheme !== authentication.scheme) {
-    return { ok: false, reason: "source_scheme_mismatch" };
-  }
-  const verifier = options.verifiers[authentication.scheme];
-  if (!verifier) {
-    return { ok: false, reason: "unsupported_authentication_scheme" };
-  }
-  const canonical = playerLocalEvidenceHoldEnvelopeStatement(decoded.envelope);
-  const messageDigest = await options.digest.hashString(canonical);
-  if (messageDigest !== decoded.envelope.message_digest) {
-    return { ok: false, reason: "invalid_message_digest" };
-  }
-  if (!await verifier.verify(
-    source.publicKey,
-    messageDigest,
-    authentication.signature,
-  )) return { ok: false, reason: "invalid_signature" };
+  const authenticated = await verifyEvidenceLineageCaseSourceEnvelopeWithCrypto(
+    decoded.envelope,
+    decoded.target.boundary,
+    decoded.target.sourceId,
+    options,
+  );
+  if (!authenticated.ok) return authenticated;
   const referenceDigest = await options.digest.hashString(
     canonicalEvidenceLineageCaseReference(decoded.target),
   );

@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "converge-evidence-source-signer",
+  "main": "src/verification-key-signer-worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "KEY_SIGNER",
+        "class_name": "VerificationKeySigner"
+      }
+    ]
+  },
+  "vars": {
+    "SIGNING_KEY_ID": "source-signing-key",
+    "SIGNING_KEY_VERSION": "1",
+    "SIGNING_KEY_LIFECYCLE_REVISION": "1",
+    "SIGNING_SUBJECT_ID": "replace-with-source-id",
+    "SIGNING_PURPOSE": "evidence-case-resolution",
+    "SIGNING_SCOPE_ID": "reference-game",
+    "SIGNING_SCHEME": "ed25519-v1",
+    "SIGNING_PUBLIC_KEY": "replace-with-64-char-lower-hex-public-key",
+    "SIGNING_VALID_FROM_MS": "0",
+    "SIGNING_VALID_UNTIL_MS": "9007199254740991",
+    "SIGNER_RUNTIME_PROFILE": "production"
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["VerificationKeySigner"]
+    }
+  ]
+}

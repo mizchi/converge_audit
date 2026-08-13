@@ -1,6 +1,6 @@
 # 署名鍵ライフサイクルと過去checkpoint検証契約
 
-更新日: 2026-08-10
+更新日: 2026-08-13
 
 ## 結論
 
@@ -13,11 +13,19 @@ routine rotation後も、authorityは署名時点で有効だった公開鍵reco
 この契約は鍵選択とadmissionを実装・形式化したものである。標準WebCryptoのSHA-256/Ed25519
 非同期backend、non-extractable browser signer、IndexedDB `CryptoKey` handle保存に加え、
 Workerのcheckpoint配送認証は標準WebCryptoと既存MoonBit verifierの二重検証へ接続済みである。
+公開verification keyのprovision/rotation/revocationは、Cloudflare Durable Object SQLiteと
+player-local IndexedDBの両adapterでmaterialized rowとappend-only eventを一transactionへ固定した。
+独立した署名Worker referenceはsecret bindingのseedを非抽出WebCrypto keyへimportし、公開履歴だけを
+SQLiteへ保存する。raw秘密値は業務DBにも署名応答にも含めない。
 reference gameのitem精算・transfer・listing・cancelのowner proofも同じ二重検証へ接続済みだが、
 reference checkpoint/journalもsealed保存とWorker受理時に標準WebCryptoとの一致を要求する。reference固有の
 authority receipt、ownership head、transfer/listing ID、checkpoint receiptも永続化または応答前に両backendの
 一致を要求する。open-world lineage proofの保存IDとlineage decision/evidence dismissal certificateも両backendの
 一致を要求し、evidence-source proposal/resolution envelopeもmessage/reference/case digestとsource署名を二重検証する。
+source resolutionの新規writerはkey-bound v2だけを生成し、authorityとplayer-local readerは明示的な
+exclusive cutoffより前のlegacy v1だけを受理するdual readerへ移行済みである。v2はprovision済み公開鍵履歴と
+purpose/scope/unit/subject/digestの完全一致を要求する。checkpoint deliveryもreference producer/witness writer、
+source seal、witness ingress、receiverを同じv2-only writer / cutoff付きdual-reader契約へ移行済みである。
 open-world lineage bundle内部もowner-key bindingとsender/recipient transfer署名を二重検証する。embedded
 compact listingとmulti-asset checkpointもauthority checkpointおよび全replay-witness attestationを
 状態変更前に二重検証し、origin receipt/initial root、authenticated-map membership/public state root、
@@ -45,8 +53,13 @@ cryptoperiod、rotation間隔、revocation判断、過去公開鍵の保持期�
 | --- | --- |
 | `src/audit/key_lifecycle` | MoonBitの純粋admission classifierとWhy3 lemma |
 | `examples/player-local-runtime/key-lifecycle.ts` | storage/crypto非依存のwire型、canonical statement、履歴compile、署名・検証reference |
+| `examples/player-local-runtime/key-lifecycle-ledger.ts` | storage非依存のrevision CAS、rotation/revocation遷移、canonical lifecycle event planner |
 | `examples/player-local-runtime/crypto-backend.ts` | 非同期backend contract、標準WebCrypto adapter、production admission gate |
-| `formal/quint/KeyLifecycle.qnt` | rotation、履歴保持、effective revocation、admissionの有限状態機械 |
+| `examples/cf-game-audit/src/verification-key-lifecycle-store.ts` | Cloudflare Durable Object SQLite materialized history + append-only event adapter |
+| `examples/cf-game-audit/web/src/audit/verification-key-lifecycle-indexeddb.ts` | player-local IndexedDB history/event adapter |
+| `examples/cf-game-audit/src/verification-key-signer-worker.ts` | secret/external capability境界を持つ非抽出WebCrypto署名Worker reference |
+| `formal/quint/KeyLifecycle.qnt` | rotation、履歴保持、effective revocation、event atomicity、admissionの有限状態機械 |
+| `formal/quint/KeyAuthenticationMigration.qnt` | v2-only writer、legacy cutoff、履歴・exact bindingを持つdual-reader移行の有限状態機械 |
 | `examples/cf-game-audit/test/key-lifecycle.test.ts` | 実Ed25519 adapterでのcheckpoint digest bindingとcustody境界test |
 
 ## 2. wire contract v1
@@ -154,6 +167,11 @@ CREATE TABLE verification_key_lifecycle_events (
 );
 ```
 
+reference実装ではこの2 relationを`VerificationKeyLifecycleStore`が作成し、同じ純粋plannerを
+IndexedDB adapterも利用する。rotation/revocationは`expectedRevision`のCASに失敗したらrowもeventも
+更新しない。正常commitでは新revisionのmaterialized rowと、同じrevisionのcanonical eventを同一transactionで
+確定する。Quintのbroken event-atomicity modelはrowだけ進めると直ちに反例を生成する。
+
 rotationは旧versionの`valid_until_ms`確定、新version追加、revision前進、canonical lifecycle event追加を
 一transactionで行う。revocationは`revoked_at_ms`とrevisionをCASし、同じtransactionでappend-only eventを
 残す。materialized rowだけを監査履歴なしに更新してはならない。
@@ -164,14 +182,31 @@ rotationは旧versionの`valid_until_ms`確定、新version追加、revision前�
 key metadataの保護・回復をkey management対象としている
 （[NIST SP 800-57 Part 1 Rev.5](https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final)）。
 
-既存checkpoint delivery v1からの移行はdual readerで行う。
+既存protocol v1からの移行はdual readerで行う。
 
 1. 既存policy内の公開鍵をsynthetic `key_id`/version 1 recordとしてarchiveする。
 2. 既存v1署名は元のcanonical statementと旧policyでのみ検証し、署名bytesを書き換えない。
-3. rollout後の新規署名はkey-bound v1 authentication（checkpoint protocol上はv2 envelope）だけを生成する。
-4. 全writer移行後、v1は新規受理を停止するが、保持期限内のhistorical readは残す。
+3. rollout後の新規署名はkey-bound v1 authentication（外側protocol上はv2 message）だけを生成する。
+4. readerは設定したexclusive cutoffより前だけlegacy v1を受理し、`now_ms >= cutoff`では
+   `legacy_authentication_expired`として拒否する。cutoffは暗黙defaultにせずauthority設定で必須にする。
 5. key historyが欠落した旧checkpointは「署名不正」ではなく`verification_key_history_unavailable`として
    central replay/operational recoveryへ送る。
+
+source resolutionではこの移行を実装済みである。source relayはpoll credentialとresolution envelopeの
+両方を`/v1/key-bound-sign`で生成し、同じ`EVIDENCE_SOURCE_KEY_SCOPE_ID`を固定する。authorityは起動時に
+`EVIDENCE_HOLD_SOURCE_KEY_HISTORY`を検査・compileし、hot pathではexact `(key_id, key_version)`を
+O(1) expectedで引く。`EVIDENCE_HOLD_SOURCE_KEY_SCOPE_ID`、
+`EVIDENCE_HOLD_LEGACY_ACCEPT_UNTIL_MS`、`EVIDENCE_HOLD_KEY_MAX_CLOCK_SKEW_MS`のいずれかが不正なら、
+source resolution endpoint全体を503でfail-closedにする。player-local readerも同じ履歴・scope・cutoffを
+受け取り、cutoff後のv1を拒否する。既に永続化したpending envelopeはhash-chain bytesを書き換えず、exact retryする。
+
+checkpoint deliveryも同じ手順を実装済みである。control-planeのauthentication policyは公開鍵履歴、
+`legacy_accept_until_ms`、`max_clock_skew_ms`をsource shardと各receiverへ永続化する。reference producerと
+witness clientはv2だけを生成し、readerはcutoff前に限って既存collection/outboxのv1をdrainできる。
+cutoff以後のv1はsource sealとreceiver mutationの両方で拒否する。routine rotation後のv2 witnessは、
+legacy rosterに残る公開鍵ではなく、roster identityと履歴中のexact `(key_id, key_version)`へ照合する。
+履歴は設定単位にcompile/cacheし、hot pathのlookupはO(1) expectedである。保存済みoutboxのexact retryでは
+`issued_at_ms`を更新したり再署名したりしない。
 
 ## 5. private-key custody境界
 
@@ -224,11 +259,11 @@ aimbot、roster管理者の悪意、暗号実装のconstant-time性、端末at-r
 | implementation observation | 旧delivery policyは公開鍵をcurrent設定へ直接埋め、version/history/署名時刻を持たなかった。browser signerはseedを公開propertyに持っていた |
 | model question | exact key binding、署名時点validity、effective revocation、旧公開鍵historyのどれが必要か |
 | tool | MoonBit proof/Why3、Quint/TLC、Vitest + MoonBit/標準WebCrypto Ed25519 adapter。backend選択は時間遷移を持たない有限predicateなので新しいQuint modelではなくhost regression tableで固定 |
-| machine result | MoonBit 5 proof goals、Quint正常model反例なし、3 broken modelでbinding/validity/revocation反例、正常6 + history deletion 1 scenario、同期/非同期共通preflight、WebCrypto/MoonBit共通vector、標準producer/witness署名生成、peer clientのretarget拒否、checkpoint配送・witness ingress・reference owner proof/checkpoint commitment/derived asset identityの標準/MoonBit二重検証、production gate、IndexedDB restart/migration、browser E2Eをtest |
-| witness | version bindingを外すとV2署名をV1として受理、validityを外すとV1終了境界の署名を受理、revocationを外すとeffective boundary上の署名を受理。旧recordを削除するとrotation後の正当なV1 checkpointを検証不能 |
+| machine result | MoonBit 5 proof goals、key lifecycle Quint正常model反例なし、4 broken modelでbinding/validity/revocation/event atomicity反例、正常7 + history deletion 1 scenario、同期/非同期共通preflight、WebCrypto/MoonBit共通vector、Cloudflare SQLite/IndexedDB lifecycle transaction、secret-backed Worker signer custody、標準producer/witness署名生成、peer clientのretarget拒否、checkpoint配送・witness ingress・reference owner proof/checkpoint commitment/derived asset identityの標準/MoonBit二重検証、production gate、IndexedDB restart/migration、browser E2Eをtest。別のmigration Quint正常modelは反例なし、writer/cutoff/history/bindingを外した4 broken modelで反例、4 rollout scenarioを確認した。source relay/authority/player-localに加え、checkpoint producer/witness/source seal/receiverのv2生成・dual read、保存cutoff、rotation後のwitness key選択をworkerd/host testで固定した |
+| witness | version bindingを外すとV2署名をV1として受理、validityを外すとV1終了境界の署名を受理、revocationを外すとeffective boundary上の署名を受理。event appendをmaterialized updateと分離するとrevision 2にevent 1しか残らない。旧recordを削除するとrotation後の正当なV1 checkpointを検証不能 |
 | domain wording | 鍵を更新しても過去の正当な戦利品を失効させない。一方、侵害期間に作られたcheckpointは後からmarketplaceで止められる |
 | decision | validityはverification timeでなくsigned issuance timeに適用する。revocationはretroactiveに設定可能なeffective boundaryとし、公開鍵historyを証拠保持期間中archiveする |
-| lock | `moon test/prove src/audit/key_lifecycle`、`just quint-scenarios`、`just quint-check`、`just quint-counterexamples`、`key-lifecycle.test.ts`、`production-crypto.test.ts`、`device-key-custody.node-test.ts`、Playwright E2E |
+| lock | `moon test/prove src/audit/key_lifecycle`、`KeyLifecycle*.qnt`、`KeyAuthenticationMigration*.qnt`、`just quint-scenarios`、`just quint-check`、`just quint-counterexamples`、`key-lifecycle.test.ts`、`evidence-case-resolution-relay.test.ts`、`evidence-resolution-relay-worker.test.ts`、`verification-key-lifecycle-store.test.ts`、`verification-key-lifecycle-indexeddb.node-test.ts`、`verification-key-signer-worker.test.ts`、`production-crypto.test.ts`、`device-key-custody.node-test.ts`、Playwright E2E |
 
 checkpoint配送は、MoonBitが生成するcanonical bytesを標準WebCryptoでhash/signature検証した後、既存MoonBit
 verifierも同じopaque capabilityへ到達した場合だけwitness collection、source seal、receiver mutationへ進む。
@@ -236,7 +271,6 @@ producer/witness署名生成も同じMoonBit serializerと交換可能な非同�
 収集中の正当な`under_quorum`にはexact-bound partial capabilityを発行する。inventory listing/checkpoint/lineageの
 authority checkpointとreplay-witness attestationも同じ標準/MoonBit二重検証を通す。inventoryのorigin
 receipt/initial rootとauthenticated-map membership/public state rootも標準SHA-256で独立再計算する。未解決なのは、
-同期生成hashの標準backend化、event/asset-delta rootを担うwitnessの独立性と運用監査、
-上記SQL relationのCloudflare/端末DB migration、
-authority署名鍵の外部custody、timestamp trust、backend/providerの運用監査である。
+同期生成hashの標準backend化、event/asset-delta rootを担うwitnessの独立性と運用監査、mobile SQLite adapter、
+timestamp trust、secret/HSM providerを含む実deploymentと運用監査である。reference Worker custodyと
 browser custodyだけを根拠にIssue #9全体を完了扱いしてはならない。

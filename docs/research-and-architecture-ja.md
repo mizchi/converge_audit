@@ -375,7 +375,7 @@ bounded single-page polling、source別durable poll job/lease/attempt fencing/�
 Workerへ提出し、exact case ID付きarbiter uphold/dismiss certificateと時間制appealへ接続済みである。
 dismissalはassetを変更せず、hold resolutionはsource別durable noticeへ置き、arbiter certificate再検証後の
 source署名だけをnext cursorへCAS publishする。zone/epoch key の委任、動的 observer assignment、
-device/mobile durable storeと外部署名credential、checkpoint-head transport、case自動提出、source workerの自動schedule/credential、transfer case、
+device/mobile durable storeと外部署名credential、checkpoint-head transport、case自動提出、production roster rotation、source relay用外部signer serviceの実deployment、transfer case、
 階層Merkle pruningは未実装である。詳細は
 [不規則 encounter の選択的アンチチート](./open-world-audit-ja.md)を参照する。
 

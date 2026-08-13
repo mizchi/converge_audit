@@ -1,0 +1,51 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "converge-evidence-source-relay",
+  "main": "src/evidence-resolution-relay-worker.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SOURCE_RELAY",
+        "class_name": "EvidenceResolutionRelay"
+      }
+    ]
+  },
+  "services": [
+    {
+      "binding": "AUTHORITY",
+      "service": "converge-game-audit"
+    },
+    {
+      "binding": "SOURCE_SIGNER",
+      "service": "converge-evidence-source-signer"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "vars": {
+    "AUTHORITY_ORIGIN": "https://converge-game-audit.internal",
+    "EVIDENCE_SOURCE_ID": "replace-with-source-id",
+    "EVIDENCE_SOURCE_SCHEME": "ed25519-v1",
+    "EVIDENCE_SOURCE_KEY_SCOPE_ID": "reference-game",
+    "EVIDENCE_UNIT": "replace-with-unit",
+    "RELAY_SUCCESS_INTERVAL_MS": "15000",
+    "RELAY_BASE_BACKOFF_MS": "1000",
+    "RELAY_MAX_BACKOFF_MS": "60000",
+    "RELAY_LEASE_DURATION_MS": "30000",
+    "RELAY_REQUEST_TIMEOUT_MS": "10000",
+    "RELAY_RUNTIME_PROFILE": "production"
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["EvidenceResolutionRelay"]
+    }
+  ]
+}

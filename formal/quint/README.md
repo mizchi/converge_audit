@@ -24,8 +24,9 @@ bounded/inductive safety, not as a replacement for the TLC liveness gate.
 ## Source layout
 
 - `CheckpointDelivery.qnt`, `WitnessQuorum.qnt`, `AssetOwnership.qnt`,
-  `LineageAppeal.qnt`, `EvidenceLineageCase.qnt`, `KeyLifecycle.qnt`, and
-  `ObserverSigningStore.qnt`: protocol state, actions, and properties.
+  `LineageAppeal.qnt`, `EvidenceLineageCase.qnt`, `KeyLifecycle.qnt`,
+  `KeyAuthenticationMigration.qnt`, `ObserverSigningStore.qnt`, and
+  `EvidenceResolutionRelay.qnt`: protocol state, actions, and properties.
 - `*Models.qnt`: healthy configurations and deliberately broken Red models.
 - `*Tests.qnt`: representative reachable and guarded scenarios.
 - `CheckpointDeliveryMbt.qnt` and `WitnessQuorumMbt.qnt`: deterministic MBT
@@ -103,14 +104,33 @@ dismissal never change the asset. Only an upheld decision performs
 only a separate action in which the authenticated source publishes the exact
 resolution at the next cursor may resolve it.
 
+`EvidenceResolutionRelay.qnt` isolates the source worker's delivery ordering.
+It models an authenticated poll, durable pending envelope, authority publish,
+cursor acknowledgement, expiring lease, retry timer, and attempt fence. Four
+broken models independently remove poll authentication, pending-envelope
+durability, retry durability, or the completion fence.
+
 ### Key lifecycle
 
 `KeyLifecycle.qnt` uses two key versions, five checkpoint candidates, and four
 clock steps. Routine rotation retains old verification records. Admission
-applies key validity and effective revocation to signing time. Three broken
-models independently remove exact key binding, issuance validity, and the
-revocation gate. Signature bytes and persisted key history remain TypeScript/
-Workers concerns; MoonBit/Why3 owns the matching pure admission predicate.
+applies key validity and effective revocation to signing time. Four broken
+models independently remove exact key binding, issuance validity, the
+revocation gate, and atomic append-only lifecycle events. Signature bytes and
+the concrete SQLite/IndexedDB adapters remain TypeScript/Workers concerns;
+MoonBit/Why3 owns the matching pure admission predicate.
+
+`KeyAuthenticationMigration.qnt` models the rollout boundary separately from
+the key lifecycle. A healthy new writer emits only key-bound v2; a dual reader
+accepts legacy v1 only before an exclusive cutoff, while v2 requires retained
+history and exact purpose/scope/unit/subject/digest binding. Four broken models
+independently restore a legacy writer, remove the cutoff, remove the history
+gate, or remove exact binding. The finite model does not prove clock trust or
+cryptographic unforgeability. The same state machine refines both source
+resolution and checkpoint-delivery authentication. Concrete host tests cover
+their different wire/storage adapters, including draining a legacy collection
+before cutoff, persisted cutoff after Durable Object restart, and rotated
+witness-key selection from retained history.
 
 ### Observer signing store
 
@@ -143,9 +163,14 @@ post-restart double-signing counterexample.
 | Only an authenticated exact-case certificate changes the asset | `decideCase` | Certificate invariant + Red models | Verified in finite model |
 | Dismissal closes only an authenticated exact case and never changes the asset | `dismissCase` | Dismissal invariants + Red models | Verified in finite model |
 | Case close never resolves a hold without source signature, exact binding, and next cursor | `publishSourceResolution` | Resolution invariants + Red models | Verified in finite model |
+| A source relay polls with its credential and persists exact bytes before publish | `EvidenceResolutionRelay.acceptPoll/publish` | Two invariants + two Red models | Verified in finite model |
+| Relay failure/crash keeps retry state and stale attempts cannot advance the cursor | `failAttempt/expireLease/acknowledgePublish` | Two invariants + two Red models + scenarios | Verified in finite model |
 | Key-version substitution is refused | `KeyLifecycle.verify` | Exact-binding invariant + Red model | Verified in finite model |
 | Validity and effective revocation apply to signing time | `KeyLifecycle.verify` | Two invariants + Red models | Verified in finite model |
 | Historical checkpoints remain verifiable after routine rotation | `KeyLifecycle.rotate/verify` | Rotation/revocation scenarios + deletion negative control | Scenario verified |
+| Every materialized key revision has its append-only lifecycle event | `KeyLifecycle.rotate/revoke` | Event-revision invariant + Red model + SQL/IndexedDB transaction tests | Verified in finite model |
+| New writers never emit legacy authentication, and legacy reads stop at the cutoff | `KeyAuthenticationMigration.write/receive` | Two invariants + two Red models + rollout scenarios | Verified in finite model |
+| Key-bound reads require retained history and exact binding | `KeyAuthenticationMigration.receive` | Binding invariant + two Red models + refusal scenarios | Verified in finite model |
 | An observer signature exists only after its exact durable reservation | `ObserverSigningStore.reserve/sign/crash` | Exact-reservation invariant + volatile Red model | Verified in finite model |
 | Crash/retry never signs two digests for one slot | `reserve/sign/crash/restart` | No-double-signing invariant + volatile Red model | Verified in finite model |
 
@@ -164,6 +189,8 @@ Healthy modules exhaustively check that:
   invalidity nor receiver advancement;
 - versioned-key admission has exact binding, a valid signing window, and signing
   time before effective revocation;
+- migration writers emit only key-bound v2, legacy v1 acceptance is bounded by
+  an exclusive cutoff, and accepted v2 has history plus exact binding;
 - asset version, dual authentication, listing, lineage, revocation, appeal,
   case, dismissal, and source-resolution invariants hold;
 - every observer signature has its exact reservation, and one slot has at most
@@ -207,6 +234,8 @@ the intended model counterexample rather than a syntax or configuration error.
 | Case certificate auth/binding | An unauthenticated or wrong-case certificate mutates the asset |
 | Dismissal auth/binding/non-mutation | Invalid dismissal or dismissal-only revocation succeeds |
 | Source resolution auth/binding/cursor/non-automatic | Closing alone, an invalid source, wrong resolution, or stale cursor clears a hold |
+| Key authentication writer/cutoff | A new writer emits legacy v1, or a reader accepts v1 at/after cutoff |
+| Key authentication history/binding | A v2 message without retained history or exact binding is accepted |
 | Observer reservation durability | Crash loses the reservation and permits missing reservation or double signing |
 
 ## Recorded results
@@ -231,7 +260,10 @@ capacity 0, quorum 0, or quorum above roster size are rejected. The lineage
 appeal model has five matching Red configurations and six scenarios. The
 evidence-lineage case model has twelve matching Red configurations and twelve
 scenarios. The observer signing model has two durability counterexamples and
-three scenarios.
+three scenarios. The evidence-resolution relay has four matching Red
+configurations and three crash/backoff/credential scenarios. The key
+authentication migration has four matching Red configurations and four
+writer/cutoff/history/binding scenarios.
 
 ## Model-based testing
 

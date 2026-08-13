@@ -1,6 +1,9 @@
 import type { CheckpointDeliveryJob } from "./checkpoint-runtime";
 import type { AuditCryptoBackend } from "../../player-local-runtime/crypto-backend";
-import { verifyCheckpointDeliveryAuthenticationDual } from "./checkpoint-delivery-crypto";
+import {
+  checkpointDeliveryAuthenticationMigrationFromPolicy,
+  verifyCheckpointDeliveryAuthenticationDual,
+} from "./checkpoint-delivery-crypto";
 import {
   classifyAnchorHead,
   sameCheckpointDeliveryAuthenticationPolicy,
@@ -184,6 +187,7 @@ export class CheckpointReceiverStore {
         authentication: job.authentication,
       },
       backend,
+      checkpointDeliveryAuthenticationMigrationFromPolicy(policy, Date.now()),
     );
     if (!verification.ok) return { decision: "refused", verification };
     return {

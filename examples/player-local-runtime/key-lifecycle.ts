@@ -240,7 +240,7 @@ function preflightKeyBoundStatement(
   options: KeyBoundVerificationContext,
   schemeSupported: (scheme: string) => boolean,
 ): KeyBoundVerificationPreflight {
-  if (!validAuthentication(authentication)) {
+  if (!isKeyBoundAuthentication(authentication)) {
     return { ok: false, reason: "invalid_authentication" };
   }
   if (options.history?.[compiledHistory] !== true) {
@@ -462,15 +462,23 @@ function validKeyRecord(value: VerificationKeyRecord): boolean {
         value.revokedAtMs <= value.validUntilMs));
 }
 
-function validAuthentication(value: KeyBoundAuthentication): boolean {
-  return value !== null && typeof value === "object" && value.version === 1 &&
-    identifier(value.purpose, 128) && boundedText(value.scopeId, 256) &&
-    boundedText(value.unitId, 256) && identifier(value.subjectId, 256) &&
-    identifier(value.keyId, 256) && safePositiveInteger(value.keyVersion) &&
-    identifier(value.scheme, 128) && boundedText(value.publicKey, 16_384) &&
-    boundedText(value.statementDigest, 4_096) &&
-    safeNonNegativeInteger(value.issuedAtMs) &&
-    boundedText(value.signature, 16_384);
+export function isKeyBoundAuthentication(
+  value: unknown,
+): value is KeyBoundAuthentication {
+  const authentication = value as KeyBoundAuthentication;
+  return value !== null && typeof value === "object" &&
+    authentication.version === 1 &&
+    identifier(authentication.purpose, 128) &&
+    boundedText(authentication.scopeId, 256) &&
+    boundedText(authentication.unitId, 256) &&
+    identifier(authentication.subjectId, 256) &&
+    identifier(authentication.keyId, 256) &&
+    safePositiveInteger(authentication.keyVersion) &&
+    identifier(authentication.scheme, 128) &&
+    boundedText(authentication.publicKey, 16_384) &&
+    boundedText(authentication.statementDigest, 4_096) &&
+    safeNonNegativeInteger(authentication.issuedAtMs) &&
+    boundedText(authentication.signature, 16_384);
 }
 
 function issuanceTimeRefusal(

@@ -149,7 +149,9 @@ prototypeのprotocol骨格は通ったが、production完成ではない。優�
    `expired`/`escalated`停止は実装済み。active holdは自動解決しない。reference PvE originでは署名済み
    holdを裁定前caseへ提出し、exact case ID付きarbiter certificateでupholdまたはdismissするWorker接続まで
    実装済み。dismissalはlineageを変更せず、resolution noticeをsourceが再検証・再署名し、既存inbox pollerで
-   player-local holdへ適用するrelayも実装済み。case自動提出、source workerの自動schedule/credentialと
+   player-local holdへ適用するrelayも実装済み。source workerはauthorityと別deployのCloudflare DOとして、
+   credential署名poll、SQLite lease/attempt fencing/指数backoff/alarm、publish前exact envelope保存と
+   crash後同一再送まで実装済み。case自動提出、production roster rotation、外部signer serviceの実deployment、
    transfer case adapterは未実装。
 4. 汎用inventoryへMerkle lineage pruningを追加し、実装済みmulti-asset checkpointを
    player-local DBへ接続して、risk-adaptive sampling/Queue backpressureを追加する。

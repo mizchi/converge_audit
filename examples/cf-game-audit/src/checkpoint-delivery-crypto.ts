@@ -4,6 +4,21 @@ import {
   type AuditCryptoBackend,
 } from "../../player-local-runtime/crypto-backend";
 import {
+  canonicalKeyBoundSignatureStatement,
+  compileVerificationKeyHistory,
+  decodeVerificationKeyHistory,
+  signKeyBoundStatementAsync,
+  verifyKeyBoundStatement,
+  verifyKeyBoundStatementAsync,
+  type CompiledVerificationKeyHistory,
+  type KeyBoundAuthentication,
+  type VerificationKeyRecord,
+} from "../../player-local-runtime/key-lifecycle";
+import {
+  audit_browser_ed25519_verify,
+  audit_browser_sha256,
+} from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
+import {
   serializeCheckpointDeliveryApprovalSync,
   serializeCheckpointDeliveryStatementSync,
   verifyCheckpointDeliveryAuthenticationSync,
@@ -18,6 +33,57 @@ export type CheckpointDeliveryStatementInput = Omit<
   CheckpointDeliveryAuthenticationInput,
   "policy" | "authentication"
 >;
+
+export const CHECKPOINT_DELIVERY_PRODUCER_PURPOSE = "checkpoint-producer";
+export const CHECKPOINT_DELIVERY_WITNESS_PURPOSE = "checkpoint-witness";
+
+export interface CheckpointDeliveryAuthenticationMigration {
+  keyHistory: CompiledVerificationKeyHistory;
+  nowMs: number;
+  maxClockSkewMs: number;
+  /** Exclusive cutoff for accepting legacy protocol-v1 authentication. */
+  legacyAcceptUntilMs: number;
+}
+
+const CHECKPOINT_KEY_HISTORY_CACHE_LIMIT = 256;
+const checkpointKeyHistoryCache = new Map<
+  string,
+  CompiledVerificationKeyHistory
+>();
+
+export function checkpointDeliveryAuthenticationMigrationFromPolicy(
+  policy: CheckpointDeliveryAuthenticationInput["policy"],
+  nowMs: number,
+): CheckpointDeliveryAuthenticationMigration | undefined {
+  if (
+    !Number.isSafeInteger(nowMs) || nowMs < 0 ||
+    !Number.isSafeInteger(policy.legacy_accept_until_ms) ||
+    (policy.legacy_accept_until_ms as number) < 0 ||
+    !Number.isSafeInteger(policy.max_clock_skew_ms) ||
+    (policy.max_clock_skew_ms as number) < 0 ||
+    (policy.max_clock_skew_ms as number) > 300_000 ||
+    !policy.key_history
+  ) return undefined;
+  const encodedHistory = JSON.stringify(policy.key_history);
+  let keyHistory = checkpointKeyHistoryCache.get(encodedHistory);
+  if (!keyHistory) {
+    const records = decodeVerificationKeyHistory(encodedHistory);
+    if (!records) return undefined;
+    const compiled = compileVerificationKeyHistory(records);
+    if (!compiled.ok) return undefined;
+    keyHistory = compiled.history;
+    if (checkpointKeyHistoryCache.size >= CHECKPOINT_KEY_HISTORY_CACHE_LIMIT) {
+      checkpointKeyHistoryCache.clear();
+    }
+    checkpointKeyHistoryCache.set(encodedHistory, keyHistory);
+  }
+  return {
+    keyHistory,
+    nowMs,
+    maxClockSkewMs: policy.max_clock_skew_ms as number,
+    legacyAcceptUntilMs: policy.legacy_accept_until_ms as number,
+  };
+}
 
 const partiallyAuthenticatedCheckpointDelivery = Symbol(
   "partially-authenticated-checkpoint-delivery",
@@ -51,12 +117,13 @@ function partialAuthenticationBinding(
       JSON.stringify(left).localeCompare(JSON.stringify(right))
     );
   const approvals = authentication.approvals
-    .map((approval): [string, string, string, string, string] => [
+    .map((approval): [string, string, string, string, string, string] => [
       approval.statement_digest,
       approval.witness_id,
       approval.witness_key,
       approval.digest,
       approval.signature,
+      JSON.stringify(approval.key_authentication ?? null),
     ])
     .sort((left, right) =>
       JSON.stringify(left).localeCompare(JSON.stringify(right))
@@ -81,6 +148,7 @@ function partialAuthenticationBinding(
     authentication.producer_key,
     authentication.statement_digest,
     authentication.producer_signature,
+    JSON.stringify(authentication.producer_key_authentication ?? null),
     approvals,
   ]);
 }
@@ -136,6 +204,8 @@ export async function signCheckpointDeliveryAuthenticationStandard(
   producerId: string,
   signer: AsyncAuditSigner,
   backend: AuditCryptoBackend,
+  key: VerificationKeyRecord,
+  issuedAtMs: number,
 ): Promise<CheckpointDeliveryAuthentication> {
   requireProductionSigningBackend(backend);
   requireCompatibleSigner(signer, backend);
@@ -145,20 +215,36 @@ export async function signCheckpointDeliveryAuthenticationStandard(
   const statementDigest = await backend.hashString(
     serializeCheckpointDeliveryStatementSync(runtime, statement),
   );
-  const producerSignature = await signer.signDigest(statementDigest);
+  if (
+    key.subjectId !== producerId ||
+    key.purpose !== CHECKPOINT_DELIVERY_PRODUCER_PURPOSE ||
+    key.scopeId !== statement.boundary.scope_id
+  ) throw new Error("checkpoint_delivery_key_binding_mismatch");
+  const keyAuthentication = await signKeyBoundStatementAsync({
+    key,
+    unitId: statement.boundary.unit_id,
+    statementDigest,
+    issuedAtMs,
+    signer,
+    digest: backend,
+  });
+  const keyBoundDigest = await backend.hashString(
+    canonicalKeyBoundSignatureStatement(keyAuthentication),
+  );
   if (!await backend.verify(
     signer.publicKey,
-    statementDigest,
-    producerSignature,
+    keyBoundDigest,
+    keyAuthentication.signature,
   )) {
     throw new Error("checkpoint_delivery_signer_self_check_failed");
   }
   return {
-    version: 1,
+    version: 2,
     producer_id: producerId,
     producer_key: signer.publicKey,
     statement_digest: statementDigest,
-    producer_signature: producerSignature,
+    producer_signature: keyAuthentication.signature,
+    producer_key_authentication: keyAuthentication,
     approvals: [],
   };
 }
@@ -169,6 +255,10 @@ export async function signCheckpointDeliveryApprovalStandard(
   witnessId: string,
   signer: AsyncAuditSigner,
   backend: AuditCryptoBackend,
+  key: VerificationKeyRecord,
+  scopeId: string,
+  unitId: string,
+  issuedAtMs: number,
 ): Promise<CheckpointDeliveryApproval> {
   requireProductionSigningBackend(backend);
   requireCompatibleSigner(signer, backend);
@@ -182,8 +272,27 @@ export async function signCheckpointDeliveryApprovalStandard(
       witnessId,
     ),
   );
-  const signature = await signer.signDigest(digest);
-  if (!await backend.verify(signer.publicKey, digest, signature)) {
+  if (
+    key.subjectId !== witnessId ||
+    key.purpose !== CHECKPOINT_DELIVERY_WITNESS_PURPOSE ||
+    key.scopeId !== scopeId
+  ) throw new Error("checkpoint_delivery_key_binding_mismatch");
+  const keyAuthentication = await signKeyBoundStatementAsync({
+    key,
+    unitId,
+    statementDigest: digest,
+    issuedAtMs,
+    signer,
+    digest: backend,
+  });
+  const keyBoundDigest = await backend.hashString(
+    canonicalKeyBoundSignatureStatement(keyAuthentication),
+  );
+  if (!await backend.verify(
+    signer.publicKey,
+    keyBoundDigest,
+    keyAuthentication.signature,
+  )) {
     throw new Error("checkpoint_delivery_signer_self_check_failed");
   }
   return {
@@ -191,7 +300,8 @@ export async function signCheckpointDeliveryApprovalStandard(
     witness_id: witnessId,
     witness_key: signer.publicKey,
     digest,
-    signature,
+    signature: keyAuthentication.signature,
+    key_authentication: keyAuthentication,
   };
 }
 
@@ -238,6 +348,7 @@ export async function verifyCheckpointDeliveryAuthenticationStandard(
   runtime: LoadedCheckpointRuntime,
   input: CheckpointDeliveryAuthenticationInput,
   backend: AuditCryptoBackend,
+  migration?: CheckpointDeliveryAuthenticationMigration,
 ): Promise<CheckpointDeliveryAuthenticationVerification> {
   const admission = cryptoRuntimeAdmission("production", backend.descriptor);
   if (!admission.ok) {
@@ -251,10 +362,7 @@ export async function verifyCheckpointDeliveryAuthenticationStandard(
   }
 
   const { authentication, policy } = input;
-  if (
-    authentication.producer_id !== policy.producer_id ||
-    authentication.producer_key !== policy.producer_key
-  ) {
+  if (authentication.producer_id !== policy.producer_id) {
     return { ok: false, error: "producer_identity_mismatch" };
   }
 
@@ -264,12 +372,59 @@ export async function verifyCheckpointDeliveryAuthenticationStandard(
   if (authentication.statement_digest !== expectedStatementDigest) {
     return { ok: false, error: "statement_digest_mismatch" };
   }
-  if (!await backend.verify(
-    authentication.producer_key,
-    authentication.statement_digest,
-    authentication.producer_signature,
-  )) {
-    return { ok: false, error: "invalid_producer_signature" };
+  if (authentication.version === 1) {
+    const nowMs = migration?.nowMs ?? 0;
+    const legacyAcceptUntilMs = migration?.legacyAcceptUntilMs ??
+      Number.MAX_SAFE_INTEGER;
+    if (nowMs >= legacyAcceptUntilMs) {
+      return { ok: false, error: "legacy_authentication_expired" };
+    }
+    if (authentication.producer_key !== policy.producer_key) {
+      return { ok: false, error: "producer_identity_mismatch" };
+    }
+    if (!await backend.verify(
+      authentication.producer_key,
+      authentication.statement_digest,
+      authentication.producer_signature,
+    )) {
+      return { ok: false, error: "invalid_producer_signature" };
+    }
+  } else {
+    if (!migration) {
+      return { ok: false, error: "verification_key_history_unavailable" };
+    }
+    const keyAuthentication = authentication.producer_key_authentication;
+    if (!flattenedKeyAuthenticationMatches(
+      authentication.producer_key,
+      authentication.producer_signature,
+      keyAuthentication,
+    )) {
+      return { ok: false, error: "producer_key_authentication_mismatch" };
+    }
+    const verification = await verifyKeyBoundStatementAsync(
+      keyAuthentication,
+      {
+        purpose: CHECKPOINT_DELIVERY_PRODUCER_PURPOSE,
+        scopeId: input.boundary.scope_id,
+        unitId: input.boundary.unit_id,
+        subjectId: authentication.producer_id,
+        statementDigest: expectedStatementDigest,
+        nowMs: migration.nowMs,
+        maxClockSkewMs: migration.maxClockSkewMs,
+        history: migration.keyHistory,
+        digest: backend,
+        verifiers: {
+          "ed25519-v1": backend,
+          "moonbit-ed25519-v1": backend,
+        },
+      },
+    );
+    if (!verification.ok) {
+      return {
+        ok: false,
+        error: `invalid_producer_key_authentication:${verification.reason}`,
+      };
+    }
   }
 
   const witnessKeys = new Map(
@@ -290,9 +445,6 @@ export async function verifyCheckpointDeliveryAuthenticationStandard(
     if (expectedKey === undefined) {
       return { ok: false, error: "unknown_witness" };
     }
-    if (approval.witness_key !== expectedKey) {
-      return { ok: false, error: "witness_key_mismatch" };
-    }
     const expectedApprovalDigest = await backend.hashString(
       serializeCheckpointDeliveryApprovalSync(
         runtime,
@@ -303,12 +455,61 @@ export async function verifyCheckpointDeliveryAuthenticationStandard(
     if (approval.digest !== expectedApprovalDigest) {
       return { ok: false, error: "approval_digest_mismatch" };
     }
-    if (!await backend.verify(
-      approval.witness_key,
-      approval.digest,
-      approval.signature,
-    )) {
-      return { ok: false, error: "invalid_witness_signature" };
+    if (approval.key_authentication === undefined) {
+      if (authentication.version === 2) {
+        return { ok: false, error: "witness_key_authentication_mismatch" };
+      }
+      const nowMs = migration?.nowMs ?? 0;
+      const legacyAcceptUntilMs = migration?.legacyAcceptUntilMs ??
+        Number.MAX_SAFE_INTEGER;
+      if (nowMs >= legacyAcceptUntilMs) {
+        return { ok: false, error: "legacy_authentication_expired" };
+      }
+      if (approval.witness_key !== expectedKey) {
+        return { ok: false, error: "witness_key_mismatch" };
+      }
+      if (!await backend.verify(
+        approval.witness_key,
+        approval.digest,
+        approval.signature,
+      )) {
+        return { ok: false, error: "invalid_witness_signature" };
+      }
+    } else {
+      if (!migration) {
+        return { ok: false, error: "verification_key_history_unavailable" };
+      }
+      if (!flattenedKeyAuthenticationMatches(
+        approval.witness_key,
+        approval.signature,
+        approval.key_authentication,
+      )) {
+        return { ok: false, error: "witness_key_authentication_mismatch" };
+      }
+      const verification = await verifyKeyBoundStatementAsync(
+        approval.key_authentication,
+        {
+          purpose: CHECKPOINT_DELIVERY_WITNESS_PURPOSE,
+          scopeId: input.boundary.scope_id,
+          unitId: input.boundary.unit_id,
+          subjectId: approval.witness_id,
+          statementDigest: expectedApprovalDigest,
+          nowMs: migration.nowMs,
+          maxClockSkewMs: migration.maxClockSkewMs,
+          history: migration.keyHistory,
+          digest: backend,
+          verifiers: {
+            "ed25519-v1": backend,
+            "moonbit-ed25519-v1": backend,
+          },
+        },
+      );
+      if (!verification.ok) {
+        return {
+          ok: false,
+          error: `invalid_witness_key_authentication:${verification.reason}`,
+        };
+      }
     }
     approved.add(approval.witness_id);
   }
@@ -323,6 +524,16 @@ export async function verifyCheckpointDeliveryAuthenticationStandard(
   };
 }
 
+function flattenedKeyAuthenticationMatches(
+  publicKey: string,
+  signature: string,
+  authentication: KeyBoundAuthentication | undefined,
+): authentication is KeyBoundAuthentication {
+  return authentication !== undefined &&
+    authentication.publicKey === publicKey &&
+    authentication.signature === signature;
+}
+
 /**
  * Migration capability: standard WebCrypto must accept first, then the
  * existing MoonBit verifier must independently reach the same capability.
@@ -331,15 +542,27 @@ export async function verifyCheckpointDeliveryAuthenticationDual(
   runtime: LoadedCheckpointRuntime,
   input: CheckpointDeliveryAuthenticationInput,
   backend: AuditCryptoBackend,
+  migration?: CheckpointDeliveryAuthenticationMigration,
 ): Promise<CheckpointDeliveryAuthenticationVerification> {
   const standard = await verifyCheckpointDeliveryAuthenticationStandard(
     runtime,
     input,
     backend,
+    migration,
   );
   if (!standard.ok) return standard;
 
-  const moonbit = verifyCheckpointDeliveryAuthenticationSync(runtime, input);
+  const hasKeyBoundAuthentication = input.authentication.version === 2 ||
+    input.authentication.approvals.some((approval) =>
+      approval.key_authentication !== undefined
+    );
+  const moonbit = !hasKeyBoundAuthentication
+    ? verifyCheckpointDeliveryAuthenticationSync(runtime, input)
+    : verifyCheckpointDeliveryKeyBoundAuthenticationSync(
+      runtime,
+      input,
+      migration,
+    );
   if (!moonbit.ok) return moonbit;
   if (
     moonbit.producer_id !== standard.producer_id ||
@@ -359,15 +582,27 @@ export async function verifyCheckpointDeliveryAuthenticationPartialDual(
   runtime: LoadedCheckpointRuntime,
   input: CheckpointDeliveryAuthenticationInput,
   backend: AuditCryptoBackend,
+  migration?: CheckpointDeliveryAuthenticationMigration,
 ): Promise<PartialCheckpointDeliveryAuthenticationVerification> {
   const standard = await verifyCheckpointDeliveryAuthenticationStandard(
     runtime,
     input,
     backend,
+    migration,
   );
   if (!standard.ok && standard.error !== "under_quorum") return standard;
 
-  const moonbit = verifyCheckpointDeliveryAuthenticationSync(runtime, input);
+  const hasKeyBoundAuthentication = input.authentication.version === 2 ||
+    input.authentication.approvals.some((approval) =>
+      approval.key_authentication !== undefined
+    );
+  const moonbit = !hasKeyBoundAuthentication
+    ? verifyCheckpointDeliveryAuthenticationSync(runtime, input)
+    : verifyCheckpointDeliveryKeyBoundAuthenticationSync(
+      runtime,
+      input,
+      migration,
+    );
   if (!moonbit.ok && moonbit.error !== "under_quorum") return moonbit;
   if (standard.ok !== moonbit.ok) {
     return { ok: false, error: "backend_verification_mismatch" };
@@ -390,5 +625,111 @@ export async function verifyCheckpointDeliveryAuthenticationPartialDual(
       [partiallyAuthenticatedCheckpointDelivery]:
         partialAuthenticationBinding(input),
     }),
+  };
+}
+
+function verifyCheckpointDeliveryKeyBoundAuthenticationSync(
+  runtime: LoadedCheckpointRuntime,
+  input: CheckpointDeliveryAuthenticationInput,
+  migration: CheckpointDeliveryAuthenticationMigration | undefined,
+): CheckpointDeliveryAuthenticationVerification {
+  if (!migration) {
+    return { ok: false, error: "verification_key_history_unavailable" };
+  }
+  const authentication = input.authentication;
+  const statementDigest = audit_browser_sha256(
+    serializeCheckpointDeliveryStatementSync(runtime, input),
+  );
+  if (statementDigest !== authentication.statement_digest) {
+    return { ok: false, error: "backend_verification_mismatch" };
+  }
+  if (authentication.version === 2) {
+    if (!authentication.producer_key_authentication) {
+      return { ok: false, error: "producer_key_authentication_mismatch" };
+    }
+    const producer = verifyKeyBoundStatement(
+      authentication.producer_key_authentication,
+      {
+        purpose: CHECKPOINT_DELIVERY_PRODUCER_PURPOSE,
+        scopeId: input.boundary.scope_id,
+        unitId: input.boundary.unit_id,
+        subjectId: authentication.producer_id,
+        statementDigest,
+        nowMs: migration.nowMs,
+        maxClockSkewMs: migration.maxClockSkewMs,
+        history: migration.keyHistory,
+        digest: { hashString: audit_browser_sha256 },
+        verifiers: {
+          "ed25519-v1": { verify: audit_browser_ed25519_verify },
+          "moonbit-ed25519-v1": { verify: audit_browser_ed25519_verify },
+        },
+      },
+    );
+    if (!producer.ok) {
+      return {
+        ok: false,
+        error: `invalid_producer_key_authentication:${producer.reason}`,
+      };
+    }
+  } else {
+    const legacyProducer = verifyCheckpointDeliveryAuthenticationSync(
+      runtime,
+      {
+        ...input,
+        authentication: { ...authentication, approvals: [] },
+      },
+    );
+    if (legacyProducer.ok || legacyProducer.error !== "under_quorum") {
+      return legacyProducer;
+    }
+  }
+  for (const approval of authentication.approvals) {
+    const approvalDigest = audit_browser_sha256(
+      serializeCheckpointDeliveryApprovalSync(
+        runtime,
+        statementDigest,
+        approval.witness_id,
+      ),
+    );
+    if (approvalDigest !== approval.digest) {
+      return { ok: false, error: "backend_verification_mismatch" };
+    }
+    if (!approval.key_authentication) {
+      const legacy = verifyCheckpointDeliveryAuthenticationSync(runtime, {
+        ...input,
+        authentication: { ...authentication, approvals: [approval] },
+      });
+      if (legacy.ok || legacy.error !== "under_quorum") return legacy;
+      continue;
+    }
+    const witness = verifyKeyBoundStatement(approval.key_authentication, {
+      purpose: CHECKPOINT_DELIVERY_WITNESS_PURPOSE,
+      scopeId: input.boundary.scope_id,
+      unitId: input.boundary.unit_id,
+      subjectId: approval.witness_id,
+      statementDigest: approvalDigest,
+      nowMs: migration.nowMs,
+      maxClockSkewMs: migration.maxClockSkewMs,
+      history: migration.keyHistory,
+      digest: { hashString: audit_browser_sha256 },
+      verifiers: {
+        "ed25519-v1": { verify: audit_browser_ed25519_verify },
+        "moonbit-ed25519-v1": { verify: audit_browser_ed25519_verify },
+      },
+    });
+    if (!witness.ok) {
+      return {
+        ok: false,
+        error: `invalid_witness_key_authentication:${witness.reason}`,
+      };
+    }
+  }
+  if (authentication.approvals.length < input.policy.required_approvals) {
+    return { ok: false, error: "under_quorum" };
+  }
+  return {
+    ok: true,
+    producer_id: authentication.producer_id,
+    approval_count: authentication.approvals.length,
   };
 }

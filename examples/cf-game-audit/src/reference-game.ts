@@ -30,4 +30,5 @@ export const referenceGameMerkleFraming: AuditMerkleFraming = Object.freeze({
 export const referenceGameLineageDecisionVerifiers:
   LineageDecisionVerifierRegistry = Object.freeze({
     "moonbit-ed25519-v1": referenceGameOwnerVerifier,
+    "ed25519-v1": referenceGameOwnerVerifier,
   });

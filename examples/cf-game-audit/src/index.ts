@@ -42,6 +42,15 @@ import {
   type EvidenceLineageCaseReference,
 } from "../../player-local-runtime/evidence-lineage-case";
 import {
+  verifyEvidenceCaseResolutionPollRequest,
+} from "../../player-local-runtime/evidence-case-resolution-relay";
+import {
+  compileVerificationKeyHistory,
+  decodeVerificationKeyHistory,
+  isKeyBoundAuthentication,
+  type CompiledVerificationKeyHistory,
+} from "../../player-local-runtime/key-lifecycle";
+import {
   decodeEvidenceCaseDismissalCertificate,
   verifyEvidenceCaseDismissalCertificateDual,
 } from "./evidence-case-dismissal-certificate";
@@ -120,6 +129,7 @@ import {
   type VerifiedItemCreation,
 } from "./moonbit";
 import {
+  checkpointDeliveryAuthenticationMigrationFromPolicy,
   verifyCheckpointDeliveryAuthenticationDual,
   verifyCheckpointDeliveryAuthenticationPartialDual,
 } from "./checkpoint-delivery-crypto";
@@ -145,6 +155,10 @@ export interface Env {
   LINEAGE_ARBITER_ROSTER?: string;
   LINEAGE_DECISION_MAX_CLOCK_SKEW_MS?: string;
   EVIDENCE_HOLD_SOURCE_ROSTER?: string;
+  EVIDENCE_HOLD_SOURCE_KEY_HISTORY?: string;
+  EVIDENCE_HOLD_SOURCE_KEY_SCOPE_ID?: string;
+  EVIDENCE_HOLD_LEGACY_ACCEPT_UNTIL_MS?: string;
+  EVIDENCE_HOLD_KEY_MAX_CLOCK_SKEW_MS?: string;
   AUDIT_RUNTIME_PROFILE?: CryptoRuntimeProfile;
   AUDIT_CRYPTO_BACKEND?: string;
 }
@@ -606,6 +620,7 @@ const standardWorkerCryptoBackend =
   createStandardWebCryptoBackend(crypto);
 const standardReferenceGameLineageDecisionVerifiers = Object.freeze({
   "moonbit-ed25519-v1": standardWorkerCryptoBackend,
+  "ed25519-v1": standardWorkerCryptoBackend,
 });
 const standardReferenceGameDigest = createAsyncAuditDigestAdapter(
   standardWorkerCryptoBackend,
@@ -938,6 +953,9 @@ export class GameAuditShard extends DurableObject<Env> {
   private readonly checkpointReceiver: CheckpointReceiverStore;
   private readonly checkpointWitnessCollections: CheckpointWitnessCollectionStore;
   private readonly observerSigningStore: OpenWorldObserverSigningStore;
+  private readonly evidenceSourceKeyHistory:
+    | CompiledVerificationKeyHistory
+    | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -950,6 +968,7 @@ export class GameAuditShard extends DurableObject<Env> {
     this.observerSigningStore = new OpenWorldObserverSigningStore(
       this.ctx.storage,
     );
+    this.evidenceSourceKeyHistory = compileEvidenceSourceKeyHistory(env);
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS audit_config (
         singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -1631,11 +1650,16 @@ export class GameAuditShard extends DurableObject<Env> {
       case "POST game-asset-lineage-case-dismissals":
         return this.dismissReferenceGameEvidenceLineageCase(request, mode, unit);
       case "POST game-evidence-case-resolution-polls":
-        return this.pollReferenceGameEvidenceCaseResolutions(request, mode);
+        return this.pollReferenceGameEvidenceCaseResolutions(
+          request,
+          mode,
+          unit,
+        );
       case "POST game-evidence-case-resolution-envelopes":
         return this.publishReferenceGameEvidenceCaseResolution(
           request,
           mode,
+          unit,
         );
       case "POST game-evidence-inbox":
         return this.pollReferenceGameEvidenceInbox(request, mode);
@@ -2361,6 +2385,7 @@ export class GameAuditShard extends DurableObject<Env> {
           authentication: producerAuthentication,
         },
         standardWorkerCryptoBackend,
+        checkpointDeliveryAuthenticationMigrationFromPolicy(policy, now),
       );
     if (!producerVerification.ok) {
       return jsonResponse(
@@ -2471,6 +2496,7 @@ export class GameAuditShard extends DurableObject<Env> {
         runtimeCapability,
         candidate.input,
         standardWorkerCryptoBackend,
+        checkpointDeliveryAuthenticationMigrationFromPolicy(policy, now),
       );
     if (!approvalVerification.ok) {
       return jsonResponse({
@@ -2613,6 +2639,14 @@ export class GameAuditShard extends DurableObject<Env> {
         });
       }
     }
+    const verificationTimeMs = Date.now();
+    const migration = checkpointDeliveryAuthenticationMigrationFromPolicy(
+      policy,
+      verificationTimeMs,
+    );
+    if (!migration) {
+      return jsonError("checkpoint_key_migration_not_configured", 503);
+    }
     for (const value of effectiveAuthentications) {
       const verification = await verifyCheckpointDeliveryAuthenticationDual(
         runtimeCapability,
@@ -2627,6 +2661,7 @@ export class GameAuditShard extends DurableObject<Env> {
         authentication: value.authentication,
         },
         standardWorkerCryptoBackend,
+        migration,
       );
       if (!verification.ok) {
         return jsonResponse(
@@ -4951,6 +4986,7 @@ export class GameAuditShard extends DurableObject<Env> {
   private async pollReferenceGameEvidenceCaseResolutions(
     request: Request,
     mode: AuditMode,
+    unit: string,
   ): Promise<Response> {
     if (mode !== "pve") return jsonError("not_found", 404);
     const sourceBucket = request.headers.get("x-audit-source-bucket");
@@ -4966,16 +5002,58 @@ export class GameAuditShard extends DurableObject<Env> {
     }
     const body = await readJsonBody(request);
     if (!body.ok) return body.response;
-    const version = numberField(body.value, "version");
-    const sourceId = stringField(body.value, "source_id");
-    const afterSequence = numberField(body.value, "after_sequence");
-    const afterResolutionId = stringField(body.value, "after_resolution_id");
-    const limit = numberField(body.value, "limit");
-    if (
-      version !== 1 || !sourceId || !/^[A-Za-z0-9._:-]{1,256}$/.test(sourceId) ||
-      afterSequence === undefined || afterSequence < -1 ||
-      !afterResolutionId || afterResolutionId.length > 4_096 || limit !== 1
-    ) return jsonError("invalid_evidence_resolution_poll", 400);
+    const roster = parseEvidenceLineageCaseSourceRoster(
+      this.auditEnv.EVIDENCE_HOLD_SOURCE_ROSTER,
+    );
+    if (!roster) {
+      return jsonError("evidence_hold_source_roster_not_configured", 503);
+    }
+    const migration = evidenceSourceAuthenticationMigration(this.auditEnv);
+    if (!migration) {
+      return jsonError("evidence_source_key_migration_not_configured", 503);
+    }
+    const verificationTimeMs = Date.now();
+    const expected = {
+      expectedAudience: new URL(request.url).origin,
+      expectedUnit: unit,
+      expectedKeyScopeId: migration.keyScopeId,
+      roster,
+      keyHistory: this.evidenceSourceKeyHistory,
+      nowMs: verificationTimeMs,
+      maxClockSkewMs: migration.maxClockSkewMs,
+      legacyAcceptUntilMs: migration.legacyAcceptUntilMs,
+    };
+    const verified = await verifyEvidenceCaseResolutionPollRequest(
+      body.value,
+      {
+        ...expected,
+        digest: referenceGameDigest,
+        verifiers: referenceGameLineageDecisionVerifiers,
+      },
+    );
+    if (!verified.ok) {
+      return jsonResponse(
+        { ok: false, decision: verified.reason },
+        verified.reason === "invalid_request" ? 400 : 403,
+      );
+    }
+    const standardVerified = await verifyEvidenceCaseResolutionPollRequest(
+      body.value,
+      {
+        ...expected,
+        digest: standardWorkerCryptoBackend,
+        verifiers: standardReferenceGameLineageDecisionVerifiers,
+      },
+    );
+    if (!standardVerified.ok) {
+      return jsonResponse(
+        { ok: false, decision: "crypto_backend_mismatch" },
+        500,
+      );
+    }
+    const sourceId = verified.cursor.sourceId;
+    const afterSequence = verified.cursor.sequence;
+    const afterResolutionId = verified.cursor.resolutionId;
     if (afterSequence === -1) {
       if (afterResolutionId !== "resolution-genesis") {
         return jsonError("evidence_resolution_cursor_mismatch", 409);
@@ -5021,6 +5099,7 @@ export class GameAuditShard extends DurableObject<Env> {
   private async publishReferenceGameEvidenceCaseResolution(
     request: Request,
     mode: AuditMode,
+    unit: string,
   ): Promise<Response> {
     if (mode !== "pve") return jsonError("not_found", 404);
     const sourceBucket = request.headers.get("x-audit-source-bucket");
@@ -5058,6 +5137,19 @@ export class GameAuditShard extends DurableObject<Env> {
     if (!roster) {
       return jsonError("evidence_hold_source_roster_not_configured", 503);
     }
+    const migration = evidenceSourceAuthenticationMigration(this.auditEnv);
+    if (!migration) {
+      return jsonError("evidence_source_key_migration_not_configured", 503);
+    }
+    const verificationTimeMs = Date.now();
+    const keyBoundOptions = {
+      keyHistory: this.evidenceSourceKeyHistory,
+      keyBoundScopeId: migration.keyScopeId,
+      keyBoundUnitId: referenceGameEvidenceCaseBoundary(evidenceCase).unit_id,
+      nowMs: verificationTimeMs,
+      maxClockSkewMs: migration.maxClockSkewMs,
+      legacyAcceptUntilMs: migration.legacyAcceptUntilMs,
+    };
     const verified = await verifyEvidenceLineageCaseSourceEnvelopeDual(
       envelope,
       referenceGameEvidenceCaseBoundary(evidenceCase),
@@ -5066,11 +5158,13 @@ export class GameAuditShard extends DurableObject<Env> {
         roster,
         verifiers: referenceGameLineageDecisionVerifiers,
         digest: referenceGameDigest,
+        ...keyBoundOptions,
       },
       {
         roster,
         verifiers: standardReferenceGameLineageDecisionVerifiers,
         digest: standardWorkerCryptoBackend,
+        ...keyBoundOptions,
       },
     );
     if (!verified.ok) {
@@ -8680,6 +8774,51 @@ function lineageDecisionMaxClockSkewMs(env: Env): number | undefined {
     : undefined;
 }
 
+function compileEvidenceSourceKeyHistory(
+  env: Env,
+): CompiledVerificationKeyHistory | undefined {
+  const decoded = decodeVerificationKeyHistory(
+    env.EVIDENCE_HOLD_SOURCE_KEY_HISTORY,
+  );
+  if (!decoded) return undefined;
+  const compiled = compileVerificationKeyHistory(decoded);
+  return compiled.ok ? compiled.history : undefined;
+}
+
+function evidenceSourceAuthenticationMigration(env: Env): {
+  legacyAcceptUntilMs: number;
+  maxClockSkewMs: number;
+  keyScopeId: string;
+} | undefined {
+  const legacyAcceptUntilMs = strictNonNegativeEnvInteger(
+    env.EVIDENCE_HOLD_LEGACY_ACCEPT_UNTIL_MS,
+  );
+  const maxClockSkewMs = strictNonNegativeEnvInteger(
+    env.EVIDENCE_HOLD_KEY_MAX_CLOCK_SKEW_MS,
+  );
+  if (
+    legacyAcceptUntilMs === undefined || maxClockSkewMs === undefined ||
+    maxClockSkewMs > 300_000 ||
+    typeof env.EVIDENCE_HOLD_SOURCE_KEY_SCOPE_ID !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(
+      env.EVIDENCE_HOLD_SOURCE_KEY_SCOPE_ID,
+    )
+  ) return undefined;
+  return {
+    legacyAcceptUntilMs,
+    maxClockSkewMs,
+    keyScopeId: env.EVIDENCE_HOLD_SOURCE_KEY_SCOPE_ID,
+  };
+}
+
+function strictNonNegativeEnvInteger(value: string | undefined): number | undefined {
+  if (value === undefined || !/^(0|[1-9][0-9]*)$/.test(value)) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
 function lineageDecisionLifecycleAt(
   head: {
     status: "eligible" | "revoked";
@@ -8931,7 +9070,10 @@ function isCheckpointDeliveryAuthenticationPolicy(
     ids.add(witnessId);
     keys.add(witnessKey);
   }
-  return true;
+  return checkpointDeliveryAuthenticationMigrationFromPolicy(
+    policy as CheckpointDeliveryAuthenticationPolicy,
+    0,
+  ) !== undefined;
 }
 
 function isCheckpointDeliveryAuthentication(
@@ -8939,7 +9081,7 @@ function isCheckpointDeliveryAuthentication(
 ): value is CheckpointDeliveryAuthentication {
   if (!value || typeof value !== "object") return false;
   const authentication = value as Partial<CheckpointDeliveryAuthentication>;
-  return authentication.version === 1 &&
+  return (authentication.version === 1 || authentication.version === 2) &&
     boundedNonEmptyString(authentication.producer_id, 256) &&
     typeof authentication.producer_key === "string" &&
     /^[0-9a-f]{64}$/.test(authentication.producer_key) &&
@@ -8947,13 +9089,19 @@ function isCheckpointDeliveryAuthentication(
     /^[0-9a-f]{64}$/.test(authentication.statement_digest) &&
     typeof authentication.producer_signature === "string" &&
     /^[0-9a-f]{128}$/.test(authentication.producer_signature) &&
+    (authentication.version === 1
+      ? authentication.producer_key_authentication === undefined
+      : isKeyBoundAuthentication(authentication.producer_key_authentication)) &&
     Array.isArray(authentication.approvals) &&
     authentication.approvals.length <= 32 &&
-    authentication.approvals.every(isCheckpointDeliveryApproval);
+    authentication.approvals.every((approval) =>
+      isCheckpointDeliveryApproval(approval, authentication.version === 2)
+    );
 }
 
 function isCheckpointDeliveryApproval(
   value: unknown,
+  requireKeyBound = false,
 ): value is CheckpointDeliveryApproval {
   if (!value || typeof value !== "object") return false;
   const approval = value as Record<string, unknown>;
@@ -8970,7 +9118,11 @@ function isCheckpointDeliveryApproval(
     typeof approval.digest === "string" &&
     /^[0-9a-f]{64}$/.test(approval.digest) &&
     typeof approval.signature === "string" &&
-    /^[0-9a-f]{128}$/.test(approval.signature);
+    /^[0-9a-f]{128}$/.test(approval.signature) &&
+    (requireKeyBound
+      ? isKeyBoundAuthentication(approval.key_authentication)
+      : approval.key_authentication === undefined ||
+        isKeyBoundAuthentication(approval.key_authentication));
 }
 
 function isCheckpointAuthorityAck(

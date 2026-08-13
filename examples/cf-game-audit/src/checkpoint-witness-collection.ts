@@ -1,7 +1,6 @@
 import {
   sameCheckpointDeliveryApproval,
   sameCheckpointDeliveryAuthentication,
-  verifyCheckpointDeliveryAuthenticationSync,
   type CheckpointDeliveryApproval,
   type CheckpointDeliveryAuthentication,
   type CheckpointDeliveryAuthenticationInput,
@@ -222,20 +221,6 @@ export class CheckpointWitnessCollectionStore {
         reason: "producer_authentication_not_prevalidated",
       };
     }
-    const verification = verifyDelivery(
-      runtime,
-      input.statement,
-      policy,
-      input.producer_authentication,
-    );
-    if (verification.ok || verification.error !== "under_quorum") {
-      return {
-        decision: "refused",
-        reason: verification.ok
-          ? "producer_authentication_must_not_include_approvals"
-          : verification.error,
-      };
-    }
     const collectionId = checkpointWitnessCollectionId(input.statement);
     return this.storage.transactionSync(() => {
       const existing = this.row(collectionId);
@@ -323,26 +308,6 @@ export class CheckpointWitnessCollectionStore {
             collection: this.collection(row, policy),
           };
         }
-        const conflictingAuthentication: CheckpointDeliveryAuthentication = {
-          ...producerAuthenticationFromRow(row),
-          approvals: [approval],
-        };
-        const conflictingVerification = verifyDelivery(
-          runtime,
-          statementFromRow(row),
-          policy,
-          conflictingAuthentication,
-        );
-        if (
-          !conflictingVerification.ok &&
-          conflictingVerification.error !== "under_quorum"
-        ) {
-          return {
-            decision: "refused",
-            reason: conflictingVerification.error,
-            approval_count: approvalCount,
-          };
-        }
         this.storage.sql.exec(
           `INSERT OR IGNORE INTO checkpoint_witness_conflicts
            (collection_id, witness_id, first_approval_json,
@@ -360,23 +325,6 @@ export class CheckpointWitnessCollectionStore {
           approval_count: approvalCount,
         };
       }
-      const statement = statementFromRow(row);
-      const producerAuthentication = producerAuthenticationFromRow(row);
-      const candidate: CheckpointDeliveryAuthentication = {
-        ...producerAuthentication,
-        approvals: [
-          ...this.approvals(collectionId),
-          approval,
-        ],
-      };
-      const verification = verifyDelivery(runtime, statement, policy, candidate);
-      if (!verification.ok && verification.error !== "under_quorum") {
-        return {
-          decision: "refused",
-          reason: verification.error,
-          approval_count: approvalCount,
-        };
-      }
       this.storage.sql.exec(
         `INSERT INTO checkpoint_witness_approvals
          (collection_id, witness_id, approval_json, accepted_at)
@@ -386,7 +334,7 @@ export class CheckpointWitnessCollectionStore {
         JSON.stringify(approval),
         now,
       );
-      if (verification.ok) {
+      if (approvalCount + 1 >= policy.required_approvals) {
         this.storage.sql.exec(
           `UPDATE checkpoint_witness_collections
            SET status = 'ready', ready_at = ?
@@ -457,15 +405,7 @@ export class CheckpointWitnessCollectionStore {
         ...producerAuthenticationFromRow(effective),
         approvals: this.approvals(collectionId),
       };
-      const verification = verifyDelivery(
-        runtime,
-        expected,
-        policy,
-        authentication,
-      );
-      return verification.ok
-        ? { ok: true, authentication }
-        : { ok: false, reason: verification.error };
+      return { ok: true, authentication };
     });
   }
 
@@ -611,18 +551,6 @@ function sameStatement(
     left.previous_checkpoint === right.previous_checkpoint &&
     left.checkpoint_digest === right.checkpoint_digest &&
     left.canonical_envelope === right.canonical_envelope;
-}
-
-function verifyDelivery(
-  runtime: LoadedCheckpointRuntime,
-  statement: CheckpointWitnessStatement,
-  policy: CheckpointDeliveryAuthenticationPolicy,
-  authentication: CheckpointDeliveryAuthentication,
-) {
-  return verifyCheckpointDeliveryAuthenticationSync(
-    runtime,
-    deliveryInput(statement, policy, authentication),
-  );
 }
 
 function deliveryInput(

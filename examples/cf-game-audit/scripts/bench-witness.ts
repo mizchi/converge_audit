@@ -12,6 +12,10 @@ import {
   createStandardWebCryptoBackend,
 } from "../../player-local-runtime/crypto-backend";
 import {
+  compileVerificationKeyHistory,
+  type VerificationKeyRecord,
+} from "../../player-local-runtime/key-lifecycle";
+import {
   cleanWitnessAuthorityPathMs,
   cleanWitnessSealPathMs,
   summarizeLatency,
@@ -106,6 +110,40 @@ const deliveryProducerKey = await standardCryptoBackend.generateSigningKey();
 const deliveryWitnessKeys = await Promise.all(
   WITNESS_IDS.map(() => standardCryptoBackend.generateSigningKey()),
 );
+
+function checkpointKeys(scopeId: string): VerificationKeyRecord[] {
+  return [{
+    version: 1,
+    keyId: "benchmark-checkpoint-producer",
+    keyVersion: 1,
+    subjectId: "checkpoint-producer",
+    purpose: "checkpoint-producer",
+    scopeId,
+    scheme: deliveryProducerKey.signer.scheme,
+    publicKey: deliveryProducerKey.signer.publicKey,
+    validFromMs: 0,
+    validUntilMs: Number.MAX_SAFE_INTEGER,
+    revokedAtMs: null,
+  }, ...WITNESS_IDS.map((witnessId, index): VerificationKeyRecord => ({
+    version: 1,
+    keyId: `benchmark-${witnessId}`,
+    keyVersion: 1,
+    subjectId: witnessId,
+    purpose: "checkpoint-witness",
+    scopeId,
+    scheme: deliveryWitnessKeys[index].signer.scheme,
+    publicKey: deliveryWitnessKeys[index].signer.publicKey,
+    validFromMs: 0,
+    validUntilMs: Number.MAX_SAFE_INTEGER,
+    revokedAtMs: null,
+  }))];
+}
+
+function checkpointKeyHistory(scopeId: string) {
+  const compiled = compileVerificationKeyHistory(checkpointKeys(scopeId));
+  if (!compiled.ok) throw new Error(compiled.reason);
+  return compiled.history;
+}
 
 const measurements: RunMeasurement[] = [];
 for (let run = 0; run < RUNS; run++) measurements.push(await measureRun(run));
@@ -276,6 +314,10 @@ async function measureRun(run: number): Promise<RunMeasurement> {
     collection,
     witnessId: WITNESS_IDS[0],
     signer: deliveryWitnessKeys[0].signer,
+    verificationKey: checkpointKeys(sessionId)[1],
+    keyHistory: checkpointKeyHistory(sessionId),
+    legacyAcceptUntilMs: 0,
+    maxClockSkewMs: 5_000,
     cryptoBackend: standardCryptoBackend,
   });
   const invalidApproval = { ...validApproval, witness_id: "mallory" };
@@ -348,6 +390,10 @@ async function measureRun(run: number): Promise<RunMeasurement> {
       collectionId: collection.collection_id,
       witnessId: WITNESS_IDS[index],
       signer: deliveryWitnessKeys[index].signer,
+      verificationKey: checkpointKeys(sessionId)[index + 1],
+      keyHistory: checkpointKeyHistory(sessionId),
+      legacyAcceptUntilMs: 0,
+      maxClockSkewMs: 5_000,
       cryptoBackend: standardCryptoBackend,
       ...(SOURCE_MODE === "synthetic-headers"
         ? { fetchImpl: sourcedFetch(VALID_SOURCE) }
@@ -504,6 +550,8 @@ async function deliveryFixture(
     policy.producer_id,
     deliveryProducerKey.signer,
     standardCryptoBackend,
+    checkpointKeys(boundary.scope_id)[0],
+    Date.now(),
   );
   return { ok: true, policy, authentication };
 }

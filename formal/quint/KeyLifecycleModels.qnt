@@ -4,7 +4,8 @@ module keyLifecycleSafety {
     enforceExactKeyBinding = true,
     enforceIssuanceValidity = true,
     enforceEffectiveRevocation = true,
-    retainHistoricalKeys = true
+    retainHistoricalKeys = true,
+    appendLifecycleEvent = true
   ).* from "./KeyLifecycle"
 }
 
@@ -13,7 +14,8 @@ module keyLifecycleBrokenBinding {
     enforceExactKeyBinding = false,
     enforceIssuanceValidity = true,
     enforceEffectiveRevocation = true,
-    retainHistoricalKeys = true
+    retainHistoricalKeys = true,
+    appendLifecycleEvent = true
   ).* from "./KeyLifecycle"
 }
 
@@ -22,7 +24,8 @@ module keyLifecycleBrokenIssuanceValidity {
     enforceExactKeyBinding = true,
     enforceIssuanceValidity = false,
     enforceEffectiveRevocation = true,
-    retainHistoricalKeys = true
+    retainHistoricalKeys = true,
+    appendLifecycleEvent = true
   ).* from "./KeyLifecycle"
 }
 
@@ -31,7 +34,8 @@ module keyLifecycleBrokenRevocation {
     enforceExactKeyBinding = true,
     enforceIssuanceValidity = true,
     enforceEffectiveRevocation = false,
-    retainHistoricalKeys = true
+    retainHistoricalKeys = true,
+    appendLifecycleEvent = true
   ).* from "./KeyLifecycle"
 }
 
@@ -40,6 +44,17 @@ module keyLifecycleBrokenHistoryRetention {
     enforceExactKeyBinding = true,
     enforceIssuanceValidity = true,
     enforceEffectiveRevocation = true,
-    retainHistoricalKeys = false
+    retainHistoricalKeys = false,
+    appendLifecycleEvent = true
+  ).* from "./KeyLifecycle"
+}
+
+module keyLifecycleBrokenEventAtomicity {
+  import keyLifecycle(
+    enforceExactKeyBinding = true,
+    enforceIssuanceValidity = true,
+    enforceEffectiveRevocation = true,
+    retainHistoricalKeys = true,
+    appendLifecycleEvent = false
   ).* from "./KeyLifecycle"
 }

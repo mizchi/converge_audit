@@ -13,8 +13,12 @@ quint typecheck formal/quint/EvidenceLineageCase.qnt
 quint typecheck formal/quint/EvidenceLineageCaseModels.qnt
 quint typecheck formal/quint/KeyLifecycle.qnt
 quint typecheck formal/quint/KeyLifecycleModels.qnt
+quint typecheck formal/quint/KeyAuthenticationMigration.qnt
+quint typecheck formal/quint/KeyAuthenticationMigrationModels.qnt
 quint typecheck formal/quint/ObserverSigningStore.qnt
 quint typecheck formal/quint/ObserverSigningStoreModels.qnt
+quint typecheck formal/quint/EvidenceResolutionRelay.qnt
+quint typecheck formal/quint/EvidenceResolutionRelayModels.qnt
 
 quint verify formal/quint/CheckpointDeliveryModels.qnt \
   --backend=tlc \
@@ -126,6 +130,17 @@ quint verify formal/quint/KeyLifecycleModels.qnt \
     acceptedCheckpointHasExactKeyBinding \
     acceptedCheckpointWasIssuedInKeyWindow \
     acceptedCheckpointPredatesEffectiveRevocation \
+    materializedKeyRevisionHasAppendOnlyEvent \
+  --verbosity=1
+
+quint verify formal/quint/KeyAuthenticationMigrationModels.qnt \
+  --backend=tlc \
+  --main=keyAuthenticationMigrationSafety \
+  --invariants \
+    typeOk \
+    newWriterNeverEmitsLegacy \
+    acceptedLegacyPredatesCutoff \
+    acceptedKeyBoundHasHistoryAndExactBinding \
   --verbosity=1
 
 quint verify formal/quint/ObserverSigningStoreModels.qnt \
@@ -136,4 +151,15 @@ quint verify formal/quint/ObserverSigningStoreModels.qnt \
     oneReservationPerSlot \
     everySignatureHasExactReservation \
     noDoubleSigning \
+  --verbosity=1
+
+quint verify formal/quint/EvidenceResolutionRelayModels.qnt \
+  --backend=tlc \
+  --main=evidenceResolutionRelaySafety \
+  --invariants \
+    typeOk \
+    acceptedPollRequiresCredential \
+    publishedBeforeCursorAckIsDurable \
+    failedAttemptHasDurableRetry \
+    cursorAdvanceUsesCurrentLeaseAttempt \
   --verbosity=1

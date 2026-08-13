@@ -263,6 +263,12 @@ expected snapshotのCASと全write-setを一transactionで行わなければな�
   roster/quorum capabilityを検証し、同じ認証済みdelivery境界へ変換する。
 - canonical statement/approvalはMoonBit contractだけがserializeし、Workerはそのexact bytesを標準WebCryptoと
   既存MoonBit verifierで二重検証する。両者が同じproducer/quorum capabilityへ到達した場合だけmutationを許す。
+- 新規producer/witness writerは外側protocol v2だけを生成し、producerと各approvalへkey ID/version、
+  purpose、scope、unit、subject、digest、署名時刻を含むkey-bound authenticationを付ける。writerは
+  signerとverification key record、および期待scope/unitの不一致を署名前に拒否する。
+- control planeは公開鍵履歴、exclusive `legacy_accept_until_ms`、`max_clock_skew_ms`をsourceと各receiverへ
+  同じpolicyとして永続化する。v1は`now_ms < cutoff`でのみ受理し、v2は履歴中のexact key versionを要求する。
+  legacy roster公開鍵はv1 drain専用であり、rotation後のv2はroster identityと履歴recordへ照合する。
 - unknown、改ざん、未認証jobはreceiver history/head/fork evidenceを一切変更しない。
 
 ### IMPL-COLLECT-001: remote witness collection
@@ -422,11 +428,11 @@ game adapterは既存の`n > 3f`、`n-f` quorumとcentral escalation policyを�
 | seal + local head + checkpoint outboxのatomic transaction | opaque planから公開write-setを導出し、player-local Node SQLite、browser IndexedDB、Cloudflare SQLiteで一括適用、player-local adapterは共通4 fault rollback | Tested locally / mobile SQLiteはPending |
 | player-local evidence prefix pruning/poll | MoonBit一段guard、appeal floor、protected/equivocation pin、durable active/resolved evidence hold、署名済みhash-chain hold envelope、source cursorとのatomic apply、bounded single-page polling、durable poll schedule/lease/attempt fencing/backoff/restart回復/operational terminal、ACK済みprefix、durable anchor、Node SQLite/IndexedDB rollback | Proven predicate/auth/hash-chain/page/schedule gate + Tested locally / poll schedulerからcase endpointへの自動提出はPending |
 | lineage case起票・裁定 | scheme別evidence source/arbiter verifier、別roster、hold referenceによるexact origin/checkpoint binding、case SQLite、v2 uphold certificateとdismissal certificateのexact case ID、resolution CAS、dismissal history、hold resolution draft、provisional revoke、時間制appeal、finalized/expired、ancestor別decision history、単一asset status readとUX射影 | MoonBit/Why3 gate + Quint normal/broken model + Worker SQLite Tested locally / transfer case・production key rotationはPending |
-| case resolution source relay | case起票時の署名済みplacement、arbiter certificate付きdurable resolution notice、sourceによるcertificate再検証とnext-cursor再署名、exact case/reference/resolutionを検査するWorker inbox、player-local bounded pollerによるhold解除 | MoonBit/Why3 gate + Quint normal/broken model + Worker/IndexedDB Tested locally / source workerの自動schedule・lease・credentialはPending |
+| case resolution source relay | case起票時の署名済みplacement、arbiter certificate付きdurable resolution notice、key-bound v2 poll/envelope writer、cutoff付きv1/v2 dual reader、履歴compile + O(1) exact key lookup、audience/unit/cursor拘束、sourceによるcertificate再検証、publish前exact envelope永続化、SQLite lease/attempt fencing/backoff/alarm、crash後同一再送、player-local bounded pollerによるhold解除 | MoonBit/Why3 gate + case/relay/migration Quint normal/20 broken + authority/source Worker/IndexedDB Tested locally / production roster rotation・外部signer service実deploymentはPending |
 | authority boundary/initial headの事前provision | 管理API → destination DO、source側provision ledger、未設定receiver拒否 | Tested locally |
 | Queue jobのsource outbox認証 | receiver mutation前のsource DO exact-match | Tested locally |
 | producer署名 + provision済みwitness quorum | `src/audit/delivery_auth`のopaque capability、MoonBit canonical serializer、標準WebCrypto + MoonBit dual verifier、source/receiver二重gate | Proven gate + dual verifier Tested locally |
-| versioned key lifecycle | key ID/version/purpose/scope/public keyを含むcanonical statement、署名時点validity/effective revocation、provision時履歴compile、O(1) exact lookup、rotation後の過去checkpoint検証、同期/非同期共通preflight、WebCrypto非抽出signer、旧seed一方向migration | MoonBit 5 goals + Quint normal/3 broken + MoonBit/WebCrypto共通vector + IndexedDB restart + browser E2E Tested / Worker標準backend・SQL migration・外部custodyはPending |
+| versioned key lifecycle | key ID/version/purpose/scope/public keyを含むcanonical statement、署名時点validity/effective revocation、provision時履歴compile、O(1) exact lookup、rotation後の過去checkpoint検証、revision CAS + append-only event、同期/非同期共通preflight、WebCrypto非抽出signer、旧seed一方向migration | MoonBit 5 goals + key lifecycle/migration Quint normal/8 broken + Cloudflare SQLite/IndexedDB transaction + secret-backed signer Worker + MoonBit/WebCrypto共通vector + browser E2E Tested。source resolutionとcheckpoint deliveryのv2 writer/cutoff付きdual reader、policy永続化、rotation後witness選択はImplemented / mobile SQLite・timestamp trust・実provider監査はPending |
 | remote witness collection | 公開pull/ローカル署名submit、producer/各approvalの標準WebCrypto + MoonBit partial capability、pure bounded fanout/指数retry/backpressure/複数response選択、SQLite collection、deadline | remote E2E + crypto ingress + pure scheduler Tested / socket push・global fair queueはPending |
 | observer reserve-before-sign | MoonBit proved classifier/canonical key、Durable Object SQLite reservation + sequence transaction、exact retry、conflict evidence、Merkle snapshot/trusted anchor、内部専用RPC | Quint正常/volatile Red model + workerd fault/eviction/signer-failure/concurrency/corruption test。Cloudflare referenceはImplemented、device/mobile DB・外部署名credentialはPending |
 | player-local peer checkpoint fanout | MoonBit JS policy、SQLite route/lease/attempt/backoff/fork quarantine、bounded HTTP POST、restart lease | loopback 7 tests / 実credential・WebSocket/WebTransportはPending |
@@ -475,9 +481,9 @@ key lifecycleのwire/storage移行、routine rotationとretroactive revocation�
 | source | `IMPL-AUTH-001`は敵対的peerでproducer署名とroster/quorum capabilityを要求する |
 | implementation observation | internal outbox exact-matchだけでは、peer由来checkpointの生成主体と相互承認を証明しない |
 | model question | 認証Booleanを呼出側が偽装せず、完全なtrust factsを通過した値だけreceiverへ渡せるか |
-| machine result | MoonBit lemmaはstatement/policy/producer identity/signature/roster/quorumの全条件を要求し、opaque capability以外から受理値を生成できない |
-| decision | game固有の署名bundleを汎用transport前段へ追加し、transport順序はsource outbox完全一致へ分離した |
-| lock | source under-quorum無変更、receiver署名改ざん・foreign witness・under-quorum無変更後の正規delivery成功test |
+| machine result | MoonBit lemmaはstatement/policy/producer identity/signature/roster/quorumの全条件を要求し、opaque capability以外から受理値を生成できない。key authentication migration Quintはv2-only writer、v1 cutoff、履歴、exact bindingを外す4 broken modelで反例を出す。workerdでは保存cutoff後のv1を無変更拒否し、DO再起動後にv2を受理した |
+| decision | game固有の署名bundleを汎用transport前段へ追加し、transport順序はsource outbox完全一致へ分離した。新規writerはv2だけを生成し、v1は保存されたexclusive cutoffまでのdrainに限定する |
+| lock | source under-quorum無変更、receiver署名改ざん・foreign witness・under-quorum無変更後の正規delivery成功、保存cutoff/再起動、rotated witness key selection test |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -571,10 +577,10 @@ key lifecycleのwire/storage移行、routine rotationとretroactive revocation�
 | expected claim | roster内sourceが署名したactive placementを、scope/unit/asset/origin/boundary/epoch/checkpointへexact bindした場合だけcaseを永続化する。case作成だけではasset/listingを変更しない。case IDを含む外部arbiter v2 certificateはcaseとlineageを同時にupholdし、別の署名付きdismissal certificateはcaseだけを閉じてlineageを変えない。どちらも端末holdを直接解除せず、sourceがexact resolutionとnext cursorを再署名した場合だけ解除する |
 | implementation observation | holdの署名だけを検証して任意asset IDと組み合わせると、正しいholdを別assetへretargetできる。case作成を既存revoke endpointへ直結すると、evidence sourceがarbiter権限を得てしまう |
 | model question | 未認証/retarget hold、case作成時auto-revoke、未認証/retarget uphold/dismissal certificate、dismissal時asset mutation、case closeだけのhold自動解除、未認証/retarget/stale-cursor source resolutionを許す各broken構成で安全性が破れるか |
-| machine result | MoonBit/Why3でcase admission/decision/dismissal/source resolutionの10 obligationsを証明した。Quint/TLC正常modelは反例なし、12 broken modelは意図した反例を検出する。workerdは従来のcase検査に加え、durable notice、arbiter certificate再検証、source署名改ざん拒否、next cursor、冪等再送、player inboxのplacement→resolve連鎖を検査する。IndexedDB testはこの二件を既存pollerへ適用し、holdが`dismissed`で解決することを確認する |
+| machine result | MoonBit/Why3でcase admission/decision/dismissal/source resolutionの10 obligationsを証明した。case Quint/TLC正常modelは反例なし、12 broken modelは意図した反例を検出する。追加relay modelも正常反例なしで、poll credential/pending durability/retry durability/attempt fenceを外した4 modelが反例を出す。key authentication migration modelも正常反例なしで、v2-only writer、legacy cutoff、key history、exact bindingを外した4 modelが反例を出し、4 rollout scenarioを通す。authority workerdはdurable notice、arbiter certificate再検証、v1 cutoff、v2 key history/binding、source署名改ざん拒否、next cursor、冪等再送、player inboxのplacement→resolve連鎖を検査する。独立source workerdは503 backoff、not-due、eviction後lease回復、key-bound v2署名poll、publish前pending保存、publish失敗後eviction、exact bytes再送、duplicate ACK後cursor前進を検査する。IndexedDB testはplacement/resolutionを既存pollerへ適用する |
 | domain wording | 「監査中」「case棄却」「使用禁止」「端末hold解除」を分離する。caseがopenでも通常プレイと出品を止めず、uphold時だけquarantineする。case close時点ではholdを解除せず、認証済みsourceがexact resolutionを次のhash-chain cursorへ再署名したときだけ端末holdを解除する |
-| decision | holdの`reference_digest`をcase reference hashとし、case IDはreference hashと署名済みmessage digestから導出する。cryptoは`scheme -> verifier`、identityは`EVIDENCE_HOLD_SOURCE_ROSTER`と`LINEAGE_ARBITER_ROSTER`へ分離する。arbiter certificate付きnoticeをdurable outboxへ保存し、sourceが再検証・再署名したenvelopeだけを既存player-local inboxへ流す。Workerはsource秘密鍵を保持しない |
-| lock | `evidence-lineage-case.ts`、`evidence-case-resolution-relay.ts`、source resolution authorization adapter、`evidence_lineage_case_*_allowed`、`evidence_case_source_resolution_allowed`、`EvidenceLineageCase*.qnt`、case/resolution/inbox endpoints、SQLite case/notice/inbox CAS、Worker/IndexedDB integration tests。source workerの自動schedule/lease/credentialは別要件として残す |
+| decision | holdの`reference_digest`をcase reference hashとし、case IDはreference hashと署名済みmessage digestから導出する。cryptoは`scheme -> verifier`、identityは`EVIDENCE_HOLD_SOURCE_ROSTER`/versioned key historyと`LINEAGE_ARBITER_ROSTER`へ分離する。poll credentialはauthority origin/unit/source/cursor/limitを署名し、v2 authenticationでpurpose/key scope/unit/subject/digestへ再束縛する。新規writerはv2だけを生成し、dual readerのv1 cutoffはauthority設定で必須にする。arbiter certificate付きnoticeをdurable outboxへ保存し、sourceが再検証・再署名したenvelopeだけを既存player-local inboxへ流す。authority Workerとsource relayを別deployにし、relayも秘密鍵ではなく`SOURCE_SIGNER` service capabilityだけを持つ |
+| lock | `evidence-lineage-case.ts`、`evidence-case-resolution-relay.ts`、source resolution authorization adapter、`evidence-resolution-relay-worker.ts`、`verification-key-signer-worker.ts`、`wrangler.source-relay.jsonc`、`evidence_lineage_case_*_allowed`、`evidence_case_source_resolution_allowed`、`EvidenceLineageCase*.qnt`、`EvidenceResolutionRelay*.qnt`、`KeyAuthenticationMigration*.qnt`、case/resolution/inbox endpoints、authority/source SQLite CAS、Worker/IndexedDB integration tests |
 
 | 項目 | 内容 |
 | --- | --- |
@@ -653,6 +659,8 @@ production adapterは最低限、次を自動検査する。
 15. peer clientはproducer statement/signatureまたは注入signerの公開鍵がrosterと一致しない場合、
     approvalをnetworkへ送らない。
 16. quorumに必要なpeer approvalを並列fanoutし、収集待ちでrender/inputを停止しない。
+17. source resolutionの新規writerはv2だけを生成し、v1はexclusive cutoff以後拒否する。v2の未知鍵、
+    欠落履歴、別scope/unit/subject/digestへのretargetではauthority/player-local stateが変わらない。
 
 回帰入口:
 

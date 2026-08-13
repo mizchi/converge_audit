@@ -15,9 +15,35 @@ import {
   type AuditCryptoBackend,
   type StandardWebCryptoBackend,
 } from "../../player-local-runtime/crypto-backend";
+import type {
+  CompiledVerificationKeyHistory,
+  VerificationKeyRecord,
+} from "../../player-local-runtime/key-lifecycle";
+import type {
+  CheckpointDeliveryAuthenticationMigration,
+} from "./checkpoint-delivery-crypto";
 import type { AuditMode } from "./contracts";
 
 export type { AuditMode } from "./contracts";
+
+export function selectCheckpointWitnessSigningKey(
+  history: readonly VerificationKeyRecord[],
+  witnessId: string,
+  scopeId: string,
+  issuedAtMs: number,
+): VerificationKeyRecord | undefined {
+  if (!Number.isSafeInteger(issuedAtMs) || issuedAtMs < 0) return undefined;
+  return [...history]
+    .filter((key) =>
+      key.subjectId === witnessId &&
+      key.purpose === "checkpoint-witness" &&
+      key.scopeId === scopeId &&
+      key.validFromMs <= issuedAtMs &&
+      issuedAtMs < key.validUntilMs &&
+      (key.revokedAtMs === null || issuedAtMs < key.revokedAtMs)
+    )
+    .sort((left, right) => right.keyVersion - left.keyVersion)[0];
+}
 
 export interface PublicCheckpointWitnessCollection {
   ok: true;
@@ -47,6 +73,10 @@ export interface ApproveCheckpointWitnessCollectionInput {
   collectionId: string;
   witnessId: string;
   signer: AsyncAuditSigner;
+  verificationKey: VerificationKeyRecord;
+  keyHistory: CompiledVerificationKeyHistory;
+  legacyAcceptUntilMs: number;
+  maxClockSkewMs: number;
   cryptoBackend: AuditCryptoBackend;
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -100,6 +130,10 @@ export async function signCheckpointWitnessApproval(input: {
   collection: PublicCheckpointWitnessCollection;
   witnessId: string;
   signer: AsyncAuditSigner;
+  verificationKey: VerificationKeyRecord;
+  keyHistory: CompiledVerificationKeyHistory;
+  legacyAcceptUntilMs: number;
+  maxClockSkewMs: number;
   cryptoBackend: AuditCryptoBackend;
   now?: () => number;
 }): Promise<CheckpointDeliveryApproval> {
@@ -117,11 +151,20 @@ export async function signCheckpointWitnessApproval(input: {
     (witness) => witness.witness_id === input.witnessId,
   );
   if (!rosterEntry) throw new Error("unknown_checkpoint_witness");
-  if (input.signer.publicKey !== rosterEntry.witness_key) {
-    throw new Error("witness_signer_does_not_match_roster");
+  if (
+    input.signer.publicKey !== input.verificationKey.publicKey ||
+    input.signer.scheme !== input.verificationKey.scheme
+  ) {
+    throw new Error("witness_signer_does_not_match_verification_key");
   }
   const runtime = await loadCheckpointRuntime();
   const statement = input.collection.statement;
+  const migration: CheckpointDeliveryAuthenticationMigration = {
+    keyHistory: input.keyHistory,
+    nowMs: now,
+    maxClockSkewMs: input.maxClockSkewMs,
+    legacyAcceptUntilMs: input.legacyAcceptUntilMs,
+  };
   const producerVerification =
     await verifyCheckpointDeliveryAuthenticationPartialDual(
       runtime,
@@ -136,6 +179,7 @@ export async function signCheckpointWitnessApproval(input: {
         authentication: input.collection.producer_authentication,
       },
       input.cryptoBackend,
+      migration,
     );
   if (!producerVerification.ok) {
     throw new Error(
@@ -148,6 +192,10 @@ export async function signCheckpointWitnessApproval(input: {
     input.witnessId,
     input.signer,
     input.cryptoBackend,
+    input.verificationKey,
+    statement.boundary.scope_id,
+    statement.boundary.unit_id,
+    now,
   );
 }
 
@@ -201,6 +249,10 @@ export async function approveCheckpointWitnessCollection(
     collection,
     witnessId: input.witnessId,
     signer: input.signer,
+    verificationKey: input.verificationKey,
+    keyHistory: input.keyHistory,
+    legacyAcceptUntilMs: input.legacyAcceptUntilMs,
+    maxClockSkewMs: input.maxClockSkewMs,
     cryptoBackend: input.cryptoBackend,
     now: input.now,
   });
@@ -226,7 +278,7 @@ export async function approveCheckpointWitnessCollectionWithLegacySeed(
   try {
     signer = (await cryptoBackend.importLegacySeed(
       input.witnessSeedHex,
-      rosterEntry.witness_key,
+      input.verificationKey.publicKey,
     )).signer;
   } catch {
     throw new Error("witness_seed_does_not_match_roster");
@@ -235,6 +287,10 @@ export async function approveCheckpointWitnessCollectionWithLegacySeed(
     collection,
     witnessId: input.witnessId,
     signer,
+    verificationKey: input.verificationKey,
+    keyHistory: input.keyHistory,
+    legacyAcceptUntilMs: input.legacyAcceptUntilMs,
+    maxClockSkewMs: input.maxClockSkewMs,
     cryptoBackend,
     now: input.now,
   });

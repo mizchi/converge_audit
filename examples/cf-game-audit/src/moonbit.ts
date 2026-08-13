@@ -4,6 +4,10 @@ import type { InventoryMembershipTranscript } from "./inventory-membership-seman
 import type { InventoryOriginSemanticTranscript } from "./inventory-origin-semantics";
 import type { OpenWorldMissingSlotTranscript } from "./open-world-missing-slot-semantics";
 import type { DigestVerificationPlan } from "../../player-local-runtime/digest-verification-plan";
+import type {
+  KeyBoundAuthentication,
+  VerificationKeyHistoryWire,
+} from "../../player-local-runtime/key-lifecycle";
 
 type AuditModule = typeof import("../../../_build/js/release/build/x/game_audit/worker/worker.js");
 
@@ -85,6 +89,9 @@ export interface CheckpointDeliveryAuthenticationPolicy {
   producer_key: string;
   witnesses: CheckpointDeliveryWitness[];
   required_approvals: number;
+  key_history?: VerificationKeyHistoryWire;
+  legacy_accept_until_ms?: number;
+  max_clock_skew_ms?: number;
 }
 
 export interface CheckpointDeliveryApproval {
@@ -93,14 +100,16 @@ export interface CheckpointDeliveryApproval {
   witness_key: string;
   digest: string;
   signature: string;
+  key_authentication?: KeyBoundAuthentication;
 }
 
 export interface CheckpointDeliveryAuthentication {
-  version: 1;
+  version: 1 | 2;
   producer_id: string;
   producer_key: string;
   statement_digest: string;
   producer_signature: string;
+  producer_key_authentication?: KeyBoundAuthentication;
   approvals: CheckpointDeliveryApproval[];
 }
 
@@ -141,11 +150,17 @@ export function sameCheckpointDeliveryAuthenticationPolicy(
     left.producer_key,
     left.required_approvals,
     normalizeWitnesses(left.witnesses),
+    JSON.stringify(left.key_history ?? null),
+    left.legacy_accept_until_ms ?? null,
+    left.max_clock_skew_ms ?? null,
   ]) === JSON.stringify([
     right.producer_id,
     right.producer_key,
     right.required_approvals,
     normalizeWitnesses(right.witnesses),
+    JSON.stringify(right.key_history ?? null),
+    right.legacy_accept_until_ms ?? null,
+    right.max_clock_skew_ms ?? null,
   ]);
 }
 
@@ -156,13 +171,14 @@ export function sameCheckpointDeliveryAuthentication(
   if (!left || !right) return left === right;
   const normalizeApprovals = (
     approvals: CheckpointDeliveryApproval[],
-  ): Array<[string, string, string, string, string]> => approvals
-    .map((approval): [string, string, string, string, string] => [
+  ): Array<[string, string, string, string, string, string]> => approvals
+    .map((approval): [string, string, string, string, string, string] => [
       approval.statement_digest,
       approval.witness_id,
       approval.witness_key,
       approval.digest,
       approval.signature,
+      JSON.stringify(approval.key_authentication ?? null),
     ])
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   return JSON.stringify([
@@ -171,6 +187,7 @@ export function sameCheckpointDeliveryAuthentication(
     left.producer_key,
     left.statement_digest,
     left.producer_signature,
+    JSON.stringify(left.producer_key_authentication ?? null),
     normalizeApprovals(left.approvals),
   ]) === JSON.stringify([
     right.version,
@@ -178,6 +195,7 @@ export function sameCheckpointDeliveryAuthentication(
     right.producer_key,
     right.statement_digest,
     right.producer_signature,
+    JSON.stringify(right.producer_key_authentication ?? null),
     normalizeApprovals(right.approvals),
   ]);
 }
@@ -190,7 +208,9 @@ export function sameCheckpointDeliveryApproval(
     left.witness_id === right.witness_id &&
     left.witness_key === right.witness_key &&
     left.digest === right.digest &&
-    left.signature === right.signature;
+    left.signature === right.signature &&
+    JSON.stringify(left.key_authentication ?? null) ===
+      JSON.stringify(right.key_authentication ?? null);
 }
 
 export interface StoredCheckpointClosure {
@@ -660,6 +680,9 @@ export function verifyCheckpointDeliveryAuthenticationSync(
     throw new Error("MoonBit checkpoint runtime must be loaded before authentication");
   }
   const { boundary, policy, authentication } = input;
+  if (authentication.version !== 1) {
+    return { ok: false, error: "unsupported_authentication_version" };
+  }
   return JSON.parse(
     auditModule.audit_verify_checkpoint_delivery_authentication(
       boundary.protocol_version,

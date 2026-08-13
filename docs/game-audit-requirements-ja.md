@@ -267,8 +267,10 @@ checkpointへexact bindしたcaseとして永続化し、case作成ではasset�
 caseとlineageを同時にupholdする経路と、署名付きdismissalでcaseだけを閉じる経路まで
 `Proven / Model checked / Tested locally`。dismissalが返すhold resolutionはsource再署名前のdraftであり、
 source別durable notice、arbiter certificate再検証、source署名、next-cursor CAS、既存player-local inbox適用まで
-接続済みである。production rosterのrotation/revocation、case自動提出、source workerの自動schedule/credential、
-transfer caseは`Pending`。
+接続済みである。さらにsource署名でaudience/unit/cursorを拘束するpoll credential、独立Cloudflare Workerの
+SQLite lease/attempt fencing/指数backoff/alarm、publish前のexact envelope永続化とcrash後同一再送まで
+`Model checked / Tested locally`。production rosterのrotation/revocation、case自動提出、外部signer serviceの
+実deployment、transfer caseは`Pending`。
 
 ### AUD-ASSET-005: multi-asset checkpointを一括受理する（MUST）
 

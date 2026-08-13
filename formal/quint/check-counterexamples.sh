@@ -39,8 +39,12 @@ quint typecheck formal/quint/EvidenceLineageCase.qnt
 quint typecheck formal/quint/EvidenceLineageCaseModels.qnt
 quint typecheck formal/quint/KeyLifecycle.qnt
 quint typecheck formal/quint/KeyLifecycleModels.qnt
+quint typecheck formal/quint/KeyAuthenticationMigration.qnt
+quint typecheck formal/quint/KeyAuthenticationMigrationModels.qnt
 quint typecheck formal/quint/ObserverSigningStore.qnt
 quint typecheck formal/quint/ObserverSigningStoreModels.qnt
+quint typecheck formal/quint/EvidenceResolutionRelay.qnt
+quint typecheck formal/quint/EvidenceResolutionRelayModels.qnt
 
 audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
@@ -244,6 +248,36 @@ check_expected_failure \
   acceptedCheckpointPredatesEffectiveRevocation \
   "$audit_quint_tmp/key-lifecycle-revocation.log"
 check_expected_failure \
+  formal/quint/KeyLifecycleModels.qnt \
+  keyLifecycleBrokenEventAtomicity \
+  invariant \
+  materializedKeyRevisionHasAppendOnlyEvent \
+  "$audit_quint_tmp/key-lifecycle-event-atomicity.log"
+check_expected_failure \
+  formal/quint/KeyAuthenticationMigrationModels.qnt \
+  keyAuthenticationMigrationBrokenWriter \
+  invariant \
+  newWriterNeverEmitsLegacy \
+  "$audit_quint_tmp/key-authentication-writer.log"
+check_expected_failure \
+  formal/quint/KeyAuthenticationMigrationModels.qnt \
+  keyAuthenticationMigrationBrokenCutoff \
+  invariant \
+  acceptedLegacyPredatesCutoff \
+  "$audit_quint_tmp/key-authentication-cutoff.log"
+check_expected_failure \
+  formal/quint/KeyAuthenticationMigrationModels.qnt \
+  keyAuthenticationMigrationBrokenHistory \
+  invariant \
+  acceptedKeyBoundHasHistoryAndExactBinding \
+  "$audit_quint_tmp/key-authentication-history.log"
+check_expected_failure \
+  formal/quint/KeyAuthenticationMigrationModels.qnt \
+  keyAuthenticationMigrationBrokenBinding \
+  invariant \
+  acceptedKeyBoundHasHistoryAndExactBinding \
+  "$audit_quint_tmp/key-authentication-binding.log"
+check_expected_failure \
   formal/quint/ObserverSigningStoreModels.qnt \
   observerSigningStoreBrokenDurability \
   invariant \
@@ -255,3 +289,27 @@ check_expected_failure \
   invariant \
   noDoubleSigning \
   "$audit_quint_tmp/observer-signing-double-signing.log"
+check_expected_failure \
+  formal/quint/EvidenceResolutionRelayModels.qnt \
+  evidenceResolutionRelayBrokenPollAuthentication \
+  invariant \
+  acceptedPollRequiresCredential \
+  "$audit_quint_tmp/evidence-resolution-poll-authentication.log"
+check_expected_failure \
+  formal/quint/EvidenceResolutionRelayModels.qnt \
+  evidenceResolutionRelayBrokenPendingDurability \
+  invariant \
+  publishedBeforeCursorAckIsDurable \
+  "$audit_quint_tmp/evidence-resolution-pending-durability.log"
+check_expected_failure \
+  formal/quint/EvidenceResolutionRelayModels.qnt \
+  evidenceResolutionRelayBrokenRetryDurability \
+  invariant \
+  failedAttemptHasDurableRetry \
+  "$audit_quint_tmp/evidence-resolution-retry-durability.log"
+check_expected_failure \
+  formal/quint/EvidenceResolutionRelayModels.qnt \
+  evidenceResolutionRelayBrokenAttemptFence \
+  invariant \
+  cursorAdvanceUsesCurrentLeaseAttempt \
+  "$audit_quint_tmp/evidence-resolution-attempt-fence.log"

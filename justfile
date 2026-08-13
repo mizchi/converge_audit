@@ -110,7 +110,9 @@ quint-docs:
   nix develop path:. --command quint docs formal/quint/LineageAppeal.qnt
   nix develop path:. --command quint docs formal/quint/EvidenceLineageCase.qnt
   nix develop path:. --command quint docs formal/quint/KeyLifecycle.qnt
+  nix develop path:. --command quint docs formal/quint/KeyAuthenticationMigration.qnt
   nix develop path:. --command quint docs formal/quint/ObserverSigningStore.qnt
+  nix develop path:. --command quint docs formal/quint/EvidenceResolutionRelay.qnt
 
 # Confirm that all load-bearing Quint guards produce counterexamples
 quint-counterexamples:
@@ -171,5 +173,13 @@ test-node-audit-runtime:
 build-cf-game-audit:
   pnpm --dir examples/cf-game-audit deploy:dry
 
+# Validate the independently deployed evidence-source relay bundle
+build-cf-evidence-source-relay:
+  pnpm --dir examples/cf-game-audit deploy:source-relay:dry
+
+# Validate the non-public verification-key signer bundle
+build-cf-key-signer:
+  pnpm --dir examples/cf-game-audit deploy:key-signer:dry
+
 # Pre-release checks
-pre-release: fmt info check check-audit-boundary test build prove formal-check check-node-audit-runtime test-node-audit-runtime check-cf-game-audit test-cf-game-audit build-cf-game-audit
+pre-release: fmt info check check-audit-boundary test build prove formal-check check-node-audit-runtime test-node-audit-runtime check-cf-game-audit test-cf-game-audit build-cf-game-audit build-cf-evidence-source-relay build-cf-key-signer

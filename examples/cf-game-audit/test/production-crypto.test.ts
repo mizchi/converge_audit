@@ -264,6 +264,41 @@ describe("standard checkpoint-delivery authentication", () => {
       }],
       required_approvals: 1,
     };
+    const issuedAtMs = 1_000;
+    const producerKey: VerificationKeyRecord = {
+      version: 1,
+      keyId: "producer-standard-key",
+      keyVersion: 1,
+      subjectId: policy.producer_id,
+      purpose: "checkpoint-producer",
+      scopeId: DELIVERY_BOUNDARY.scope_id,
+      scheme: producer.signer.scheme,
+      publicKey: producer.signer.publicKey,
+      validFromMs: 0,
+      validUntilMs: 10_000,
+      revokedAtMs: null,
+    };
+    const witnessKey: VerificationKeyRecord = {
+      version: 1,
+      keyId: "witness-standard-key",
+      keyVersion: 1,
+      subjectId: "witness-standard",
+      purpose: "checkpoint-witness",
+      scopeId: DELIVERY_BOUNDARY.scope_id,
+      scheme: witness.signer.scheme,
+      publicKey: witness.signer.publicKey,
+      validFromMs: 0,
+      validUntilMs: 10_000,
+      revokedAtMs: null,
+    };
+    const compiled = compileVerificationKeyHistory([producerKey, witnessKey]);
+    if (!compiled.ok) throw new Error(compiled.reason);
+    const migration = {
+      keyHistory: compiled.history,
+      nowMs: issuedAtMs,
+      maxClockSkewMs: 0,
+      legacyAcceptUntilMs: 500,
+    };
     const producerAuthentication =
       await signCheckpointDeliveryAuthenticationStandard(
         runtime,
@@ -271,7 +306,19 @@ describe("standard checkpoint-delivery authentication", () => {
         "producer-standard",
         producer.signer,
         standardBackend,
+        producerKey,
+        issuedAtMs,
       );
+    expect(producerAuthentication).toMatchObject({
+      version: 2,
+      producer_key_authentication: {
+        keyId: producerKey.keyId,
+        keyVersion: producerKey.keyVersion,
+      },
+    });
+    if (!producerAuthentication.producer_key_authentication) {
+      throw new Error("missing producer key authentication");
+    }
     const producerInput: CheckpointDeliveryAuthenticationInput = {
       ...statement,
       policy,
@@ -281,6 +328,7 @@ describe("standard checkpoint-delivery authentication", () => {
       runtime,
       producerInput,
       standardBackend,
+      migration,
     )).resolves.toMatchObject({
       ok: true,
       producer_id: "producer-standard",
@@ -294,7 +342,28 @@ describe("standard checkpoint-delivery authentication", () => {
       "witness-standard",
       witness.signer,
       standardBackend,
+      witnessKey,
+      DELIVERY_BOUNDARY.scope_id,
+      DELIVERY_BOUNDARY.unit_id,
+      issuedAtMs,
     );
+    expect(approval).toMatchObject({
+      key_authentication: {
+        keyId: witnessKey.keyId,
+        keyVersion: witnessKey.keyVersion,
+      },
+    });
+    await expect(signCheckpointDeliveryApprovalStandard(
+      runtime,
+      producerAuthentication.statement_digest,
+      "witness-standard",
+      witness.signer,
+      standardBackend,
+      { ...witnessKey, scopeId: "retargeted-world" },
+      DELIVERY_BOUNDARY.scope_id,
+      DELIVERY_BOUNDARY.unit_id,
+      issuedAtMs,
+    )).rejects.toThrow("checkpoint_delivery_key_binding_mismatch");
     await expect(verifyCheckpointDeliveryAuthenticationDual(
       runtime,
       {
@@ -305,10 +374,65 @@ describe("standard checkpoint-delivery authentication", () => {
         },
       },
       standardBackend,
+      migration,
     )).resolves.toEqual({
       ok: true,
       producer_id: "producer-standard",
       approval_count: 1,
+    });
+
+    await expect(verifyCheckpointDeliveryAuthenticationDual(
+      runtime,
+      {
+        ...producerInput,
+        authentication: {
+          ...producerAuthentication,
+          producer_key_authentication: {
+            ...producerAuthentication.producer_key_authentication,
+            scopeId: "retargeted-world",
+          },
+          approvals: [approval],
+        },
+      },
+      standardBackend,
+      migration,
+    )).resolves.toEqual({
+      ok: false,
+      error: "invalid_producer_key_authentication:expected_binding_mismatch",
+    });
+  });
+
+  it("accepts legacy checkpoint authentication only before its cutoff", async () => {
+    const runtime = await loadCheckpointRuntime();
+    const input = deliveryInput(deliveryFixture(1).authentication);
+    const compiled = compileVerificationKeyHistory([{
+      version: 1,
+      keyId: "unused-v2-key",
+      keyVersion: 1,
+      subjectId: "producer-1",
+      purpose: "checkpoint-producer",
+      scopeId: DELIVERY_BOUNDARY.scope_id,
+      scheme: "ed25519-v1",
+      publicKey: input.policy.producer_key,
+      validFromMs: 0,
+      validUntilMs: 10_000,
+      revokedAtMs: null,
+    }]);
+    if (!compiled.ok) throw new Error(compiled.reason);
+    const migration = {
+      keyHistory: compiled.history,
+      nowMs: 500,
+      maxClockSkewMs: 0,
+      legacyAcceptUntilMs: 500,
+    };
+    await expect(verifyCheckpointDeliveryAuthenticationDual(
+      runtime,
+      input,
+      standardBackend,
+      migration,
+    )).resolves.toEqual({
+      ok: false,
+      error: "legacy_authentication_expired",
     });
   });
 

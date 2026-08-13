@@ -7,7 +7,9 @@ quint typecheck formal/quint/AssetOwnershipTests.qnt
 quint typecheck formal/quint/LineageAppealTests.qnt
 quint typecheck formal/quint/EvidenceLineageCaseTests.qnt
 quint typecheck formal/quint/KeyLifecycleTests.qnt
+quint typecheck formal/quint/KeyAuthenticationMigrationTests.qnt
 quint typecheck formal/quint/ObserverSigningStoreTests.qnt
+quint typecheck formal/quint/EvidenceResolutionRelayTests.qnt
 
 quint test formal/quint/CheckpointDeliveryTests.qnt \
   --main=checkpointDeliveryTests \
@@ -36,12 +38,22 @@ quint test formal/quint/EvidenceLineageCaseTests.qnt \
 
 quint test formal/quint/KeyLifecycleTests.qnt \
   --main=keyLifecycleTests \
-  --match='^(oldCheckpointVerifiesAfterRotation|oldCheckpointBeforeRevocationStillVerifies|compromisedCheckpointAtRevocationBoundaryIsRejected|substitutedKeyVersionIsRejected|expiredSigningTimeIsRejected|currentKeyCheckpointIsAccepted)$' \
+  --match='^(oldCheckpointVerifiesAfterRotation|oldCheckpointBeforeRevocationStillVerifies|compromisedCheckpointAtRevocationBoundaryIsRejected|substitutedKeyVersionIsRejected|expiredSigningTimeIsRejected|currentKeyCheckpointIsAccepted|rotationAndRevocationAppendLifecycleEvents)$' \
+  --verbosity=1
+
+quint test formal/quint/KeyAuthenticationMigrationTests.qnt \
+  --main=keyAuthenticationMigrationTests \
+  --match='^(legacyReadsOnlyBeforeCutoff|keyBoundReadsAcrossCutoffWithHistory|keyBoundWithoutHistoryIsRejected|keyBoundWithRetargetedBindingIsRejected)$' \
   --verbosity=1
 
 quint test formal/quint/ObserverSigningStoreTests.qnt \
   --main=observerSigningStoreTests \
   --match='^(exactRetryIsIdempotent|conflictingDigestIsRejected|signerFailureKeepsReservationAcrossCrash)$' \
+  --verbosity=1
+
+quint test formal/quint/EvidenceResolutionRelayTests.qnt \
+  --main=evidenceResolutionRelayTests \
+  --match='^(crashAfterPublishRetriesTheDurableEnvelope|failedPollWaitsForDurableBackoff|unauthenticatedPollIsRejected)$' \
   --verbosity=1
 
 quint test formal/quint/KeyLifecycleTests.qnt \

@@ -3,7 +3,8 @@ module keyLifecycleTests {
     enforceExactKeyBinding = true,
     enforceIssuanceValidity = true,
     enforceEffectiveRevocation = true,
-    retainHistoricalKeys = true
+    retainHistoricalKeys = true,
+    appendLifecycleEvent = true
   ).* from "./KeyLifecycle"
 
   run oldCheckpointVerifiesAfterRotation =
@@ -38,6 +39,15 @@ module keyLifecycleTests {
       .then(rotate)
       .then(verify(CurrentCheckpoint))
       .expect(CurrentCheckpoint.in(state.accepted))
+
+  run rotationAndRevocationAppendLifecycleEvents =
+    init
+      .then(rotate)
+      .then(revokeOldKey)
+      .expect(and {
+        state.lifecycleRevision == 3,
+        state.lifecycleEventRevisions == Set(1, 2, 3),
+      })
 }
 
 module keyLifecycleHistoryRetentionTests {
@@ -45,7 +55,8 @@ module keyLifecycleHistoryRetentionTests {
     enforceExactKeyBinding = true,
     enforceIssuanceValidity = true,
     enforceEffectiveRevocation = true,
-    retainHistoricalKeys = false
+    retainHistoricalKeys = false,
+    appendLifecycleEvent = true
   ).* from "./KeyLifecycle"
 
   run droppingOldKeyMakesHistoricalVerificationUnavailable =

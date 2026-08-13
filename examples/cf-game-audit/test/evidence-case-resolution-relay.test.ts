@@ -6,16 +6,42 @@ import {
   audit_browser_sha256,
 } from "../../../_build/js/release/build/x/game_audit/browser_bridge/browser_bridge.js";
 import {
+  buildEvidenceCaseResolutionPollRequest,
   buildEvidenceCaseResolutionEnvelope,
+  canonicalEvidenceCaseResolutionPollStatement,
   decodeEvidenceCaseResolutionPollPage,
+  verifyEvidenceCaseResolutionPollRequest,
   type EvidenceCaseResolutionNotice,
 } from "../../player-local-runtime/evidence-case-resolution-relay.ts";
 import { playerLocalEvidenceHoldEnvelopeStatement } from "../../player-local-runtime/evidence-hold-wire.ts";
+import {
+  compileVerificationKeyHistory,
+  signKeyBoundStatement,
+  type VerificationKeyRecord,
+} from "../../player-local-runtime/key-lifecycle.ts";
+import {
+  createMoonBitEd25519EvidenceHoldAuthenticator,
+} from "../web/src/audit/evidence-hold-authenticator.ts";
 
 const seed =
   "e0e1e2e3e4e5e6e7e8e9eaebecedeeef" +
   "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff";
 const publicKey = audit_browser_ed25519_public_key(seed);
+const keyRecord: VerificationKeyRecord = {
+  version: 1,
+  keyId: "evidence-source-signing-key",
+  keyVersion: 1,
+  subjectId: "evidence-source-a",
+  purpose: "evidence-case-resolution",
+  scopeId: "dungeon-1",
+  scheme: "moonbit-ed25519-v1",
+  publicKey,
+  validFromMs: 0,
+  validUntilMs: 3_000_000,
+  revokedAtMs: null,
+};
+const compiledKeyHistory = compileVerificationKeyHistory([keyRecord]);
+if (!compiledKeyHistory.ok) throw new Error(compiledKeyHistory.reason);
 const boundary = {
   protocol_version: 1,
   purpose: "reference-game-checkpoint-v1",
@@ -67,6 +93,183 @@ function build(
 }
 
 describe("evidence case resolution source relay", () => {
+  it("authenticates a poll to the exact authority audience, unit, and cursor", async () => {
+    const request = await buildEvidenceCaseResolutionPollRequest({
+      audience: "https://authority.example",
+      unit: "dungeon-1",
+      cursor: {
+        sourceId: notice.sourceId,
+        sequence: -1,
+        resolutionId: "resolution-genesis",
+      },
+      limit: 1,
+      digest: { hashString: audit_browser_sha256 },
+      signer: {
+        scheme: "moonbit-ed25519-v1",
+        sign: (digest) => audit_browser_ed25519_sign(seed, digest),
+      },
+    });
+    expect(request).toMatchObject({
+      version: 1,
+      audience: "https://authority.example",
+      unit: "dungeon-1",
+      source_id: notice.sourceId,
+      after_sequence: -1,
+      after_resolution_id: "resolution-genesis",
+      limit: 1,
+      authentication: { scheme: "moonbit-ed25519-v1" },
+    });
+    expect(canonicalEvidenceCaseResolutionPollStatement(request)).toBe(
+      JSON.stringify([
+        "converge-audit-evidence-case-resolution-poll-v1",
+        1,
+        "https://authority.example",
+        "dungeon-1",
+        notice.sourceId,
+        -1,
+        "resolution-genesis",
+        1,
+      ]),
+    );
+    const options = {
+      expectedAudience: "https://authority.example",
+      expectedUnit: "dungeon-1",
+      roster: {
+        [notice.sourceId]: {
+          scheme: "moonbit-ed25519-v1",
+          publicKey,
+        },
+      },
+      digest: { hashString: audit_browser_sha256 },
+      verifiers: {
+        "moonbit-ed25519-v1": { verify: audit_browser_ed25519_verify },
+      },
+      keyHistory: compiledKeyHistory.history,
+      nowMs: 2_000_000,
+      maxClockSkewMs: 0,
+      legacyAcceptUntilMs: 2_500_000,
+    };
+    await expect(verifyEvidenceCaseResolutionPollRequest(request, options))
+      .resolves.toEqual({
+        ok: true,
+        cursor: {
+          sourceId: notice.sourceId,
+          sequence: -1,
+          resolutionId: "resolution-genesis",
+        },
+        limit: 1,
+      });
+    await expect(verifyEvidenceCaseResolutionPollRequest({
+      ...request,
+      audience: "https://other-authority.example",
+    }, options)).resolves.toEqual({
+      ok: false,
+      reason: "expected_binding_mismatch",
+    });
+    await expect(verifyEvidenceCaseResolutionPollRequest({
+      ...request,
+      after_sequence: 0,
+    }, options)).resolves.toEqual({
+      ok: false,
+      reason: "invalid_signature",
+    });
+  });
+
+  it("writes key-bound poll v2 and reads legacy v1 only before its cutoff", async () => {
+    const request = await buildEvidenceCaseResolutionPollRequest({
+      audience: "https://authority.example",
+      unit: "dungeon-1",
+      cursor: {
+        sourceId: notice.sourceId,
+        sequence: -1,
+        resolutionId: "resolution-genesis",
+      },
+      limit: 1,
+      digest: { hashString: audit_browser_sha256 },
+      signer: {
+        version: 2,
+        authenticate(input) {
+          return signKeyBoundStatement({
+            key: keyRecord,
+            unitId: input.unitId,
+            statementDigest: input.statementDigest,
+            issuedAtMs: 2_000_000,
+            signer: {
+              scheme: keyRecord.scheme,
+              publicKey,
+              signDigest: (digest) => audit_browser_ed25519_sign(seed, digest),
+            },
+            digest: { hashString: audit_browser_sha256 },
+          });
+        },
+      },
+    });
+    expect(request).toMatchObject({
+      version: 2,
+      authentication: {
+        version: 1,
+        keyId: keyRecord.keyId,
+        keyVersion: 1,
+        subjectId: notice.sourceId,
+        purpose: "evidence-case-resolution",
+        scopeId: "dungeon-1",
+      },
+    });
+    expect(canonicalEvidenceCaseResolutionPollStatement(request)).toContain(
+      "converge-audit-evidence-case-resolution-poll-v2",
+    );
+    const verification = {
+      expectedAudience: "https://authority.example",
+      expectedUnit: "dungeon-1",
+      roster: {
+        [notice.sourceId]: {
+          scheme: "moonbit-ed25519-v1",
+          publicKey,
+        },
+      },
+      keyHistory: compiledKeyHistory.history,
+      digest: { hashString: audit_browser_sha256 },
+      verifiers: {
+        "moonbit-ed25519-v1": { verify: audit_browser_ed25519_verify },
+      },
+      nowMs: 2_000_001,
+      maxClockSkewMs: 0,
+      legacyAcceptUntilMs: 2_500_000,
+    };
+    await expect(verifyEvidenceCaseResolutionPollRequest(request, verification))
+      .resolves.toMatchObject({ ok: true, authenticationVersion: 2 });
+    await expect(verifyEvidenceCaseResolutionPollRequest({
+      ...request,
+      authentication: { ...request.authentication, keyVersion: 2 },
+    }, verification)).resolves.toEqual({
+      ok: false,
+      reason: "invalid_key_bound_authentication",
+    });
+
+    const legacy = await buildEvidenceCaseResolutionPollRequest({
+      audience: "https://authority.example",
+      unit: "dungeon-1",
+      cursor: {
+        sourceId: notice.sourceId,
+        sequence: -1,
+        resolutionId: "resolution-genesis",
+      },
+      limit: 1,
+      digest: { hashString: audit_browser_sha256 },
+      signer: {
+        scheme: "moonbit-ed25519-v1",
+        sign: (digest) => audit_browser_ed25519_sign(seed, digest),
+      },
+    });
+    await expect(verifyEvidenceCaseResolutionPollRequest(legacy, {
+      ...verification,
+      nowMs: 2_500_000,
+    })).resolves.toEqual({
+      ok: false,
+      reason: "legacy_authentication_expired",
+    });
+  });
+
   it("decodes one bounded notice page at the exact resolution cursor", () => {
     expect(decodeEvidenceCaseResolutionPollPage({
       version: 1,
@@ -134,6 +337,73 @@ describe("evidence case resolution source relay", () => {
       result.envelope.authentication.signature,
     )).toBe(true);
     await expect(build()).resolves.toEqual(result);
+  });
+
+  it("writes a key-bound resolution envelope without rewriting its hash chain", async () => {
+    const result = await buildEvidenceCaseResolutionEnvelope(notice, {
+      cursor: {
+        boundary,
+        source_id: notice.sourceId,
+        sequence: 0,
+        message_digest: "p".repeat(64),
+      },
+      authorizationVerifier: { verify: () => true },
+      digest: { hashString: audit_browser_sha256 },
+      signer: {
+        version: 2,
+        authenticate(input) {
+          return signKeyBoundStatement({
+            key: keyRecord,
+            unitId: input.unitId,
+            statementDigest: input.statementDigest,
+            issuedAtMs: 2_000_000,
+            signer: {
+              scheme: keyRecord.scheme,
+              publicKey,
+              signDigest: (digest) => audit_browser_ed25519_sign(seed, digest),
+            },
+            digest: { hashString: audit_browser_sha256 },
+          });
+        },
+      },
+    });
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.envelope.message_digest).toBe(audit_browser_sha256(
+      playerLocalEvidenceHoldEnvelopeStatement(result.envelope),
+    ));
+    expect(result.envelope.authentication).toMatchObject({
+      version: 1,
+      keyId: keyRecord.keyId,
+      keyVersion: 1,
+      scopeId: "dungeon-1",
+      unitId: boundary.unit_id,
+    });
+    const authenticator = createMoonBitEd25519EvidenceHoldAuthenticator(
+      { [notice.sourceId]: publicKey },
+      {
+        keyHistory: compiledKeyHistory.history,
+        keyScopeId: "dungeon-1",
+        nowMs: () => 2_000_001,
+        maxClockSkewMs: 0,
+        legacyAcceptUntilMs: 2_000_000,
+      },
+    );
+    expect(await authenticator.verify({
+      source_id: notice.sourceId,
+      canonical_statement: playerLocalEvidenceHoldEnvelopeStatement(
+        result.envelope,
+      ),
+      message_digest: result.envelope.message_digest,
+      authentication: result.envelope.authentication,
+    })).toBe(true);
+    expect(await authenticator.verify({
+      source_id: notice.sourceId,
+      canonical_statement: playerLocalEvidenceHoldEnvelopeStatement(
+        result.envelope,
+      ),
+      message_digest: result.envelope.message_digest,
+      authentication: { scheme: keyRecord.scheme, signature: "0".repeat(128) },
+    })).toBe(false);
   });
 
   it("refuses unauthenticated notices and a cursor owned by another source", async () => {
