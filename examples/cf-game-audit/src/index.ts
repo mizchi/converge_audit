@@ -54,6 +54,7 @@ import { verifyInventoryLineageSemantics } from "./inventory-lineage-semantics";
 import { verifyInventoryCheckpointCertificateAuthentication } from "./inventory-checkpoint-certificate";
 import { verifyInventoryCheckpointSemantics } from "./inventory-checkpoint-semantics";
 import { verifyInventoryMembershipSemantics } from "./inventory-membership-semantics";
+import { verifyInventoryOriginSemantics } from "./inventory-origin-semantics";
 import type { AuditDigestAdapter } from "../game/audit/journal";
 import {
   decodeGameCheckpointVerificationRequest,
@@ -130,6 +131,7 @@ import {
   type CryptoRuntimeProfile,
 } from "../../player-local-runtime/crypto-backend";
 import { createAsyncAuditDigestAdapter } from "../../player-local-runtime/merkle-digest";
+import { persistOpenWorldMissingSlotConflictIfVerified } from "./open-world-seal-conflict";
 
 export interface Env {
   AUDIT_SHARD: DurableObjectNamespace<GameAuditShard>;
@@ -541,6 +543,7 @@ const MAX_REPLAY_BUNDLE_HEX_CHARS = 2_097_152;
 const MAX_INVENTORY_BUNDLE_HEX_CHARS = 524_288;
 const MAX_INVENTORY_LINEAGE_BUNDLE_HEX_CHARS = 1_048_576;
 const MAX_INVENTORY_CHECKPOINT_BUNDLE_HEX_CHARS = 2_097_152;
+const MAX_OPEN_WORLD_SEAL_CONFLICT_HEX_CHARS = 524_288;
 const MAX_INVENTORY_CHECKPOINT_ASSETS = 64;
 const MAX_RETAINED_LINEAGE_TRANSFERS_PER_ASSET = 256;
 const MAX_GAP_ITEMS = 256;
@@ -566,6 +569,7 @@ const AUDIT_ADMIN_ACTIONS = new Set([
   "game-asset-lineage-decisions",
   "game-asset-lineage-case-dismissals",
   "asset-lineage-status",
+  "open-world-seal-conflicts",
 ]);
 const LOCATION_HINTS = new Set([
   "wnam",
@@ -1012,6 +1016,42 @@ export class GameAuditShard extends DurableObject<Env> {
         bundle_hex TEXT NOT NULL,
         bundle_bytes INTEGER NOT NULL,
         created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS open_world_seal_conflicts (
+        audit_checkpoint_digest TEXT NOT NULL CHECK (
+          length(audit_checkpoint_digest) = 64
+        ),
+        seal_checkpoint_digest TEXT NOT NULL CHECK (
+          length(seal_checkpoint_digest) = 64
+        ),
+        encounter_digest TEXT NOT NULL CHECK (length(encounter_digest) = 64),
+        registration_index INTEGER NOT NULL CHECK (registration_index >= 0),
+        registered_count INTEGER NOT NULL CHECK (
+          registered_count > 0 AND registration_index < registered_count
+        ),
+        registry_root TEXT NOT NULL CHECK (length(registry_root) = 64),
+        source TEXT NOT NULL CHECK (
+          source IN ('authority_signed_encounter', 'observer_quorum')
+        ),
+        observer_approvals INTEGER,
+        standard_hash_check_count INTEGER NOT NULL CHECK (
+          standard_hash_check_count > 0
+        ),
+        bundle_hex TEXT NOT NULL,
+        bundle_bytes INTEGER NOT NULL CHECK (bundle_bytes > 0),
+        created_at INTEGER NOT NULL CHECK (created_at >= 0),
+        CHECK (
+          (source = 'authority_signed_encounter' AND observer_approvals IS NULL)
+          OR
+          (source = 'observer_quorum' AND observer_approvals IS NOT NULL
+           AND observer_approvals > 0)
+        ),
+        PRIMARY KEY (
+          seal_checkpoint_digest,
+          encounter_digest,
+          registration_index,
+          source
+        )
       );
       CREATE TABLE IF NOT EXISTS verified_item_creations (
         asset_id TEXT PRIMARY KEY,
@@ -1548,6 +1588,8 @@ export class GameAuditShard extends DurableObject<Env> {
         return this.checkMarketListing(request, mode, unit);
       case "POST inventory-checkpoints":
         return this.commitVerifiedInventoryCheckpoint(request, mode, unit);
+      case "POST open-world-seal-conflicts":
+        return this.storeOpenWorldSealConflict(request, mode, unit);
       case "POST asset-lineage-decisions":
         return this.decideVerifiedAssetLineage(request, mode, unit);
       case "POST asset-lineage-proofs":
@@ -1722,6 +1764,128 @@ export class GameAuditShard extends DurableObject<Env> {
     return jsonResponse(
       { ok: true, decision: "configured", mode, unit },
       201,
+    );
+  }
+
+  private async storeOpenWorldSealConflict(
+    request: Request,
+    mode: AuditMode,
+    unit: string,
+  ): Promise<Response> {
+    if (mode !== "open") {
+      return jsonError("open_world_mode_required", 400);
+    }
+    const config = this.config();
+    if (!config || config.mode !== mode || config.unit_key !== unit) {
+      return jsonError("shard_not_configured", 409);
+    }
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const bundleHex = stringField(body.value, "bundle_hex");
+    const transparencyLogSessionId = stringField(
+      body.value,
+      "transparency_log_session_id",
+    );
+    const transparencyPublisherKey = stringField(
+      body.value,
+      "transparency_publisher_key",
+    );
+    const transparencyCheckpointDigest = stringField(
+      body.value,
+      "transparency_checkpoint_digest",
+    );
+    const auditCheckpointDigest = stringField(
+      body.value,
+      "audit_checkpoint_digest",
+    );
+    const sealCheckpointDigest = stringField(
+      body.value,
+      "seal_checkpoint_digest",
+    );
+    const encounterCheckpointDigest = stringField(
+      body.value,
+      "encounter_checkpoint_digest",
+    );
+    const registrationIndex = numberField(body.value, "registration_index");
+    const rawSource = stringField(body.value, "source");
+    const evidenceSource = rawSource === "authority_signed_encounter" ||
+        rawSource === "observer_quorum"
+      ? rawSource
+      : undefined;
+    const digestValid = (value: string | undefined): value is string =>
+      value !== undefined && /^[0-9a-f]{64}$/.test(value);
+    if (
+      !bundleHex || bundleHex.length > MAX_OPEN_WORLD_SEAL_CONFLICT_HEX_CHARS ||
+      bundleHex.length % 2 !== 0 || !/^[0-9a-f]+$/.test(bundleHex) ||
+      !transparencyLogSessionId || transparencyLogSessionId.length > 4_096 ||
+      !digestValid(transparencyPublisherKey) ||
+      !digestValid(transparencyCheckpointDigest) ||
+      !digestValid(auditCheckpointDigest) ||
+      !digestValid(sealCheckpointDigest) ||
+      !digestValid(encounterCheckpointDigest) ||
+      registrationIndex === undefined || registrationIndex < 0 ||
+      registrationIndex >= 2_147_483_647 || !evidenceSource
+    ) {
+      return jsonError("invalid_open_world_seal_conflict", 400);
+    }
+    const bundleBytes = bundleHex.length / 2;
+    const result = await persistOpenWorldMissingSlotConflictIfVerified(
+      {
+        bundleHex,
+        expectedWorldId: config.session_id,
+        expectedAuthorityKey: config.authority_key,
+        expectedTransparencyLogSessionId: transparencyLogSessionId,
+        expectedTransparencyPublisherKey: transparencyPublisherKey,
+        expectedTransparencyCheckpointDigest: transparencyCheckpointDigest,
+        expectedAuditCheckpointDigest: auditCheckpointDigest,
+        expectedSealCheckpointDigest: sealCheckpointDigest,
+        expectedEncounterCheckpointDigest: encounterCheckpointDigest,
+        expectedRegistrationIndex: registrationIndex,
+        evidenceSource,
+      },
+      standardWorkerCryptoBackend,
+      (conflict) =>
+        this.ctx.storage.transactionSync(() => {
+          this.ctx.storage.sql.exec(
+            `INSERT INTO open_world_seal_conflicts
+             (audit_checkpoint_digest, seal_checkpoint_digest,
+              encounter_digest, registration_index, registered_count,
+              registry_root, source, observer_approvals,
+              standard_hash_check_count, bundle_hex, bundle_bytes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT (
+               seal_checkpoint_digest, encounter_digest,
+               registration_index, source
+             ) DO NOTHING`,
+            conflict.audit_checkpoint_digest,
+            conflict.seal_checkpoint_digest,
+            conflict.encounter_digest,
+            conflict.registration_index,
+            conflict.registered_count,
+            conflict.registry_root,
+            conflict.source,
+            conflict.observer_approvals,
+            conflict.standard_hash_check_count,
+            bundleHex,
+            bundleBytes,
+            Date.now(),
+          );
+          const changed = this.ctx.storage.sql.exec<{ changed: number }>(
+            "SELECT changes() AS changed",
+          ).toArray()[0]?.changed ?? 0;
+          return { decision: changed === 1 ? "stored" as const : "duplicate" as const };
+        }),
+    );
+    if (!result.ok) return jsonError(result.error, 422);
+    return jsonResponse(
+      {
+        ok: true,
+        ...result.conflict,
+        conflict_decision: result.conflict.decision,
+        decision: result.persisted.decision,
+        bundle_bytes: bundleBytes,
+      },
+      result.persisted.decision === "stored" ? 201 : 200,
     );
   }
 
@@ -5800,18 +5964,33 @@ export class GameAuditShard extends DurableObject<Env> {
         asset_id: assetId,
       }, 500);
     }
-    const standardMembership = await verifyInventoryMembershipSemantics(
-      verification.inventory_membership,
-      standardWorkerCryptoBackend,
-      verification.public_state_root,
-      [{
+    const expectedOrigins = [{
         asset_id: creation.asset_id,
         recipient_id: creation.initial_owner_id,
         item_type: creation.item_type,
         quantity: creation.quantity,
         source_event: creation.source_event,
         output_index: creation.output_index,
-      }],
+      }];
+    const standardOrigins = await verifyInventoryOriginSemantics(
+      verification.inventory_origins,
+      standardWorkerCryptoBackend,
+      expectedOrigins,
+    );
+    if (!standardOrigins.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_origin_semantic_backend_mismatch",
+        origin_index: standardOrigins.originIndex,
+        semantic_error: standardOrigins.reason,
+        asset_id: assetId,
+      }, 500);
+    }
+    const standardMembership = await verifyInventoryMembershipSemantics(
+      verification.inventory_membership,
+      standardWorkerCryptoBackend,
+      verification.public_state_root,
+      standardOrigins.origins,
     );
     if (!standardMembership.ok) {
       return jsonResponse({
@@ -5839,14 +6018,7 @@ export class GameAuditShard extends DurableObject<Env> {
     const standardSemantics = await verifyInventoryLineageSemantics(
       verification,
       standardWorkerCryptoBackend,
-      {
-        asset_id: creation.asset_id,
-        recipient_id: creation.initial_owner_id,
-        item_type: creation.item_type,
-        quantity: creation.quantity,
-        source_event: creation.source_event,
-        output_index: creation.output_index,
-      },
+      standardOrigins.origins[0],
     );
     if (!standardSemantics.ok) {
       return jsonResponse({
@@ -6546,18 +6718,32 @@ export class GameAuditShard extends DurableObject<Env> {
         semantic_error: standardCheckpointSemantics.reason,
       }, 500);
     }
-    const standardMembership = await verifyInventoryMembershipSemantics(
-      verification.inventory_membership,
-      standardWorkerCryptoBackend,
-      verification.public_state_root,
-      expectedAssets.map((asset) => ({
+    const expectedOrigins = expectedAssets.map((asset) => ({
         asset_id: asset.asset_id,
         recipient_id: asset.initial_owner_id,
         item_type: asset.item_type,
         quantity: asset.quantity,
         source_event: asset.source_event,
         output_index: asset.output_index,
-      })),
+      }));
+    const standardOrigins = await verifyInventoryOriginSemantics(
+      verification.inventory_origins,
+      standardWorkerCryptoBackend,
+      expectedOrigins,
+    );
+    if (!standardOrigins.ok) {
+      return jsonResponse({
+        ok: false,
+        decision: "inventory_origin_semantic_backend_mismatch",
+        origin_index: standardOrigins.originIndex,
+        semantic_error: standardOrigins.reason,
+      }, 500);
+    }
+    const standardMembership = await verifyInventoryMembershipSemantics(
+      verification.inventory_membership,
+      standardWorkerCryptoBackend,
+      verification.public_state_root,
+      standardOrigins.origins,
     );
     if (!standardMembership.ok) {
       return jsonResponse({
@@ -6935,18 +7121,35 @@ export class GameAuditShard extends DurableObject<Env> {
           seller_id: sellerId,
         }, 500);
       }
-      const standardMembership = await verifyInventoryMembershipSemantics(
-        verification.inventory_membership,
-        standardWorkerCryptoBackend,
-        verification.public_state_root,
-        [{
+      const expectedOrigins = [{
           asset_id: creation.asset_id,
           recipient_id: creation.initial_owner_id,
           item_type: creation.item_type,
           quantity: creation.quantity,
           source_event: creation.source_event,
           output_index: creation.output_index,
-        }],
+        }];
+      const standardOrigins = await verifyInventoryOriginSemantics(
+        verification.inventory_origins,
+        standardWorkerCryptoBackend,
+        expectedOrigins,
+      );
+      if (!standardOrigins.ok) {
+        return jsonResponse({
+          ok: false,
+          allowed: false,
+          decision: "inventory_origin_semantic_backend_mismatch",
+          origin_index: standardOrigins.originIndex,
+          semantic_error: standardOrigins.reason,
+          asset_id: assetId,
+          seller_id: sellerId,
+        }, 500);
+      }
+      const standardMembership = await verifyInventoryMembershipSemantics(
+        verification.inventory_membership,
+        standardWorkerCryptoBackend,
+        verification.public_state_root,
+        standardOrigins.origins,
       );
       if (!standardMembership.ok) {
         return jsonResponse({
@@ -7412,6 +7615,13 @@ export class GameAuditShard extends DurableObject<Env> {
       `SELECT COUNT(*) AS stored, COALESCE(SUM(bundle_bytes), 0) AS bytes
        FROM replay_artifacts`,
     ).toArray()[0] ?? { stored: 0, bytes: 0 };
+    const openWorldSealConflicts = this.ctx.storage.sql.exec<{
+      stored: number;
+      bytes: number;
+    }>(
+      `SELECT COUNT(*) AS stored, COALESCE(SUM(bundle_bytes), 0) AS bytes
+       FROM open_world_seal_conflicts`,
+    ).toArray()[0] ?? { stored: 0, bytes: 0 };
     const replayCompute = this.ctx.storage.sql.exec<{
       count: number;
       mean_ms: number;
@@ -7457,6 +7667,7 @@ export class GameAuditShard extends DurableObject<Env> {
         refused: this.replayRefusalCount(),
       },
       replay_artifacts: replayArtifacts,
+      open_world_seal_conflicts: openWorldSealConflicts,
       replay_compute: replayCompute,
       verified_item_creations: {
         eligible: itemCreations.eligible ?? 0,

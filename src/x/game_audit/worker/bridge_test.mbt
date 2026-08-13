@@ -358,6 +358,194 @@ test "worker bridge executes real-crypto open-world eligibility and observer rep
 }
 
 ///|
+fn worker_test_json_string_array(value : Json) -> Array[String] raise Error {
+  guard value is Array(items) else { fail("expected JSON string array") }
+  let output : Array[String] = []
+  for item in items {
+    guard item is String(value) else { fail("expected JSON string array item") }
+    output.push(value)
+  }
+  output
+}
+
+///|
+test "worker bridge opens bounded open-world missing-slot proof plans" {
+  let fixture = audit_benchmark_make_open_world_missing_slot_proof(8, 3)
+  guard @json.parse(fixture) is Object(fields) &&
+    fields["ok"] is True &&
+    fields["expected_root"] is String(expected_root) &&
+    fields["registered_count"] is Number(8.0, ..) &&
+    fields["registration_index"] is Number(3.0, ..) &&
+    fields["proof_entry_count"] is Number(proof_entry_count, ..) else {
+    fail("expected missing-slot fixture")
+  }
+  let directions = worker_test_json_string_array(fields["directions"])
+  let parent_keys = worker_test_json_string_array(fields["parent_keys"])
+  let parent_values = worker_test_json_string_array(fields["parent_values"])
+  let sibling_digests = worker_test_json_string_array(fields["sibling_digests"])
+  let verified = audit_verify_open_world_missing_slot_proof(
+    expected_root,
+    8,
+    3,
+    proof_entry_count.to_int(),
+    directions,
+    parent_keys,
+    parent_values,
+    sibling_digests,
+  )
+  guard @json.parse(verified) is Object(result) &&
+    result["ok"] is True &&
+    result["complete"] is True &&
+    result["proof_key"] is String(proof_key) &&
+    result["path"] is Array(path) &&
+    result["hash_check_count"] is Number(hash_check_count, ..) &&
+    result["root_check_index"] is Number(root_check_index, ..) else {
+    fail("expected verified missing-slot plan")
+  }
+  assert_eq(proof_key, audit_open_world_encounter_registration_key(3))
+  assert_eq(hash_check_count.to_int(), path.length() + 2)
+  assert_eq(root_check_index.to_int(), hash_check_count.to_int() - 1)
+
+  let wrong_root = "00000000000000000000000000000000" +
+    "00000000000000000000000000000000"
+  guard @json.parse(
+      audit_verify_open_world_missing_slot_proof(
+        wrong_root,
+        8,
+        3,
+        proof_entry_count.to_int(),
+        directions,
+        parent_keys,
+        parent_values,
+        sibling_digests,
+      ),
+    )
+    is Object(wrong_root_result) &&
+    wrong_root_result["error"] is String("invalid_non_membership_proof") else {
+    fail("expected wrong missing-slot root refusal")
+  }
+  ignore(directions.pop())
+  guard @json.parse(
+      audit_verify_open_world_missing_slot_proof(
+        expected_root,
+        8,
+        3,
+        proof_entry_count.to_int(),
+        directions,
+        parent_keys,
+        parent_values,
+        sibling_digests,
+      ),
+    )
+    is Object(shape_result) &&
+    shape_result["error"] is String("invalid_non_membership_shape") else {
+    fail("expected missing-slot shape refusal")
+  }
+  assert_eq(audit_open_world_encounter_registration_key(-1), "")
+}
+
+///|
+test "worker bridge opens an entirely omitted one-slot registry" {
+  let fixture = audit_benchmark_make_open_world_missing_slot_proof(1, 0)
+  guard @json.parse(fixture) is Object(fields) &&
+    fields["expected_root"] is String(expected_root) &&
+    fields["proof_entry_count"] is Number(0.0, ..) else {
+    fail("expected empty missing-slot fixture")
+  }
+  let verified = audit_verify_open_world_missing_slot_proof(
+    expected_root,
+    1,
+    0,
+    0,
+    [],
+    [],
+    [],
+    [],
+  )
+  guard @json.parse(verified) is Object(result) &&
+    result["ok"] is True &&
+    result["path"] is Array([]) &&
+    result["hash_check_count"] is Number(2.0, ..) else {
+    fail("expected empty-to-root missing-slot plan")
+  }
+}
+
+///|
+test "worker bridge binds signed left evidence to a missing-slot proof" {
+  let authority_seed = "000102030405060708090a0b0c0d0e0f" +
+    "101112131415161718191a1b1c1d1e1f"
+  let participant_seed = "202122232425262728292a2b2c2d2e2f" +
+    "303132333435363738393a3b3c3d3e3f"
+  for source in ["authority_signed_encounter", "observer_quorum"] {
+    let fixture = audit_benchmark_make_open_world_missing_slot_conflict_bundle(
+      authority_seed, participant_seed, "world:missing-slot", "world:missing-slot:encounter-0",
+      source,
+    )
+    guard @json.parse(fixture) is Object(fields) &&
+      fields["ok"] is True &&
+      fields["bundle_hex"] is String(bundle_hex) &&
+      fields["bundle_bytes"] is Number(bundle_bytes, ..) &&
+      fields["authority_key"] is String(authority_key) &&
+      fields["transparency_log_session_id"]
+      is String(transparency_log_session_id) &&
+      fields["transparency_publisher_key"] is String(transparency_publisher_key) &&
+      fields["transparency_checkpoint_digest"] is String(transparency_digest) &&
+      fields["audit_checkpoint_digest"] is String(audit_digest) &&
+      fields["seal_checkpoint_digest"] is String(seal_digest) &&
+      fields["checkpoint_digest"] is String(encounter_digest) else {
+      fail("expected signed compact missing-slot conflict fixture")
+    }
+    assert_true(bundle_bytes < 262144.0)
+    let verified = audit_verify_open_world_missing_slot_conflict(
+      bundle_hex, "world:missing-slot", authority_key, transparency_log_session_id,
+      transparency_publisher_key, transparency_digest, audit_digest, seal_digest,
+      encounter_digest, 0, source,
+    )
+    guard @json.parse(verified) is Object(result) &&
+      result["ok"] is True &&
+      result["complete"] is True &&
+      result["decision"] is String("persist_conflict") &&
+      result["kind"] is String("missing_slot") &&
+      result["source"] is String(actual_source) &&
+      result["encounter_digest"] is String(actual_encounter_digest) &&
+      result["registration_index"] is Number(0.0, ..) &&
+      result["hash_check_count"] is Number(2.0, ..) else {
+      fail("expected authenticated missing-slot conflict")
+    }
+    assert_eq(actual_source, source)
+    assert_eq(actual_encounter_digest, encounter_digest)
+  }
+  let fixture = audit_benchmark_make_open_world_missing_slot_conflict_bundle(
+    authority_seed, participant_seed, "world:missing-slot", "world:missing-slot:encounter-0",
+    "authority_signed_encounter",
+  )
+  guard @json.parse(fixture) is Object(fields) &&
+    fields["bundle_hex"] is String(bundle_hex) &&
+    fields["authority_key"] is String(authority_key) &&
+    fields["transparency_log_session_id"] is String(transparency_log_session_id) &&
+    fields["transparency_publisher_key"] is String(transparency_publisher_key) &&
+    fields["transparency_checkpoint_digest"] is String(transparency_digest) &&
+    fields["audit_checkpoint_digest"] is String(audit_digest) &&
+    fields["seal_checkpoint_digest"] is String(seal_digest) &&
+    fields["checkpoint_digest"] is String(encounter_digest) else {
+    fail("expected compact authority conflict fixture")
+  }
+  let tampered_encounter = "00" + encounter_digest[2:].to_owned()
+  guard @json.parse(
+      audit_verify_open_world_missing_slot_conflict(
+        bundle_hex, "world:missing-slot", authority_key, transparency_log_session_id,
+        transparency_publisher_key, transparency_digest, audit_digest, seal_digest,
+        tampered_encounter, 0, "authority_signed_encounter",
+      ),
+    )
+    is Object(refused) &&
+    refused["ok"] is False &&
+    refused["error"] is String("expected_encounter_checkpoint_mismatch") else {
+    fail("expected foreign encounter boundary refusal")
+  }
+}
+
+///|
 test "worker bridge verifies real-crypto current-owner inventory proof" {
   let authority_seed = "000102030405060708090a0b0c0d0e0f" +
     "101112131415161718191a1b1c1d1e1f"
@@ -405,8 +593,34 @@ test "worker bridge verifies real-crypto current-owner inventory proof" {
     manifest_check["expected_digest"] is String(_) &&
     semantics["delegated_roots"]
     is Array([String("event_root"), String("asset_delta_root")]) &&
+    result["inventory_origins"] is Object(origins) &&
+    origins["origin_count"] is Number(1.0, ..) &&
+    origins["hash_check_count"] is Number(2.0, ..) &&
+    origins["hash_checks"]
+    is Array([Object(origin_receipt), Object(origin_lineage)]) &&
+    origin_receipt["kind"] is String("inventory_origin_receipt") &&
+    origin_receipt["check_index"] is Number(0.0, ..) &&
+    origin_lineage["kind"] is String("inventory_origin_lineage") &&
+    origin_lineage["check_index"] is Number(1.0, ..) &&
     result["inventory_membership"] is Object(membership) &&
-    membership["proof_count"] is Number(1.0, ..) else {
+    membership["expected_root"] is String(public_state_root) &&
+    membership["proof_count"] is Number(1.0, ..) &&
+    membership["hash_check_count"] is Number(2.0, ..) &&
+    membership["hash_checks"] is Array([Object(leaf_check), Object(root_check)]) &&
+    leaf_check["kind"] is String("authmap_membership_leaf") &&
+    leaf_check["check_index"] is Number(0.0, ..) &&
+    leaf_check["dependency_check_indices"] is Array([]) &&
+    root_check["kind"] is String("authmap_membership_root") &&
+    root_check["check_index"] is Number(1.0, ..) &&
+    root_check["dependency_check_indices"] is Array([Number(0.0, ..)]) &&
+    root_check["expected_digest"] is String(root_digest) &&
+    membership["proofs"] is Array([Object(membership_proof)]) &&
+    membership_proof["canonical_record"] is String(canonical_record) &&
+    membership_proof["plan_check_start"] is Number(0.0, ..) &&
+    membership_proof["plan_check_count"] is Number(2.0, ..) &&
+    membership_proof["root_check_index"] is Number(1.0, ..) &&
+    public_state_root == root_digest &&
+    canonical_record != "" else {
     fail("expected current-owner proof verification")
   }
   let stale_owner = audit_verify_inventory_listing_proof_bundle(
@@ -472,6 +686,13 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     result["transfer_events"] is Array([String(transfer_event), ..]) &&
     result["transitions"] is Array([Object(semantic_transition)]) &&
     semantic_transition["origin_receipt_digest"] is String(origin_digest) &&
+    semantic_transition["next_lineage_root"] is String(next_lineage_root) &&
+    result["hash_check_count"] is Number(1.0, ..) &&
+    result["hash_checks"] is Array([Object(lineage_hash_check)]) &&
+    lineage_hash_check["kind"] is String("inventory_lineage_transition") &&
+    lineage_hash_check["check_index"] is Number(0.0, ..) &&
+    lineage_hash_check["canonical_statement"] is String(lineage_statement) &&
+    lineage_hash_check["expected_digest"] is String(expected_lineage_root) &&
     result["authentication_checks"]
     is Array(
       [
@@ -495,6 +716,9 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     witness_check["kind"] is String("replay_witness_attestation") &&
     result["checkpoint_semantics"] is Object(semantics) &&
     semantics["witness_count"] is Number(4.0, ..) &&
+    result["inventory_origins"] is Object(origins) &&
+    origins["origin_count"] is Number(1.0, ..) &&
+    origins["hash_check_count"] is Number(2.0, ..) &&
     result["inventory_membership"] is Object(membership) &&
     membership["proof_count"] is Number(1.0, ..) &&
     initial_owner_id == anchor_owner_id &&
@@ -503,6 +727,8 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     initial_lineage_root == anchor_lineage_root &&
     initial_origin_digest != "" &&
     origin_digest != "" &&
+    lineage_statement != "" &&
+    expected_lineage_root == next_lineage_root &&
     transfer_event != "" else {
     fail("expected historical inventory lineage verification")
   }
@@ -569,6 +795,22 @@ test "worker bridge verifies one real-crypto atomic multi-asset checkpoint" {
     witness_check["kind"] is String("replay_witness_attestation") &&
     result["checkpoint_semantics"] is Object(semantics) &&
     semantics["witness_count"] is Number(4.0, ..) &&
+    result["inventory_origins"] is Object(origins) &&
+    origins["origin_count"] is Number(2.0, ..) &&
+    origins["hash_check_count"] is Number(4.0, ..) &&
+    origins["hash_checks"]
+    is Array(
+      [
+        Object(first_receipt),
+        Object(first_lineage),
+        Object(second_receipt),
+        Object(second_lineage),
+      ]
+    ) &&
+    first_receipt["check_index"] is Number(0.0, ..) &&
+    first_lineage["check_index"] is Number(1.0, ..) &&
+    second_receipt["check_index"] is Number(2.0, ..) &&
+    second_lineage["check_index"] is Number(3.0, ..) &&
     result["inventory_membership"] is Object(membership) &&
     membership["proof_count"] is Number(2.0, ..) &&
     write_set_digest != "" else {

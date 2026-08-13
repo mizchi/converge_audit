@@ -10,11 +10,13 @@ priv struct OpenWorldCentralReplayFixture {
   seal_checkpoint_digest : @bft.Digest
   encounter_checkpoint_digest : @bft.Digest
   bundle : @wire.OpenWorldPveReplayBundle
+  missing_registration : @authmap.AuthMapAbsenceProof?
 }
 
 ///|
 fn open_world_central_replay_fixture(
   observation_count? : Int = 3,
+  omit_registry_slot? : Bool = false,
 ) -> OpenWorldCentralReplayFixture raise Error {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
@@ -190,6 +192,22 @@ fn open_world_central_replay_fixture(
     Some(value) => value
     None => fail("expected open-world eligibility proof")
   }
+  let eligible_registry = @authmap.AuthenticatedMap::new(hasher)
+  if !omit_registry_slot {
+    ignore(
+      eligible_registry.put(
+        @open_world.open_world_encounter_registration_key(0),
+        signed_encounter_checkpoint.digest.0,
+      ),
+    )
+  }
+  let missing_registration = if omit_registry_slot {
+    eligible_registry.absence_proof(
+      @open_world.open_world_encounter_registration_key(0),
+    )
+  } else {
+    None
+  }
   let signed_anchor_seal_checkpoint = @checkpoint.sign_checkpoint(
     hasher,
     authority,
@@ -203,7 +221,7 @@ fn open_world_central_replay_fixture(
         registered_count=1,
       ),
       event_root: eligible.root(),
-      public_state_root: @bft.Digest("open-world-registry-root"),
+      public_state_root: eligible_registry.root(),
       asset_delta_root: @bft.Digest("open-world-seal-assets"),
       hidden_state_commitment: None,
     },
@@ -282,6 +300,7 @@ fn open_world_central_replay_fixture(
     audit_checkpoint_digest: signed_audit_checkpoint.digest,
     seal_checkpoint_digest: signed_anchor_seal_checkpoint.digest,
     encounter_checkpoint_digest: signed_encounter_checkpoint.digest,
+    missing_registration,
     bundle: {
       signed_audit_checkpoint,
       signed_anchor_seal_checkpoint,
@@ -320,6 +339,56 @@ fn open_world_central_replay_fixture(
       },
     },
   }
+}
+
+///|
+fn open_world_missing_slot_bundle(
+  fixture : OpenWorldCentralReplayFixture,
+  source : @wire.OpenWorldMissingSlotEvidence,
+) -> @wire.OpenWorldMissingSlotConflictBundle raise Error {
+  let missing_registration = match fixture.missing_registration {
+    Some(value) => value
+    None => fail("expected missing-slot proof")
+  }
+  let replay = fixture.bundle
+  {
+    signed_audit_checkpoint: replay.signed_audit_checkpoint,
+    signed_anchor_seal_checkpoint: replay.signed_anchor_seal_checkpoint,
+    audit_transparency: replay.audit_transparency,
+    game_manifest_digest: replay.game_manifest_digest,
+    sample_numerator: replay.sample_numerator,
+    sample_denominator: replay.sample_denominator,
+    registered_count: replay.registered_count,
+    seed: replay.seed,
+    observers: replay.observers,
+    max_faults: replay.max_faults,
+    source,
+    missing_registration,
+  }
+}
+
+///|
+fn verify_open_world_missing_slot_fixture(
+  fixture : OpenWorldCentralReplayFixture,
+  source : @wire.OpenWorldMissingSlotEvidence,
+) -> OpenWorldMissingSlotConflictResult raise Error {
+  verify_open_world_missing_slot_conflict_bundle(
+    @bft.FnvHasher::new(),
+    @bft.MockVerifier::new(),
+    @wire.encode_open_world_missing_slot_conflict_bundle(
+      open_world_missing_slot_bundle(fixture, source),
+    ),
+    expected_world_id=fixture.world_id,
+    expected_authority_key=fixture.authority_key,
+    expected_transparency_log_session_id=fixture.transparency_log_session_id,
+    expected_transparency_publisher_key=fixture.transparency_publisher_key,
+    expected_transparency_checkpoint_digest=fixture.transparency_checkpoint_digest,
+    expected_audit_checkpoint_digest=fixture.audit_checkpoint_digest,
+    expected_seal_checkpoint_digest=fixture.seal_checkpoint_digest,
+    expected_encounter_checkpoint_digest=fixture.encounter_checkpoint_digest,
+    expected_registration_index=0,
+    limits=@wire.OpenWorldMissingSlotConflictWireLimits::default(),
+  )
 }
 
 ///|
@@ -450,4 +519,71 @@ test "open-world central replay rejects an eligibility proof for another leaf" {
     OpenWorldPveReplayRefused(OpenWorldEncounterGateRefused(_)) => ()
     _ => fail("expected open-world eligibility refusal")
   }
+}
+
+///|
+test "open-world central replay opens compact authority missing-slot evidence" {
+  let fixture = open_world_central_replay_fixture(omit_registry_slot=true)
+  let source = @wire.OpenWorldMissingSlotEvidence::AuthoritySignedEncounter(
+    fixture.bundle.encounter.signed_checkpoint,
+  )
+  match verify_open_world_missing_slot_fixture(fixture, source) {
+    OpenWorldMissingSlotConflictVerified(value) => {
+      assert_eq(value.conflict().registration_index(), 0)
+      assert_eq(
+        value.registry_root(),
+        fixture.bundle.signed_anchor_seal_checkpoint.checkpoint.public_state_root,
+      )
+      assert_eq(value.registered_count(), 1)
+    }
+    _ => fail("expected compact authority missing-slot conflict")
+  }
+}
+
+///|
+test "open-world central replay opens compact observer missing-slot evidence" {
+  let fixture = open_world_central_replay_fixture(omit_registry_slot=true)
+  let source = @wire.OpenWorldMissingSlotEvidence::ObserverQuorum(
+    0,
+    fixture.encounter_checkpoint_digest,
+    fixture.bundle.observations,
+  )
+  match verify_open_world_missing_slot_fixture(fixture, source) {
+    OpenWorldMissingSlotConflictVerified(value) =>
+      assert_eq(value.conflict().observer_approval_count(), Some(3))
+    _ => fail("expected compact observer missing-slot conflict")
+  }
+}
+
+///|
+test "open-world compact missing-slot evidence refuses observer under-quorum" {
+  let fixture = open_world_central_replay_fixture(
+    observation_count=2,
+    omit_registry_slot=true,
+  )
+  let source = @wire.OpenWorldMissingSlotEvidence::ObserverQuorum(
+    0,
+    fixture.encounter_checkpoint_digest,
+    fixture.bundle.observations,
+  )
+  match verify_open_world_missing_slot_fixture(fixture, source) {
+    OpenWorldMissingSlotConflictRefused(MissingSlotObserverQuorumPending(2, 3)) =>
+      ()
+    _ => fail("expected compact observer under-quorum refusal")
+  }
+}
+
+///|
+test "open-world missing-slot wire excludes full encounter replay" {
+  let fixture = open_world_central_replay_fixture(omit_registry_slot=true)
+  let compact = @wire.encode_open_world_missing_slot_conflict_bundle(
+    open_world_missing_slot_bundle(
+      fixture,
+      @wire.OpenWorldMissingSlotEvidence::AuthoritySignedEncounter(
+        fixture.bundle.encounter.signed_checkpoint,
+      ),
+    ),
+  )
+  let full = @wire.encode_open_world_pve_replay_bundle(fixture.bundle)
+  assert_true(compact.length() < full.length())
 }

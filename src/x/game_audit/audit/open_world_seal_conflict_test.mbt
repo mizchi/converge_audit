@@ -158,3 +158,28 @@ test "invalid or ambiguous absence evidence cannot accuse" {
     assert_eq(decision, OpenWorldSealConflictDecision::InvalidEvidence)
   }
 }
+
+///|
+test "missing-slot persistence requires both verifiers and exact binding" {
+  assert_true(
+    open_world_missing_slot_persist_allowed(
+      conflict_capability_issued=true,
+      standard_non_membership_verified=true,
+      exact_transcript_binding=true,
+    ),
+  )
+  assert_false(
+    open_world_missing_slot_persist_allowed(
+      conflict_capability_issued=true,
+      standard_non_membership_verified=false,
+      exact_transcript_binding=true,
+    ),
+  )
+  assert_false(
+    open_world_missing_slot_persist_allowed(
+      conflict_capability_issued=false,
+      standard_non_membership_verified=true,
+      exact_transcript_binding=true,
+    ),
+  )
+}

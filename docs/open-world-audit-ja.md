@@ -104,6 +104,26 @@ certificate のどちらかを左辺の「登録されたはず」という evid
 authority が encounter checkpoint を発行せず、observer が受領済みの登録だけを隠すケースも
 検出できる。
 
+汎用`audit/authmap`は、この不在証明のhash部分を`authmap-empty-v1`から逆順parent pathを経て
+`authmap-root-v1`へ至る依存planとしても返す。空registryなら2 check、非空registryなら
+`path length + 2` checkで、各checkは直前の実測digestだけに依存する。これはWebCrypto等へ
+暗号計算を委譲する境界で使えるが、それだけでは「どのkeyを検索したか」を証明しない。
+missing slot keyの完全一致、左右方向の大小関係、entry count/path shapeは従来どおり
+`verify_non_membership`とconflict detectorが検査する。raw Worker bridgeはこの右辺証拠を最大64段に制限して
+MoonBitで開封し、成功時だけlocal-only transcriptを返す。hostはgeneric dependent-digest executorと
+標準WebCrypto SHA-256で同じrootを再計算する。transcriptはnetwork wireではなく、clientから受け取った
+planを実行する経路もない。
+
+最終gateでは、canonical compact conflict bundle v1をMoonBitがdecodeし、外部から固定したworld/authority/
+transparency/audit/seal/encounter digestと照合する。署名済みplan/seal/transparencyを開いた後、選択した
+authority-signed encounterまたは`n-f` observer certificateとnon-membership proofを同じconflict detectorへ
+渡す。成功時だけopaque conflict capabilityと、そのsigned registry rootへ拘束されたhash planを返す。
+hostは標準WebCryptoの成功と全digest/source/indexのexact bindingを確認してからだけmutation callbackを呼ぶ。
+`open_world_missing_slot_persist_allowed`は、この3条件のどれかが欠ければ永続化不能であることをMoonBit prove
+対象にする。Cloudflare adapterはこの同じgateを`POST /v1/open/{unit}/open-world-seal-conflicts`から呼び、
+成功後だけshard-local Durable Object SQLiteへtransaction insertする。同じ`seal/encounter/slot/source`はduplicateとして冪等に受理し、
+検証拒否時にはtableを変更しない。
+
 ただし observer 全員へ到達する前に遮断された要求、observer roster 自体の Sybil 支配、
 honest observer の local receipt 消失は解かない。signing API は署名前に
 `reserve(plan-slot, digest)` を呼ぶ persistence boundary を持ち、予約失敗時は signer を
@@ -307,7 +327,10 @@ Apple M5 arm64、MoonBit `0.1.20260724`、FNV/mock signature の構造コスト:
 | delayed sample selection × 1,000 | 666.31 µs |
 | Merkle-eligible provisional gate × 1,000 | 3.01 ms |
 | valid inclusion による偽 conflict 拒否 × 1,000 | 1.16 ms |
-| 10,000-entry map の non-membership 検証 × 1,000 | 13.90 ms |
+| 10,000-entry map の non-membership 検証 × 1,000 | 13.16 ms |
+| 同じ non-membership hash plan 生成 × 1,000 | 17.45 ms |
+| 10,000-slot proofのMoonBit開封 + host plan生成（SHA-256/JSON） | 0.210–0.241 ms/proof |
+| 同じ21-check planの標準WebCrypto再計算 | 0.248–0.278 ms/proof |
 | 4 observer (`f=1`) registration certificate × 1,000 | 6.01 ms |
 | 10,000-slot observer omission 検出 × 1,000 | 28.36 ms |
 | observer ledger の新規登録署名 × 1,000 | 15.10 ms |
@@ -324,7 +347,10 @@ provisional gate は単一-leaf proof、checkpoint/capability 比較、空 evide
 構築を含む。conflict 拒否は同じ slot/digest の inclusion を検証して告発しない経路である。
 non-membership は authenticated treap の検索経路を再構成し、entry count を含む root と
 照合する。この実装での検証は expected `O(log registered slots)` であり、最悪計算量の
-保証ではない。observer certificate は roster canonicalization と三つの mock signature
+保証ではない。外部暗号adapter向けには同じ再構成を一本の後方依存hash planとして取得できる。
+FNV plan生成の実測値はexpected digest計算とcheck/segment allocationを含む。別測定の実SHA-256
+Worker bridge値は10,000-slot中index 7,777欠落、19 path steps/21 checks、1,000反復×2 runの
+mean範囲で、fixture map構築は計測外である。observer certificate は roster canonicalization と三つの mock signature
 検証を含む。observer omission は certificate capability の境界比較、key 照合、10,000-slot
 non-membership path の再構成を含むが、game replay は含まない。
 新規署名は in-memory CAS 予約、mock signature、authenticated-map root 更新を含む。conflict

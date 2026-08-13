@@ -94,6 +94,56 @@ predicate open_world_seal_conflict_post(
 }
 
 ///|
+predicate open_world_missing_slot_persist_post(
+  conflict_capability_issued : Bool,
+  standard_non_membership_verified : Bool,
+  exact_transcript_binding : Bool,
+  result : Bool,
+) {
+  if conflict_capability_issued {
+    if standard_non_membership_verified {
+      result == exact_transcript_binding
+    } else {
+      result == false
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma persisted_open_world_missing_slot_requires_every_binding(
+  conflict_capability_issued : Bool,
+  standard_non_membership_verified : Bool,
+  exact_transcript_binding : Bool,
+) where {
+  proof_require: open_world_missing_slot_persist_post(
+    conflict_capability_issued,
+    standard_non_membership_verified,
+    exact_transcript_binding,
+    true,
+  ),
+  proof_ensure: conflict_capability_issued == true,
+  proof_ensure: standard_non_membership_verified == true,
+  proof_ensure: exact_transcript_binding == true,
+} {
+}
+
+///|
+pub lemma unverified_standard_missing_slot_never_persists(
+  conflict_capability_issued : Bool,
+  exact_transcript_binding : Bool,
+) where {
+  proof_ensure: open_world_missing_slot_persist_post(
+    conflict_capability_issued,
+    false,
+    exact_transcript_binding,
+    false,
+  ),
+} {
+}
+
+///|
 pub lemma open_world_truncation_requires_matching_boundary_and_out_of_range_slot(
   encounter_boundary_matches : Bool,
   registration_index : Int,

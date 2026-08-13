@@ -3,6 +3,7 @@ package "mizchi/converge_audit/x/game_audit/wire"
 
 import {
   "mizchi/converge_audit",
+  "mizchi/converge_audit/audit/authmap",
   "mizchi/converge_audit/audit/merkle",
   "mizchi/converge_audit/x/game_audit/attestation",
   "mizchi/converge_audit/x/game_audit/checkpoint",
@@ -19,6 +20,8 @@ pub fn decode_inventory_checkpoint_proof_bundle(Bytes, limits~ : InventoryCheckp
 pub fn decode_inventory_lineage_proof_bundle(Bytes, limits~ : InventoryLineageWireLimits) -> Result[InventoryLineageProofBundle, InventoryLineageWireError]
 
 pub fn decode_inventory_listing_proof_bundle(Bytes, limits~ : InventoryListingWireLimits) -> Result[InventoryListingProofBundle, InventoryListingWireError]
+
+pub fn decode_open_world_missing_slot_conflict_bundle(Bytes, limits~ : OpenWorldMissingSlotConflictWireLimits) -> Result[OpenWorldMissingSlotConflictBundle, OpenWorldMissingSlotConflictWireError]
 
 pub fn decode_open_world_observer_signing_anchor_envelope(Bytes, limits~ : OpenWorldAuditWireLimits) -> Result[@open_world.OpenWorldObserverSigningAnchorEnvelope, OpenWorldAuditWireError]
 
@@ -37,6 +40,8 @@ pub fn encode_inventory_checkpoint_proof_bundle(InventoryCheckpointProofBundle) 
 pub fn encode_inventory_lineage_proof_bundle(InventoryLineageProofBundle) -> Bytes
 
 pub fn encode_inventory_listing_proof_bundle(InventoryListingProofBundle) -> Bytes
+
+pub fn encode_open_world_missing_slot_conflict_bundle(OpenWorldMissingSlotConflictBundle) -> Bytes
 
 pub fn encode_open_world_observer_signing_anchor_envelope(@open_world.OpenWorldObserverSigningAnchorEnvelope) -> Bytes
 
@@ -61,6 +66,15 @@ pub suberror OpenWorldAuditWireError {
   WireMalformedCbor
   WireInvalidShape
   WireIntegerOutOfRange
+} derive(Eq, @debug.Debug)
+
+pub suberror OpenWorldMissingSlotConflictWireError {
+  MissingSlotInputTooLarge(Int, Int)
+  MissingSlotObserversTooMany(Int, Int)
+  MissingSlotObservationsTooMany(Int, Int)
+  MissingSlotProofTooLong(Int, Int)
+  MissingSlotUnsupportedVersion(Int)
+  MissingSlotCodecRefused(OpenWorldAuditWireError)
 } derive(Eq, @debug.Debug)
 
 pub suberror OpenWorldPveReplayWireError {
@@ -186,6 +200,36 @@ pub(all) struct OpenWorldAuditWireLimits {
   max_gap_response_items : Int
 } derive(Eq, @debug.Debug)
 pub fn OpenWorldAuditWireLimits::default() -> Self
+
+pub(all) struct OpenWorldMissingSlotConflictBundle {
+  signed_audit_checkpoint : @checkpoint.SignedCheckpoint
+  signed_anchor_seal_checkpoint : @checkpoint.SignedCheckpoint
+  audit_transparency : @open_world.OpenWorldAuditTransparencyEnvelope
+  game_manifest_digest : @converge_audit.Digest
+  sample_numerator : Int
+  sample_denominator : Int
+  registered_count : Int
+  seed : String
+  observers : Array[@attestation.Participant]
+  max_faults : Int
+  source : OpenWorldMissingSlotEvidence
+  missing_registration : @authmap.AuthMapAbsenceProof
+} derive(Eq, @debug.Debug)
+
+pub(all) struct OpenWorldMissingSlotConflictWireLimits {
+  max_bundle_bytes : Int
+  max_text_bytes : Int
+  max_observers : Int
+  max_observations : Int
+  max_absence_proof_steps : Int
+  max_transparency_proof_steps : Int
+} derive(Eq, @debug.Debug)
+pub fn OpenWorldMissingSlotConflictWireLimits::default() -> Self
+
+pub(all) enum OpenWorldMissingSlotEvidence {
+  AuthoritySignedEncounter(@checkpoint.SignedCheckpoint)
+  ObserverQuorum(Int, @converge_audit.Digest, Array[@open_world.SignedOpenWorldRegistrationObservation])
+} derive(Eq, @debug.Debug)
 
 pub(all) struct OpenWorldPveReplayBundle {
   signed_audit_checkpoint : @checkpoint.SignedCheckpoint

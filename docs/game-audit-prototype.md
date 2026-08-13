@@ -287,6 +287,9 @@ proves 172 additional goals that establish:
   a different digest; wrong boundaries and missing proofs cannot accuse;
 - seal missing-slot conflict requires an in-range slot and an exact valid
   non-membership proof; invalid or ambiguous evidence cannot accuse;
+- compact missing-slot transport authenticates the same plan, seal,
+  transparency publication, authority/observer evidence, and exact absence
+  proof without carrying the full encounter replay;
 - marketplace acceptance requires finalization, inclusion, and clean ancestry;
 - executable approval counting and decisions match their logic-side models;
 - participant vote merge is idempotent, commutative, and associative;
@@ -628,6 +631,7 @@ cryptography.
 | Seal conflict capability requires truncation, exact-slot substitution, or exact in-range non-membership | MoonBit + capability contract | conflict-policy proof goals and truncation/substitution/missing-slot/tamper tests | Proven + Tested |
 | Registration-observer certificate requires a plan-bound `n > 3f`, `n-f` policy | MoonBit + observer capability contract | policy/intersection proofs and roster/plan/signature/under-quorum tests | Proven + Tested |
 | Observer certificate plus exact seal proof can expose an authority-hidden registration | observer/seal capability contract | missing-slot, foreign-plan, and tampered-proof tests | Tested + Proven boundary |
+| A missing-slot mutation occurs only after compact canonical decoding, MoonBit capability issuance, standard-crypto root recomputation, and exact transcript binding | compact conflict wire + Cloudflare D1 adapter | authority/observer, size/shape, callback refusal, idempotent transaction integration | Proven core + Tested locally |
 | Observer signing decision cannot select a second digest for an existing plan/slot | MoonBit pure decision contract | never-sign-second proof | Proven |
 | Signing-store reservation precedes signature emission | signing-store API contract | unavailable-store call-count and shared-store conflict tests | Tested for reference/control flow; production durability assumed |
 | Trusted signing anchor rejects rollback/foreign restore | restore contract | exact-match, empty-store, and foreign-observer tests | Tested |

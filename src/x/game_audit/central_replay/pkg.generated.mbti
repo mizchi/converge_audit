@@ -3,6 +3,7 @@ package "mizchi/converge_audit/x/game_audit/central_replay"
 
 import {
   "mizchi/converge_audit",
+  "mizchi/converge_audit/audit/authmap",
   "mizchi/converge_audit/x/game_audit/attestation",
   "mizchi/converge_audit/x/game_audit/checkpoint",
   "mizchi/converge_audit/x/game_audit/inventory",
@@ -20,6 +21,8 @@ pub fn verify_inventory_checkpoint_proof_bundle(&@converge_audit.Hasher, &@conve
 pub fn verify_inventory_lineage_proof_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_checkpoint_digest~ : @converge_audit.Digest, expected_game_manifest_digest~ : @converge_audit.Digest, expected_origin~ : @market.ItemReceipt, expected_seller_id~ : String, expected_anchor~ : @inventory.AssetLineageAnchor, limits~ : @wire.InventoryLineageWireLimits) -> InventoryLineageCentralResult
 
 pub fn verify_inventory_listing_proof_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_checkpoint_digest~ : @converge_audit.Digest, expected_game_manifest_digest~ : @converge_audit.Digest, expected_origin~ : @market.ItemReceipt, expected_seller_id~ : String, rejected_ancestor~ : Bool, limits~ : @wire.InventoryListingWireLimits) -> InventoryListingCentralResult
+
+pub fn verify_open_world_missing_slot_conflict_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_world_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_transparency_log_session_id~ : String, expected_transparency_publisher_key~ : @converge_audit.PublicKey, expected_transparency_checkpoint_digest~ : @converge_audit.Digest, expected_audit_checkpoint_digest~ : @converge_audit.Digest, expected_seal_checkpoint_digest~ : @converge_audit.Digest, expected_encounter_checkpoint_digest~ : @converge_audit.Digest, expected_registration_index~ : Int, limits~ : @wire.OpenWorldMissingSlotConflictWireLimits) -> OpenWorldMissingSlotConflictResult
 
 pub fn verify_open_world_pve_replay_bundle(&@converge_audit.Hasher, &@converge_audit.Verifier, Bytes, expected_world_id~ : String, expected_encounter_session_id~ : String, expected_authority_key~ : @converge_audit.PublicKey, expected_transparency_log_session_id~ : String, expected_transparency_publisher_key~ : @converge_audit.PublicKey, expected_transparency_checkpoint_digest~ : @converge_audit.Digest, expected_audit_checkpoint_digest~ : @converge_audit.Digest, expected_seal_checkpoint_digest~ : @converge_audit.Digest, expected_encounter_checkpoint_digest~ : @converge_audit.Digest, limits~ : @wire.OpenWorldPveReplayWireLimits) -> OpenWorldPveCentralReplayResult
 
@@ -146,6 +149,36 @@ pub fn InventoryListingCentralVerified::public_state_root(Self) -> @converge_aud
 pub fn InventoryListingCentralVerified::required_approvals(Self) -> Int
 pub fn InventoryListingCentralVerified::session_id(Self) -> String
 pub fn InventoryListingCentralVerified::version(Self) -> Int
+
+pub(all) enum OpenWorldMissingSlotConflictRefusal {
+  MissingSlotWireRefused(@wire.OpenWorldMissingSlotConflictWireError)
+  MissingSlotAuditBoundaryRefused(OpenWorldPveCentralReplayRefusal)
+  MissingSlotExpectedEncounterMismatch
+  MissingSlotExpectedRegistrationIndexMismatch
+  MissingSlotEncounterAuthenticationRefused(@checkpoint.CheckpointVerification)
+  MissingSlotObserverPolicyRefused
+  MissingSlotObserverEvidenceRefused(@open_world.OpenWorldObservationAlertKind)
+  MissingSlotObserverQuorumPending(Int, Int)
+  MissingSlotConflictNotFound
+  MissingSlotConflictEvidenceInvalid
+  MissingSlotConflictBoundaryMismatch
+} derive(Eq, @debug.Debug)
+
+pub(all) enum OpenWorldMissingSlotConflictResult {
+  OpenWorldMissingSlotConflictVerified(OpenWorldMissingSlotConflictVerified)
+  OpenWorldMissingSlotConflictRefused(OpenWorldMissingSlotConflictRefusal)
+}
+
+pub struct OpenWorldMissingSlotConflictVerified {
+  conflict : @open_world.OpenWorldSealConflict
+  registry_root : @converge_audit.Digest
+  registered_count : Int
+  missing_registration : @authmap.AuthMapAbsenceProof
+}
+pub fn OpenWorldMissingSlotConflictVerified::conflict(Self) -> @open_world.OpenWorldSealConflict
+pub fn OpenWorldMissingSlotConflictVerified::missing_registration(Self) -> @authmap.AuthMapAbsenceProof
+pub fn OpenWorldMissingSlotConflictVerified::registered_count(Self) -> Int
+pub fn OpenWorldMissingSlotConflictVerified::registry_root(Self) -> @converge_audit.Digest
 
 pub(all) enum OpenWorldPveCentralReplayRefusal {
   OpenWorldWireReplayRefused(@wire.OpenWorldPveReplayWireError)

@@ -1,8 +1,12 @@
 import {
-  type InventoryOriginReceipt,
-  inventoryOriginCommitments,
-  inventoryOriginReceiptValid,
+  type VerifiedInventoryOrigin,
+  verifiedInventoryOriginValid,
 } from "./inventory-origin-semantics";
+import {
+  type AsyncDigestVerificationBackend,
+  type DigestVerificationPlan,
+  verifyDigestVerificationPlan,
+} from "../../player-local-runtime/digest-verification-plan";
 
 export interface InventoryLineageSemanticTransition {
   asset_id: string;
@@ -16,7 +20,8 @@ export interface InventoryLineageSemanticTransition {
   next_lineage_root: string;
 }
 
-export interface InventoryLineageSemanticTranscript {
+export interface InventoryLineageSemanticTranscript
+  extends DigestVerificationPlan {
   asset_id: string;
   current_owner_id: string;
   initial_owner_id: string;
@@ -32,9 +37,8 @@ export interface InventoryLineageSemanticTranscript {
   final_lineage_root: string;
 }
 
-export interface AsyncInventoryLineageSemanticDigest {
-  hashString(value: string): Promise<string>;
-}
+export type AsyncInventoryLineageSemanticDigest =
+  AsyncDigestVerificationBackend;
 
 export type VerifyInventoryLineageSemanticsResult =
   | { ok: true; transitionCount: number }
@@ -47,26 +51,6 @@ export type VerifyInventoryLineageSemanticsResult =
         | "root_mismatch";
       transitionIndex: number;
     };
-
-function appendField(value: string): string {
-  return `${value.length}:${value}`;
-}
-
-export function canonicalInventoryLineageTransition(
-  transition: InventoryLineageSemanticTransition,
-): string {
-  return [
-    "inventory-asset-lineage-transition-v1",
-    transition.asset_id,
-    transition.origin_receipt_digest,
-    transition.from_owner,
-    transition.to_owner,
-    transition.expected_version.toString(),
-    transition.previous_event,
-    transition.source_event,
-    transition.previous_lineage_root,
-  ].map(appendField).join("");
-}
 
 function textFieldValid(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 4096;
@@ -99,9 +83,11 @@ function transitionStructurallyValid(
 export async function verifyInventoryLineageSemantics(
   transcript: InventoryLineageSemanticTranscript,
   digest: AsyncInventoryLineageSemanticDigest,
-  origin: InventoryOriginReceipt,
+  verifiedOrigin: VerifiedInventoryOrigin,
 ): Promise<VerifyInventoryLineageSemanticsResult> {
+  const origin = verifiedOrigin?.receipt;
   if (
+    typeof transcript !== "object" || transcript === null ||
     !textFieldValid(transcript.asset_id) ||
     !textFieldValid(transcript.current_owner_id) ||
     !textFieldValid(transcript.initial_owner_id) ||
@@ -109,12 +95,15 @@ export async function verifyInventoryLineageSemantics(
     !textFieldValid(transcript.initial_last_event) ||
     !digestValid(transcript.initial_lineage_root) ||
     !digestValid(transcript.initial_origin_receipt_digest) ||
-    !inventoryOriginReceiptValid(origin) ||
+    !verifiedInventoryOriginValid(verifiedOrigin) ||
     !Number.isSafeInteger(transcript.transfer_count) ||
     transcript.transfer_count <= 0 ||
     transcript.transfer_count > 64 ||
     !Array.isArray(transcript.transitions) ||
     transcript.transitions.length !== transcript.transfer_count ||
+    transcript.hash_check_count !== transcript.transfer_count ||
+    !Array.isArray(transcript.hash_checks) ||
+    transcript.hash_checks.length !== transcript.transfer_count ||
     !textFieldValid(transcript.final_owner_id) ||
     !versionValid(transcript.final_version) ||
     !textFieldValid(transcript.final_last_event) ||
@@ -123,15 +112,14 @@ export async function verifyInventoryLineageSemantics(
     return { ok: false, reason: "invalid_transcript", transitionIndex: 0 };
   }
 
-  const originCommitments = await inventoryOriginCommitments(origin, digest);
   if (
     origin.asset_id !== transcript.asset_id ||
     transcript.initial_origin_receipt_digest !==
-      originCommitments.receiptDigest ||
+      verifiedOrigin.receiptDigest ||
     (transcript.initial_version === 0 &&
       (transcript.initial_owner_id !== origin.recipient_id ||
         transcript.initial_last_event !== origin.source_event ||
-        transcript.initial_lineage_root !== originCommitments.lineageRoot))
+        transcript.initial_lineage_root !== verifiedOrigin.lineageRoot))
   ) {
     return { ok: false, reason: "origin_mismatch", transitionIndex: 0 };
   }
@@ -142,10 +130,22 @@ export async function verifyInventoryLineageSemantics(
   let lineageRoot = transcript.initial_lineage_root;
   for (let index = 0; index < transcript.transitions.length; index++) {
     const transition = transcript.transitions[index];
+    const hashCheck = transcript.hash_checks[index];
+    if (
+      hashCheck?.kind !== "inventory_lineage_transition" ||
+      hashCheck?.check_index !== index ||
+      hashCheck.expected_digest !== transition?.next_lineage_root
+    ) {
+      return {
+        ok: false,
+        reason: "invalid_transcript",
+        transitionIndex: index,
+      };
+    }
     if (
       !transitionStructurallyValid(transition) ||
       transition.asset_id !== transcript.asset_id ||
-      transition.origin_receipt_digest !== originCommitments.receiptDigest ||
+      transition.origin_receipt_digest !== verifiedOrigin.receiptDigest ||
       transition.from_owner !== owner ||
       transition.expected_version !== version ||
       transition.previous_event !== lastEvent ||
@@ -176,15 +176,15 @@ export async function verifyInventoryLineageSemantics(
     };
   }
 
-  const computedRoots = await Promise.all(
-    transcript.transitions.map((transition) =>
-      digest.hashString(canonicalInventoryLineageTransition(transition))
-    ),
-  );
-  for (let index = 0; index < computedRoots.length; index++) {
-    if (computedRoots[index] !== transcript.transitions[index].next_lineage_root) {
-      return { ok: false, reason: "root_mismatch", transitionIndex: index };
-    }
+  const verifiedPlan = await verifyDigestVerificationPlan(transcript, digest);
+  if (!verifiedPlan.ok) {
+    return {
+      ok: false,
+      reason: verifiedPlan.reason === "invalid_plan"
+        ? "invalid_transcript"
+        : "root_mismatch",
+      transitionIndex: verifiedPlan.checkIndex,
+    };
   }
   return { ok: true, transitionCount: transcript.transitions.length };
 }

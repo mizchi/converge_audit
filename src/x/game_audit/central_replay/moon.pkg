@@ -1,4 +1,5 @@
 import {
+  "mizchi/converge_audit/audit/authmap",
   "mizchi/converge_audit/x/game_audit/attestation",
   "mizchi/converge_audit/x/game_audit/audit",
   "mizchi/converge_audit" @bft,
@@ -13,7 +14,6 @@ import {
 }
 
 import {
-  "mizchi/converge_audit/audit/authmap",
   "mizchi/converge_audit/audit/merkle",
   "mizchi/converge_audit/x/game_audit/witness_manifest",
 } for "test"

@@ -61,6 +61,25 @@ test "membership proofs verify for every key" {
 }
 
 ///|
+test "membership hash plan preserves the leaf to root dependency chain" {
+  let hasher = @bft.FnvHasher::new()
+  let map = map_with([
+    ("asset-a", "alice"),
+    ("asset-b", "bob"),
+    ("asset-c", "carol"),
+  ])
+  let proof = proof_or_fail(map, "asset-c")
+  let plan = membership_verification_plan(hasher, proof)
+  assert_eq(plan.checks.length(), proof.path.length() + 2)
+  assert_eq(plan.root_check_index, plan.checks.length() - 1)
+  assert_eq(plan.checks[0].dependency_check_indices, [])
+  for index in 1..<plan.checks.length() {
+    assert_eq(plan.checks[index].dependency_check_indices, [index - 1])
+  }
+  assert_eq(plan.checks[plan.root_check_index].expected_digest, map.root())
+}
+
+///|
 test "proof key value root sibling and count tampering are rejected" {
   let hasher = @bft.FnvHasher::new()
   let map = map_with([("a", "1"), ("b", "2"), ("c", "3"), ("d", "4")])
@@ -176,6 +195,82 @@ test "non-membership proofs verify for empty and populated maps" {
     )
   }
   assert_eq(populated.absence_proof("c"), None)
+}
+
+///|
+test "non-membership ordered-search validity is independent of hashing" {
+  let empty = AuthenticatedMap::new(@bft.FnvHasher::new())
+  assert_true(
+    absence_proof_search_valid(absence_proof_or_fail(empty, "missing")),
+  )
+  let populated = map_with([("a", "1"), ("c", "3"), ("e", "5"), ("g", "7")])
+  let proof = absence_proof_or_fail(populated, "d")
+  assert_true(absence_proof_search_valid(proof))
+  assert_false(absence_proof_search_valid({ ..proof, key: "c" }))
+  assert_false(absence_proof_search_valid({ ..proof, path: [] }))
+}
+
+///|
+test "empty-map non-membership hash plan preserves the empty to root chain" {
+  let hasher = @bft.FnvHasher::new()
+  let map = AuthenticatedMap::new(hasher)
+  let proof = absence_proof_or_fail(map, "missing")
+  let plan = non_membership_verification_plan(hasher, proof)
+  assert_eq(plan.checks.length(), 2)
+  assert_eq(plan.root_check_index, 1)
+  assert_eq(plan.checks[0].statement_segments, [serialize_authmap_empty()])
+  assert_eq(plan.checks[0].dependency_check_indices, [])
+  assert_eq(
+    plan.checks[0].expected_digest,
+    hasher.hash_string(serialize_authmap_empty()),
+  )
+  assert_eq(plan.checks[1].dependency_check_indices, [0])
+  assert_eq(plan.checks[plan.root_check_index].expected_digest, map.root())
+}
+
+///|
+test "populated non-membership hash plan preserves the empty to root chain" {
+  let hasher = @bft.FnvHasher::new()
+  let map = map_with([("a", "1"), ("c", "3"), ("e", "5"), ("g", "7")])
+  let proof = absence_proof_or_fail(map, "d")
+  let plan = non_membership_verification_plan(hasher, proof)
+  assert_eq(plan.checks.length(), proof.path.length() + 2)
+  assert_eq(plan.root_check_index, plan.checks.length() - 1)
+  assert_eq(plan.checks[0].dependency_check_indices, [])
+  for index in 1..<plan.checks.length() {
+    assert_eq(plan.checks[index].dependency_check_indices, [index - 1])
+  }
+  assert_eq(plan.checks[plan.root_check_index].expected_digest, map.root())
+}
+
+///|
+test "non-membership hash plan binds count and authenticated path material" {
+  let hasher = @bft.FnvHasher::new()
+  let map = map_with([("a", "1"), ("c", "3"), ("e", "5"), ("g", "7")])
+  let proof = absence_proof_or_fail(map, "d")
+  let changed_count = non_membership_verification_plan(hasher, {
+    ..proof,
+    entry_count: proof.entry_count + 1,
+  })
+  assert_not_eq(
+    changed_count.checks[changed_count.root_check_index].expected_digest,
+    map.root(),
+  )
+  let changed_path = proof.path.copy()
+  changed_path[0] = match changed_path[0] {
+    DescendedLeft(parent_key, parent_value, _) =>
+      DescendedLeft(parent_key, parent_value, @bft.Digest("fake-sibling"))
+    DescendedRight(parent_key, parent_value, _) =>
+      DescendedRight(parent_key, parent_value, @bft.Digest("fake-sibling"))
+  }
+  let changed_material = non_membership_verification_plan(hasher, {
+    ..proof,
+    path: changed_path,
+  })
+  assert_not_eq(
+    changed_material.checks[changed_material.root_check_index].expected_digest,
+    map.root(),
+  )
 }
 
 ///|

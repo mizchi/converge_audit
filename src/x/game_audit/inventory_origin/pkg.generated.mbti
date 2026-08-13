@@ -1,0 +1,41 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/converge_audit/x/game_audit/inventory_origin"
+
+import {
+  "mizchi/converge_audit",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn inventory_origin_valid(InventoryOrigin) -> Bool
+
+pub fn inventory_origin_verification_plan(&@converge_audit.Hasher, InventoryOrigin) -> InventoryOriginVerificationPlan
+
+pub fn serialize_inventory_origin_lineage(@converge_audit.Digest) -> String
+
+pub fn serialize_inventory_origin_receipt(InventoryOrigin) -> String
+
+pub fn serialize_item_receipt(InventoryOrigin) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct InventoryOrigin {
+  asset_id : String
+  recipient_id : String
+  item_type : String
+  quantity : Int
+  source_event : @converge_audit.Digest
+  output_index : Int
+} derive(Eq, @debug.Debug)
+
+pub(all) struct InventoryOriginVerificationPlan {
+  receipt_statement : String
+  receipt_digest : @converge_audit.Digest
+  lineage_statement : String
+  lineage_root : @converge_audit.Digest
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits

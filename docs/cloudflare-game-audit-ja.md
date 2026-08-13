@@ -122,7 +122,7 @@ owner/version整合の6条件を要求し、wrong-parentとversion rollbackを�
 multi-asset checkpointはさらにasset非空・件数上限・canonical順・共有parent/epoch・全creation/lineage/
 proof/head条件の10条件を要求する。game-audit packageで176 proof goals、汎用audit
 policy/head/event-time/closure/ACK/atomic seal/delivery authentication/evidence inbox/poll schedule/case/source resolution handoffで60 goals、
-vote semilatticeで8 goals、計244 goalsが成功している。Workerは汎用headを含むMoonBit分類器を直接呼ぶため、Queue配送成功を
+key lifecycleで5 goals、vote semilatticeで8 goals、計249 goalsが成功している。Workerは汎用headを含むMoonBit分類器を直接呼ぶため、Queue配送成功を
 ゲーム結果の検証成功へ昇格させない。
 
 三modeでversioned canonical CBOR bundleを`replay_artifacts`へ保存する経路を実装した。PvE bundleは
@@ -197,26 +197,51 @@ revokeした場合は、両方がappealされるまで再許可しない。decis
 低コストfast pathになる。challenge・高価値・witness fork時のbounded lineage slow pathは接続済みで、
 全frame logではなくcurrent authenticated recordへ到達するtransfer証拠だけを検証する。
 
-local generated-JS実暗号benchmark（2026-08-11、20反復、同一開発機）では次の値だった。これはremote
+local generated-JS実暗号benchmark（2026-08-12、20反復、同一開発機）では次の値だった。これはremote
 Worker RTTを含まず、比較用の小標本である。transfer authは4件×transferのtranscriptを検査するが、同じ
 owner-key bindingはcacheして重複hash/signature検証を避ける。certificateはauthority checkpoint 1件と
-replay-witness attestation 3件を検査する固定費である。membershipは終端recordからauthenticated-map rootを、
-semanticはorigin receipt/initial lineage rootとanchorから終端までのparent/version/owner/eventを追跡し、
+replay-witness attestation 3件を検査する固定費である。membership planはMoonBit生成の
+leaf→parent→root依存planへ標準WebCryptoの実測digestを注入してauthenticated-map rootを、
+originはMoonBitが生成した2段planでreceipt/initial lineage rootを、lineage planは検証済みorigin capabilityと
+anchorから終端までのparent/version/owner/eventを追跡しながらMoonBit生成statementを実行し、
 それぞれ標準SHA-256で再計算する。manifestはgame manifest、authority、全witness roster、fault boundから
 replay-witness session manifestを独立再計算する。
 
-| transfer数 | bundle bytes | MoonBit verify mean / p95 | WebCrypto transfer mean / p95 | certificate mean / p95 | manifest mean / p95 | membership mean / p95 | semantic root mean / p95 | 標準検証合計 mean / p95 |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 4,313 | 35.655 / 37.103 ms | 0.173 / 0.197 ms | 0.296 / 0.353 ms | 0.036 / 0.047 ms | 0.072 / 0.087 ms | 0.055 / 0.072 ms | 0.635 / 0.703 ms |
-| 8 | 12,727 | 130.204 / 144.900 ms | 0.720 / 0.899 ms | 0.304 / 0.385 ms | 0.038 / 0.044 ms | 0.079 / 0.094 ms | 0.112 / 0.132 ms | 1.256 / 1.540 ms |
-| 32 | 41,670 | 566.852 / 723.929 ms | 3.426 / 5.818 ms | 0.478 / 1.151 ms | 0.218 / 1.247 ms | 0.195 / 0.615 ms | 0.368 / 0.530 ms | 4.688 / 7.776 ms |
-| 64 | 80,326 | 979.906 / 1,383.957 ms | 6.214 / 9.135 ms | 0.670 / 1.338 ms | 0.085 / 0.227 ms | 1.338 / 0.254 ms | 0.581 / 0.965 ms | 8.891 / 14.972 ms |
+| transfer数 | bundle bytes | MoonBit verify mean / p95 | WebCrypto transfer mean / p95 | certificate mean / p95 | manifest mean / p95 | origin plan mean / p95 | membership plan mean / p95 | lineage plan mean / p95 | 標準検証合計 mean / p95 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 4,313 | 34.510 / 35.417 ms | 0.180 / 0.222 ms | 0.288 / 0.385 ms | 0.028 / 0.041 ms | 0.038 / 0.045 ms | 0.051 / 0.068 ms | 0.026 / 0.036 ms | 0.614 / 0.777 ms |
+| 8 | 12,727 | 120.700 / 123.689 ms | 0.660 / 0.831 ms | 0.282 / 0.343 ms | 0.030 / 0.035 ms | 0.038 / 0.044 ms | 0.047 / 0.054 ms | 0.070 / 0.087 ms | 1.130 / 1.416 ms |
+| 32 | 41,670 | 412.685 / 416.862 ms | 2.096 / 2.739 ms | 0.292 / 0.492 ms | 0.032 / 0.053 ms | 0.033 / 0.039 ms | 0.050 / 0.079 ms | 0.220 / 0.250 ms | 2.724 / 3.695 ms |
+| 64 | 80,326 | 844.138 / 966.202 ms | 4.287 / 4.970 ms | 0.414 / 0.791 ms | 0.034 / 0.054 ms | 0.036 / 0.054 ms | 0.054 / 0.083 ms | 0.406 / 0.459 ms | 5.234 / 6.318 ms |
 
-manifest再計算のp50は0.035〜0.054 msでtransfer数に依存しなかった。64 transferで標準検証全体は
-MoonBit verifyの約0.91%だった。64件membershipのmeanには24.292 msの単発外れ値が入り、p50は0.104 msである。
+manifest再計算のp50は0.025〜0.031 ms、origin planは0.031〜0.037 ms、単一proofのmembership planは
+0.046〜0.050 msでtransfer数に依存しなかった。lineage planのp50は1件0.024 msから64件0.407 msまで
+増え、64 transferで標準検証全体はMoonBit verifyの約0.62%だった。
 
 `pnpm --dir examples/cf-game-audit bench:lineage`で再測定できる。binding table導入前の64件
 104,360 bytes / 1,139.736 msから、80,326 bytes / 773.854 msへ減少した（各1反復の比較）。
+
+open-world missing-slotの右辺証拠も、MoonBitがrange、canonical slot key、ordered-search path、
+registry rootを検査してから`empty→parent→root` planを返し、標準WebCryptoで再計算する。
+local generated-JS、10,000-slot中index 7,777欠落、19 path steps/21 checks、1,000反復×2 runの結果は次の通り。
+
+| 段階 | mean範囲 | p95範囲 |
+| --- | ---: | ---: |
+| MoonBit proof開封 + SHA-256 plan生成 + JSON | 0.210–0.241 ms | 0.373–0.434 ms |
+| 標準WebCrypto dependent plan | 0.248–0.278 ms | 0.498–0.584 ms |
+
+直列合計の平均は0.458–0.519 msである。fixture生成375.928–421.461 msは10,000件のmap構築を含むsetup値であり、
+proof検証には含めない。`pnpm --dir examples/cf-game-audit bench:open-world-missing-slot`で再測定できる。
+raw proof bridge単独は告発能力を発行しない。production用の統合bridgeはcanonical compact conflict v1 bundleから
+署名済みaudit plan/seal、独立transparency publicationを再認証し、authority-signed encounterまたは
+plan-bound `n-f` observer certificateのどちらかを左辺として選ぶ。同じ呼出しでsigned sealの
+`public_state_root`に対するnon-membershipを検査した場合だけopaque missing-slot conflict capabilityと
+host hash planを返す。TypeScriptのpre-mutation gateはそのplanを標準WebCryptoで再計算し、証明済みの
+3条件conjunction（MoonBit capability、標準暗号、exact transcript binding）が成立した後だけmutation
+callbackを呼ぶ。admin認証された`POST /v1/open/{unit}/open-world-seal-conflicts`は、設定済みworld/authorityを
+requestから上書きさせず、このcallback内のshard-local Durable Object SQLite transactionでだけcompact bundleとconflict transcriptを保存する。
+semantic keyは`seal_checkpoint_digest/encounter_digest/registration_index/source`で、初回は201 `stored`、
+再送は200 `duplicate`、検証拒否は422となる。`GET .../stats`は保存件数とcompact bundle bytesを返す。
 
 local workerd上で、asset件数ごとに固定した実暗号fixtureを別々のDOへ投入し、multi-asset bundleのHTTP
 検証とSQLite atomic commitを各3反復した小標本は次のとおりである。fixture生成と初期replayは計測外で、
@@ -227,10 +252,10 @@ CAS/history/batch更新、`E2E`はendpoint往復を含む。workerdのms timer�
 
 | assets | bundle bytes | MoonBit verify mean | standard verify mean | SQLite mean | E2E mean |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 3,266 | 18.000 ms | 0.333 ms | 0.000 ms | 21.667 ms |
-| 8 | 21,794 | 20.667 ms | 0.667 ms | 0.000 ms | 24.667 ms |
-| 32 | 123,980 | 41.000 ms | 1.000 ms | 1.000 ms | 48.000 ms |
-| 64 | 338,606 | 73.333 ms | 2.000 ms | 1.333 ms | 84.333 ms |
+| 1 | 3,266 | 17.667 ms | 0.333 ms | 0.000 ms | 21.333 ms |
+| 8 | 21,794 | 22.333 ms | 0.667 ms | 0.000 ms | 26.000 ms |
+| 32 | 123,980 | 42.333 ms | 1.333 ms | 1.000 ms | 48.667 ms |
+| 64 | 338,606 | 77.667 ms | 2.667 ms | 2.000 ms | 90.000 ms |
 
 `pnpm --dir examples/cf-game-audit bench:inventory-checkpoint`で1/8/32/64件を再測定できる。共有certificateを
 1回だけ検証するため、asset数増加の主な追加費用はproof decode/Merkle verificationとSQLite行更新になる。
@@ -443,6 +468,7 @@ pnpm bench:witness
 | 実暗号PvP bundleは全event認証・三root一致・`n-f` witness後だけverifiedになる | MoonBit verifier + workerd Queue integration | Tested locally |
 | 実暗号open-world v2 bundleは4 checkpoint・2 publication proofs・遅延seed・`n-f` observer・eligible inclusion・PvE replay後だけverifiedになる | MoonBit verifier + workerd Queue integration | Tested locally |
 | open-world encounterが署名済みeligible sealに含まれる | Merkle capability + workerd integration | Tested locally |
+| open-world missing-slotはsigned plan/seal/transparency、authority encounterまたはobserver quorum、exact non-membership、標準WebCrypto再計算をすべて通る | bounded canonical compact CBOR + opaque MoonBit conflict capability + proved 3条件persistence gate + Durable Object SQLite transaction/idempotency integration | Proven core + Tested locally |
 | audit plan/sealが独立publisherのtransparency checkpointに含まれる | exact map membership capability + trusted head digest + workerd integration | Tested locally |
 | TS側遷移がMoonBit proofと同じ | Worker bridgeがproved classifierを直接呼ぶ | Proven core + Tested bridge |
 | current-owner listingはauthority checkpoint、`n-f` replay witness、origin receipt、inventory root membershipを要求する | MoonBit central verifier + real-crypto workerd integration + apac-ne benchmark | Tested locally + remote |

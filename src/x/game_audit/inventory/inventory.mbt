@@ -109,6 +109,17 @@ pub struct InventoryPlan {
 }
 
 ///|
+/// The two hash stages needed to independently verify one item's origin. The
+/// host executes the statements with its production hash backend; MoonBit owns
+/// their framing and expected dependency.
+pub(all) struct InventoryOriginVerificationPlan {
+  receipt_statement : String
+  receipt_digest : @bft.Digest
+  lineage_statement : String
+  lineage_root : @bft.Digest
+} derive(Eq, Debug)
+
+///|
 fn append_field(buffer : StringBuilder, value : String) -> Unit {
   buffer.write_string(value.length().to_string())
   buffer.write_char(':')
@@ -116,20 +127,40 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 }
 
 ///|
+fn inventory_record_value(
+  record : AssetRecord,
+) -> @inventory_record.InventoryRecord {
+  {
+    asset_id: record.asset_id,
+    owner_id: record.owner_id,
+    item_type: record.item_type,
+    quantity: record.quantity,
+    origin_source_event: record.origin_source_event,
+    origin_output_index: record.origin_output_index,
+    origin_receipt_digest: record.origin_receipt_digest,
+    version: record.version,
+    last_event: record.last_event,
+    lineage_root: record.lineage_root,
+  }
+}
+
+///|
 pub fn serialize_asset_record(record : AssetRecord) -> String {
-  let buffer = StringBuilder::new()
-  append_field(buffer, "asset-record-v2")
-  append_field(buffer, record.asset_id)
-  append_field(buffer, record.owner_id)
-  append_field(buffer, record.item_type)
-  append_field(buffer, record.quantity.to_string())
-  append_field(buffer, record.origin_source_event.0)
-  append_field(buffer, record.origin_output_index.to_string())
-  append_field(buffer, record.origin_receipt_digest.0)
-  append_field(buffer, record.version.to_string())
-  append_field(buffer, record.last_event.0)
-  append_field(buffer, record.lineage_root.0)
-  buffer.to_string()
+  @inventory_record.serialize_inventory_record(inventory_record_value(record))
+}
+
+///|
+pub fn serialize_inventory_origin_receipt(
+  receipt : @market.ItemReceipt,
+) -> String {
+  @inventory_origin.serialize_inventory_origin_receipt({
+    asset_id: receipt.asset_id,
+    recipient_id: receipt.recipient_id,
+    item_type: receipt.item_type,
+    quantity: receipt.quantity,
+    source_event: receipt.source_event,
+    output_index: receipt.output_index,
+  })
 }
 
 ///|
@@ -137,10 +168,14 @@ pub fn inventory_origin_receipt_digest(
   hasher : &@bft.Hasher,
   receipt : @market.ItemReceipt,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
-  append_field(buffer, "inventory-origin-receipt-v1")
-  append_field(buffer, @market.serialize_item_receipt(receipt))
-  hasher.hash_string(buffer.to_string())
+  hasher.hash_string(serialize_inventory_origin_receipt(receipt))
+}
+
+///|
+pub fn serialize_inventory_origin_lineage(
+  receipt_digest : @bft.Digest,
+) -> String {
+  @inventory_origin.serialize_inventory_origin_lineage(receipt_digest)
 }
 
 ///|
@@ -150,10 +185,23 @@ pub fn inventory_origin_lineage_root(
   hasher : &@bft.Hasher,
   receipt : @market.ItemReceipt,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
-  append_field(buffer, "inventory-origin-lineage-v1")
-  append_field(buffer, inventory_origin_receipt_digest(hasher, receipt).0)
-  hasher.hash_string(buffer.to_string())
+  hasher.hash_string(
+    serialize_inventory_origin_lineage(
+      inventory_origin_receipt_digest(hasher, receipt),
+    ),
+  )
+}
+
+///|
+pub fn inventory_origin_verification_plan(
+  hasher : &@bft.Hasher,
+  receipt : @market.ItemReceipt,
+) -> InventoryOriginVerificationPlan {
+  let receipt_statement = serialize_inventory_origin_receipt(receipt)
+  let receipt_digest = hasher.hash_string(receipt_statement)
+  let lineage_statement = serialize_inventory_origin_lineage(receipt_digest)
+  let lineage_root = hasher.hash_string(lineage_statement)
+  { receipt_statement, receipt_digest, lineage_statement, lineage_root }
 }
 
 ///|
@@ -177,17 +225,16 @@ pub fn asset_lineage_transition(
 pub fn serialize_asset_lineage_transition(
   transition : AssetLineageTransition,
 ) -> String {
-  let buffer = StringBuilder::new()
-  append_field(buffer, "inventory-asset-lineage-transition-v1")
-  append_field(buffer, transition.asset_id)
-  append_field(buffer, transition.origin_receipt_digest.0)
-  append_field(buffer, transition.from_owner)
-  append_field(buffer, transition.to_owner)
-  append_field(buffer, transition.expected_version.to_string())
-  append_field(buffer, transition.previous_event.0)
-  append_field(buffer, transition.source_event.0)
-  append_field(buffer, transition.previous_lineage_root.0)
-  buffer.to_string()
+  @inventory_transition.serialize_inventory_lineage_transition({
+    asset_id: transition.asset_id,
+    origin_receipt_digest: transition.origin_receipt_digest,
+    from_owner: transition.from_owner,
+    to_owner: transition.to_owner,
+    expected_version: transition.expected_version,
+    previous_event: transition.previous_event,
+    source_event: transition.source_event,
+    previous_lineage_root: transition.previous_lineage_root,
+  })
 }
 
 ///|
@@ -195,7 +242,16 @@ pub fn asset_lineage_transition_root(
   hasher : &@bft.Hasher,
   transition : AssetLineageTransition,
 ) -> @bft.Digest {
-  hasher.hash_string(serialize_asset_lineage_transition(transition))
+  @inventory_transition.inventory_lineage_transition_root(hasher, {
+    asset_id: transition.asset_id,
+    origin_receipt_digest: transition.origin_receipt_digest,
+    from_owner: transition.from_owner,
+    to_owner: transition.to_owner,
+    expected_version: transition.expected_version,
+    previous_event: transition.previous_event,
+    source_event: transition.source_event,
+    previous_lineage_root: transition.previous_lineage_root,
+  })
 }
 
 ///|
@@ -543,16 +599,7 @@ pub fn InventoryIndex::proof(
 
 ///|
 fn record_is_structurally_valid(record : AssetRecord) -> Bool {
-  record.asset_id != "" &&
-  record.owner_id != "" &&
-  record.item_type != "" &&
-  record.quantity > 0 &&
-  record.origin_output_index >= 0 &&
-  record.origin_source_event.0 != "" &&
-  record.origin_receipt_digest.0 != "" &&
-  record.version >= 0 &&
-  record.last_event.0 != "" &&
-  record.lineage_root.0 != ""
+  @inventory_record.inventory_record_valid(inventory_record_value(record))
 }
 
 ///|

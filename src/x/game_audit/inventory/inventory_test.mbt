@@ -558,3 +558,29 @@ test "semantic inventory root converges despite creation order" {
   let right_plan = plan_or_fail(right, batch([second, first]), [], effects)
   assert_eq(left_plan.state_root(), right_plan.state_root())
 }
+
+///|
+test "inventory origin plan exposes both canonical hash stages" {
+  let hasher = @bft.FnvHasher::new()
+  let receipt : @market.ItemReceipt = {
+    asset_id: "asset-origin-1",
+    recipient_id: "alice",
+    item_type: "raid-token",
+    quantity: 2,
+    source_event: @bft.Digest("loot-event-1"),
+    output_index: 3,
+  }
+  let plan = inventory_origin_verification_plan(hasher, receipt)
+  assert_eq(plan.receipt_statement, serialize_inventory_origin_receipt(receipt))
+  assert_eq(plan.receipt_digest, hasher.hash_string(plan.receipt_statement))
+  assert_eq(
+    plan.lineage_statement,
+    serialize_inventory_origin_lineage(plan.receipt_digest),
+  )
+  assert_eq(plan.lineage_root, hasher.hash_string(plan.lineage_statement))
+  assert_eq(
+    plan.receipt_digest,
+    inventory_origin_receipt_digest(hasher, receipt),
+  )
+  assert_eq(plan.lineage_root, inventory_origin_lineage_root(hasher, receipt))
+}

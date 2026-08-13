@@ -1,0 +1,32 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/converge_audit/x/game_audit/inventory_record"
+
+import {
+  "mizchi/converge_audit",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn inventory_record_valid(InventoryRecord) -> Bool
+
+pub fn serialize_inventory_record(InventoryRecord) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct InventoryRecord {
+  asset_id : String
+  owner_id : String
+  item_type : String
+  quantity : Int
+  origin_source_event : @converge_audit.Digest
+  origin_output_index : Int
+  origin_receipt_digest : @converge_audit.Digest
+  version : Int
+  last_event : @converge_audit.Digest
+  lineage_root : @converge_audit.Digest
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits

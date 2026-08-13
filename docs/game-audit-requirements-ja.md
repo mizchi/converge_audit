@@ -1,6 +1,6 @@
 # 検証可能リアルタイムゲーム監査 要求仕様
 
-更新日: 2026-08-04
+更新日: 2026-08-12
 
 ## 1. 目的と適用範囲
 
@@ -377,8 +377,10 @@ open-world lineage bundleも各transferのauthority owner-key binding 2件とsen
 canonical transcriptとして抽出し、4件×transferを標準WebCryptoで独立再検証する。さらにcompact listing、
 multi-asset checkpoint、lineageの全経路でauthority checkpointと全replay-witness attestationを同じ
 certificate transcriptとして抽出し、状態変更前に標準WebCryptoで再検証する。lineage transition rootも
-検証済みanchorからowner/version/event境界を追跡し、標準SHA-256で並列再計算する。さらにorigin receiptと
-initial lineage root、authenticated-map membershipとpublic state rootも同じ境界で独立再計算する。
+MoonBitが受信bundleから最大64件のbounded hash planを再生成し、検証済みanchorから
+owner/version/event境界を追跡したうえで、hostが標準SHA-256で並列再計算する。さらにorigin receiptと
+initial lineage root、authenticated-map membershipとpublic state rootも、MoonBit生成の最大4,224件の
+依存hash planへ標準WebCryptoの実測digestを順に注入して同じ境界で独立再計算する。
 replay-witness session manifestもgame manifest、authority、全roster、fault boundから独立再計算する。
 一方、event/asset-delta rootの元になる全ログはcompact bundleに含めず、認証済み`n-f` replay witnessへ
 意味論検証を委譲する。中央verifierはこれらを再計算したとは主張しない。
@@ -458,7 +460,7 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 | checkpoint transport | durable bounded outbox、retry、exact-parentによりnetwork安定後authorityがlatest epochへ到達する | Quint/TLC、2 peer・2 epoch、crash/drop/partition | 11,340 distinct states、反例なし。capacity gateを外すbroken modelも反例 | `just formal-check` |
 | witness collection | producer/roster/quorum/expiry/fairnessなしにreadyやreceiver更新へ進まない | Quint/TLC、4 roster + 1 intruder | safety 30,720、liveness 19,456 distinct states、反例なし。2 broken gateは期待どおり反例 | `just formal-check` |
 | witness source isolation | 同一sourceのinvalid floodは別sourceのquorum quotaを消費せず、client指定bucketを信用しない | workerd integration + local 20 run + remote単一egress20 run | HMAC secret欠落時503、local別source quorum 20/20、remote 429回復後quorum 20/20。異なるremote source間公平性は未測定 | `pnpm --dir examples/cf-game-audit bench:witness` |
-| MoonBit JS shared verification | client/serverは同じMoonBit serializer/predicateからbounded planを生成し、serverはclient結果を信用せず再実行する。TypeScriptは標準暗号とI/Oだけを担当する | replay-witness manifestのWorker/browser共通serializer、digest plan executor、test-only TS reference | 最初のmanifest経路はTested locally。origin/lineage/authmap plan移行はPending | `moon test src/x/game_audit/{witness_manifest,browser_bridge,worker}` + `pnpm --dir examples/cf-game-audit test` |
+| MoonBit JS shared verification | client/serverは同じMoonBit serializer/predicateからbounded planを生成し、serverはclient結果を信用せず再実行する。TypeScriptは標準暗号とI/Oだけを担当する | replay-witness manifest、origin/initial lineage、inventory record/AuthMap membership/non-membership、lineage transitionのWorker/browser共通serializer、independent/dependent digest plan executor、test-only TS reference | manifest、origin、membership、non-membership、lineage transitionの5経路はTested locally。missing-slotはbounded canonical compact CBORからsigned seal + authority/observer左辺を同じMoonBit capabilityへ束ね、標準WebCryptoとexact binding後だけshard-local Durable Object SQLite transaction callbackを呼ぶ。persist conjunctionとexact-key告発条件はMoonBit proof、asset遷移はQuintでmodel checked | `moon test src/{audit/authmap,x/game_audit/{inventory_origin,inventory_record,inventory_transition,inventory,witness_manifest,browser_bridge,worker}}` + `pnpm --dir examples/cf-game-audit test` |
 | reference owner proof | item精算・二者transfer・listing・cancelは同じcanonical文を標準WebCryptoとMoonBitの両方が受理した場合だけ業務状態を更新する | `AssetOwnership.qnt` auth guard + WebCrypto/MoonBit相互運用test + workerd integration | Model checked + Tested locally。暗号強度そのものは未証明 | `just formal-check` + `pnpm --dir examples/cf-game-audit test` |
 | reference checkpoint commitment | game replayは一度だけ行い、MoonBit所有のMerkle framingを使う標準WebCryptoとMoonBitがevent root/state/genesis/chain/envelope digestで一致した場合だけ保存する | pure async adapter + 0/1/odd/power-of-two/30/Unicode相互運用test + broken-backend negative control + workerd integration | Tested locally。既存replay/finality predicateはMoonBit proof対象、backend等価性と暗号強度は未証明 | `moon test` + `pnpm --dir examples/cf-game-audit test` |
 | reference derived asset identity | origin receiptからownership head、transfer、listingまでのcanonical ID chainとcheckpoint receiptは標準WebCryptoとMoonBitが一致した場合だけSQLite更新またはauthority応答へ進む | pure sync/async ID adapter相互運用test + broken-backend negative control + workerd integration | Tested locally。既存ownership遷移はQuintでmodel checked、backend等価性と暗号強度は未証明 | `just formal-check` + `pnpm --dir examples/cf-game-audit test` |

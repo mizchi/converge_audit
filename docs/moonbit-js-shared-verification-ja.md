@@ -82,6 +82,11 @@ Cloudflare Worker
 - server mutationはMoonBit predicateと標準暗号planの両方が成功した後だけ行う。
 - client/serverはserializerを共有するが、鍵、DB transaction、時刻、rate limitは共有しない。
 - browserへ1.6 MBの全Worker bridgeを配らず、用途別bridgeをtree-shake可能に保つ。
+- browser bridgeからimportする共有serializer packageは状態、`Map`、`Json::object`、bench supportへ
+  依存させない。これらはMoonBit JSのglobal scopeでrandom hash seedを初期化し得るため、Cloudflare
+  Workerが起動を拒否する。origin、current record、transition framingは、それぞれ軽量な
+  `x/game_audit/inventory_origin`、`x/game_audit/inventory_record`、
+  `x/game_audit/inventory_transition`へ隔離する。
 
 ## Compact proofの委譲境界
 
@@ -96,9 +101,10 @@ origin、lineage、authenticated-map rootを中央で再計算できる。一方
 | --- | --- | --- |
 | replay-witness session manifest | MoonBit serializer + Worker plan + browser bridge + WebCrypto executorへ移行済み | 他planと共通metrics化 |
 | checkpoint/attestation署名 | MoonBit canonical transcript + generic TS executor済み | digest/signature plan型の統合を検討 |
-| origin / initial lineage root | runtime TSにもcanonical化が残る | MoonBit hash planへ移し、TS実装をtest-only化 |
-| lineage transition root | runtime TSにもcanonical化が残る | bounded hash planへ移行 |
-| authenticated-map membership | runtime TSにtree再計算が残る | 依存順を持つbounded hash planへ移行 |
+| origin / initial lineage root | MoonBitの2段hash plan + Worker/browser bridge + generic WebCrypto executorへ移行済み | 他planと共通metrics化 |
+| lineage transition root | MoonBitの最大64件hash plan + Worker/browser bridge + generic WebCrypto executorへ移行済み | 他planと共通metrics化 |
+| authenticated-map membership | MoonBitのleaf→parent→root依存plan + Worker/browser bridge + generic WebCrypto DAG executorへ移行済み | 複数proofの共通metrics化 |
+| authenticated-map non-membership | MoonBitのempty→parent→root共通plan + compact conflict専用wire + Worker/browser bridge + generic WebCrypto executor + D1永続化endpointへ移行済み | conflict ingestのremote benchmarkとretention policy |
 | game replay / state transition | MoonBit JS共有済み | game別bridgeを小さく保つ |
 | D1 / Durable Objects / IndexedDB | TypeScript adapter | MoonBitへ移さない |
 
@@ -118,6 +124,6 @@ origin、lineage、authenticated-map rootを中央で再計算できる。一方
 | source | client/serverの意味論重複を減らし、証明対象と実行コードを一致させたい |
 | observation | inventory周辺ではTSがMoonBitのframing、roster順、root計算を再実装していた |
 | model question | MoonBitを唯一の意味論実装にしても、server独立実行と標準暗号検査を保存できるか |
-| machine result | manifest serializerを両bridgeで共有し、MoonBit planを標準WebCrypto executorで検証。test-only TS referenceとも一致 |
+| machine result | manifest、origin、inventory record、lineage transition、AuthMap serializerを両bridgeで共有し、MoonBit planを標準WebCrypto executorで検証。missing-slotは署名済みplan/seal/transparencyとauthority encounterまたはobserver quorumをMoonBitで同時に開き、標準WebCrypto成功後だけpre-mutation callbackへ進む |
 | decision | runtimeはMoonBit semantic plan + host crypto/I/O adapter、実装多様性はdifferential testで維持する |
-| lock | witness manifest/bridge test、digest plan test、inventory checkpoint semantics/integration test、全形式検査 |
+| lock | witness manifest/origin/record/lineage transition/AuthMap empty/node/root bridge test、membership/non-membership plan test、open-world seal-conflict pre-mutation test、independent/dependent digest plan test、inventory checkpoint semantics/integration test、全形式検査 |

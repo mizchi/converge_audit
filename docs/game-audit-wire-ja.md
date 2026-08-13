@@ -101,6 +101,38 @@ revocationはbundle全体を拒否する。中央verifierが返すdomain-separat
 storage adapterは暗号検証後もtransaction内で全CAS前提とrevocationを再読込し、全head/historyと
 batch idempotency rowを1 transactionで反映する。
 
+bundle受理後のhost検証境界では、MoonBit verifierが`inventory_origins`を返す。各originはcanonical
+`inventory-origin-receipt-v1`と、そのdigestを入力にする`inventory-origin-lineage-v1`の2 checkを持ち、
+全check indexはasset順に連続する。TypeScriptはstatementを組み立て直さず、標準WebCryptoでbounded
+planを実行して得たcapabilityだけをmembership/lineage adapterへ渡す。このtranscriptはCBOR wireへ
+追加されず、serverが受信bundleと期待originから毎回再生成する。
+
+同じhost境界の`inventory_membership`は、各proofについてcurrent recordのcanonical valueと、
+leaf→逆順parent path→`authmap-root-v1`の依存hash planを返す。各checkはliteral segmentと、それらの
+間へ挿入する先行check indexだけを持つ。hostはMoonBitが予告した中間digestではなく標準WebCryptoの
+実測digestを次statementへ注入し、proofごとの独立チェーンを並行実行する。最大64 proof ×
+（64 path + leaf/root）= 4,224 checksで、全terminal digestが署名済み`public_state_root`と一致しなければ
+拒否する。record/AuthMap framingはruntime TypeScriptに再実装せず、独立実装はdifferential testだけに残す。
+このplanもCBOR wireには追加しない。
+
+`audit/authmap`の同じ共通plan型はnon-membershipにも使える。開始checkを
+`authmap-empty-v1`とし、逆順parent path、entry countを拘束するroot checkへ接続するため、
+空mapは`empty→root`の2 check、非空mapは`path length + 2` checkになる。ただしhash planは
+認証済みpath materialの再計算だけを担い、missing keyと各parent keyの大小関係、空/非空時の
+path shapeは意味論verifierが別に検査する。Worker bridgeは、外部から固定したregistry root、
+`registered_count`、対象indexと最大64段のparallel path fieldsを受け、MoonBitでrange、canonical key、
+ordered search、rootを検査した後だけlocal host transcriptを返す。TypeScript adapterはそのplanへ
+標準WebCryptoの実測digestを注入する。transcriptはCBORへ追加せずclientにも選ばせない。これは
+raw proof APIはmissing-slot告発の「rootにslotがない」という右辺だけであり、告発能力を発行しない。
+統合APIはversion 1のcompact conflict専用canonical CBORをdecodeし、外部固定digestに対する署名済み
+plan/seal/transparencyと、authority-signed encounterまたはobserver quorumという左辺を開く。その同じ
+MoonBit呼出しでsealの`public_state_root`に対する右辺proofが成立した場合だけconflict capability由来の
+local transcriptを返す。hostが標準WebCryptoでもrootを再計算するまでmutation callbackは呼ばれない。
+wireは`[version, signed_audit, signed_seal, transparency, game_manifest, sample_numerator,
+sample_denominator, registered_count, seed, observers, max_faults, source, absence_proof]`であり、full PvEの
+event、state、loot receiptを運ばない。既定上限は256 KiB、observer/observation各64、不在proof/transparency
+proof各64段で、非canonical CBORも拒否する。
+
 historical inventory lineage bundleはversion 2で、listing bundleをそのまま包含し、保存済みretention
 anchorからcurrent recordの`lineage_root`までの最大64 transferだけを運ぶ。
 
@@ -116,6 +148,12 @@ anchorからcurrent recordの`lineage_root`までの最大64 transferだけを�
 共有するowner bindingはtableで一度だけ送り、同一署名の検証結果も再利用する。既定上限はbundle
 512 KiB、transfer 64、owner binding 128である。空slice、wrong parent/version/asset、authority binding、
 sender/recipient署名、終端rootのどれかが不一致なら全体を拒否する。
+
+host検証境界では、MoonBit verifierが各transitionについて`inventory_lineage_transition` checkを
+transfer順に1件ずつ返す。checkはMoonBit所有のcanonical statementと導出済み`next_lineage_root`を
+拘束し、最大64件を標準WebCrypto executorが並列検証する。TypeScript runtimeはfield framingを
+再実装せず、anchorからのowner/version/event/root連鎖とplan形状だけを検査する。このplanもCBOR wireへ
+追加せず、serverが受信bundleから再生成する。
 
 `intent`と`observed_receipt`は署名event payloadから独立に信用しない。replay kernelがcanonical
 payloadと完全一致することを再確認する。署名eventはdecode後に`AuditAdapter`へ渡し、session、hash、

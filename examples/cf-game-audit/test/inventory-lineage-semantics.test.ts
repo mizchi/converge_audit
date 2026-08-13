@@ -4,6 +4,7 @@ import { createStandardWebCryptoBackend } from "../../player-local-runtime/crypt
 import {
   verifyInventoryLineageSemantics,
 } from "../src/inventory-lineage-semantics";
+import { verifyInventoryOriginSemantics } from "../src/inventory-origin-semantics";
 import { verifyInventoryLineageProofBundle } from "../src/moonbit";
 
 const authoritySeed =
@@ -20,6 +21,33 @@ const unicodeOrigin = {
   source_event: "loot-event",
   output_index: 0,
 };
+
+function appendReferenceField(value: string): string {
+  return `${value.length}:${value}`;
+}
+
+function referenceCanonicalTransition(transition: {
+  asset_id: string;
+  origin_receipt_digest: string;
+  from_owner: string;
+  to_owner: string;
+  expected_version: number;
+  previous_event: string;
+  source_event: string;
+  previous_lineage_root: string;
+}): string {
+  return [
+    "inventory-asset-lineage-transition-v1",
+    transition.asset_id,
+    transition.origin_receipt_digest,
+    transition.from_owner,
+    transition.to_owner,
+    transition.expected_version.toString(),
+    transition.previous_event,
+    transition.source_event,
+    transition.previous_lineage_root,
+  ].map(appendReferenceField).join("");
+}
 
 async function verifiedUnicodeLineage() {
   const fixture = JSON.parse(audit_benchmark_make_inventory_lineage_proof_bundle(
@@ -69,20 +97,44 @@ async function verifiedUnicodeLineage() {
   return verification;
 }
 
-describe("inventory lineage semantic roots", () => {
+describe("inventory lineage transition plan", () => {
   it("recomputes a Unicode lineage chain with standard SHA-256", async () => {
     const verification = await verifiedUnicodeLineage();
+    const backend = createStandardWebCryptoBackend(crypto);
+    const origins = await verifyInventoryOriginSemantics(
+      verification.inventory_origins,
+      backend,
+      [unicodeOrigin],
+    );
+    if (!origins.ok) throw new Error(origins.reason);
+
+    expect(verification.hash_check_count).toBe(2);
+    expect(verification.hash_checks).toHaveLength(2);
+    verification.transitions.forEach((transition, index) => {
+      expect(verification.hash_checks[index]).toEqual({
+        kind: "inventory_lineage_transition",
+        check_index: index,
+        canonical_statement: referenceCanonicalTransition(transition),
+        expected_digest: transition.next_lineage_root,
+      });
+    });
 
     await expect(verifyInventoryLineageSemantics(
       verification,
-      createStandardWebCryptoBackend(crypto),
-      unicodeOrigin,
+      backend,
+      origins.origins[0],
     )).resolves.toEqual({ ok: true, transitionCount: 2 });
   });
 
   it("rejects a broken chain and a mismatched hash backend", async () => {
     const verification = await verifiedUnicodeLineage();
     const standard = createStandardWebCryptoBackend(crypto);
+    const origins = await verifyInventoryOriginSemantics(
+      verification.inventory_origins,
+      standard,
+      [unicodeOrigin],
+    );
+    if (!origins.ok) throw new Error(origins.reason);
     const brokenChain = {
       ...verification,
       transitions: verification.transitions.map((transition, index) =>
@@ -95,7 +147,7 @@ describe("inventory lineage semantic roots", () => {
     await expect(verifyInventoryLineageSemantics(
       brokenChain,
       standard,
-      unicodeOrigin,
+      origins.origins[0],
     )).resolves.toEqual({
       ok: false,
       reason: "transition_mismatch",
@@ -109,16 +161,45 @@ describe("inventory lineage semantic roots", () => {
             ? "0".repeat(64)
             : standard.hashString(value),
       },
-      unicodeOrigin,
+      origins.origins[0],
     )).resolves.toEqual({
       ok: false,
       reason: "root_mismatch",
       transitionIndex: 0,
     });
     await expect(verifyInventoryLineageSemantics(
-      verification,
+      {
+        ...verification,
+        hash_check_count: verification.hash_check_count + 1,
+      },
       standard,
-      { ...unicodeOrigin, item_type: "forged-token" },
+      origins.origins[0],
+    )).resolves.toEqual({
+      ok: false,
+      reason: "invalid_transcript",
+      transitionIndex: 0,
+    });
+    await expect(verifyInventoryLineageSemantics(
+      {
+        ...verification,
+        hash_checks: verification.hash_checks.map((check, index) =>
+          index === 0 ? { ...check, kind: "wrong_kind" } : check
+        ),
+      },
+      standard,
+      origins.origins[0],
+    )).resolves.toEqual({
+      ok: false,
+      reason: "invalid_transcript",
+      transitionIndex: 0,
+    });
+    await expect(verifyInventoryLineageSemantics(
+      {
+        ...verification,
+        initial_origin_receipt_digest: "0".repeat(64),
+      },
+      standard,
+      origins.origins[0],
     )).resolves.toEqual({
       ok: false,
       reason: "origin_mismatch",

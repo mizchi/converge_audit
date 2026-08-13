@@ -54,6 +54,14 @@ fn worker_error(code : String) -> String {
 }
 
 ///|
+fn worker_sha256_digest_valid(value : String) -> Bool {
+  match worker_bytes_from_hex(value) {
+    Some(bytes) => bytes.length() == 32 && worker_bytes_to_hex(bytes) == value
+    None => false
+  }
+}
+
+///|
 fn worker_checkpoint_delivery_statement(
   protocol_version : Int,
   purpose : String,
@@ -1154,6 +1162,20 @@ pub fn audit_marketplace_creation_persist_allowed(
 }
 
 ///|
+/// Stable bridge to the proved missing-slot pre-mutation conjunction.
+pub fn audit_open_world_missing_slot_persist_allowed(
+  conflict_capability_issued : Bool,
+  standard_non_membership_verified : Bool,
+  exact_transcript_binding : Bool,
+) -> Bool {
+  @audit.open_world_missing_slot_persist_allowed(
+    conflict_capability_issued~,
+    standard_non_membership_verified~,
+    exact_transcript_binding~,
+  )
+}
+
+///|
 pub fn audit_inventory_head_advance_allowed(
   creation_eligible : Bool,
   proof_verified : Bool,
@@ -1915,6 +1937,8 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
   world_id : String,
   encounter_session_id : String,
   asset_count : Int,
+  omit_registry_slot : Bool,
+  missing_slot_source : String,
 ) -> String {
   let authority_seed = match worker_bytes_from_hex(authority_seed_hex) {
     Some(value) => value
@@ -2138,6 +2162,32 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
     Some(value) => value
     None => return worker_error("fixture_open_world_proof_missing")
   }
+  let eligible_registry = @authmap.AuthenticatedMap::new(hasher)
+  if !omit_registry_slot {
+    ignore(
+      eligible_registry.put(
+        @open_world.open_world_encounter_registration_key(0),
+        signed_encounter_checkpoint.digest.0,
+      ),
+    )
+  }
+  let missing_slot = if omit_registry_slot {
+    match
+      eligible_registry.absence_proof(
+        @open_world.open_world_encounter_registration_key(0),
+      ) {
+      Some(proof) =>
+        Some(WorkerOpenWorldMissingSlotFixture::{
+          expected_root: eligible_registry.root(),
+          registered_count: 1,
+          registration_index: 0,
+          proof,
+        })
+      None => return worker_error("fixture_missing_slot_proof_missing")
+    }
+  } else {
+    None
+  }
   let signed_anchor_seal_checkpoint = @checkpoint.sign_checkpoint(
     hasher,
     authority,
@@ -2151,7 +2201,7 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
         registered_count=1,
       ),
       event_root: eligible.root(),
-      public_state_root: hasher.hash_string("benchmark-open-world-registry"),
+      public_state_root: eligible_registry.root(),
       asset_delta_root: hasher.hash_string("benchmark-open-world-seal-assets"),
       hidden_state_commitment: None,
     },
@@ -2230,7 +2280,7 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
       _ => return worker_error("fixture_observer_signing_refused")
     }
   }
-  let encoded = @wire.encode_open_world_pve_replay_bundle({
+  let replay_bundle : @wire.OpenWorldPveReplayBundle = {
     signed_audit_checkpoint,
     signed_anchor_seal_checkpoint,
     audit_transparency: {
@@ -2262,7 +2312,39 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
       ],
       asset_effects,
     },
-  })
+  }
+  let encoded = match missing_slot {
+    Some(slot) => {
+      let source = match missing_slot_source {
+        "authority_signed_encounter" =>
+          @wire.OpenWorldMissingSlotEvidence::AuthoritySignedEncounter(
+            signed_encounter_checkpoint,
+          )
+        "observer_quorum" =>
+          @wire.OpenWorldMissingSlotEvidence::ObserverQuorum(
+            0,
+            signed_encounter_checkpoint.digest,
+            observations,
+          )
+        _ => return worker_error("invalid_missing_slot_evidence_source")
+      }
+      @wire.encode_open_world_missing_slot_conflict_bundle({
+        signed_audit_checkpoint,
+        signed_anchor_seal_checkpoint,
+        audit_transparency: replay_bundle.audit_transparency,
+        game_manifest_digest,
+        sample_numerator: 1,
+        sample_denominator: 1,
+        registered_count: 1,
+        seed,
+        observers,
+        max_faults: 1,
+        source,
+        missing_registration: slot.proof,
+      })
+    }
+    None => @wire.encode_open_world_pve_replay_bundle(replay_bundle)
+  }
   let fixture_assets : Array[Json] = []
   for receipt in loot_receipts {
     fixture_assets.push(
@@ -2277,6 +2359,10 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
     )
   }
   let first_receipt = loot_receipts[0]
+  let missing_slot_json = match missing_slot {
+    Some(fixture) => worker_open_world_missing_slot_fixture_json(fixture)
+    None => Json::object({})
+  }
   Json::object({
     "ok": Json::boolean(true),
     "bundle_hex": Json::string(worker_bytes_to_hex(encoded)),
@@ -2303,6 +2389,7 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
     "source_event": Json::string(first_receipt.source_event.0),
     "assets": Json::array(fixture_assets),
     "observer_approvals": Json::number(observations.length().to_double()),
+    "missing_slot": missing_slot_json,
   }).stringify()
 }
 
@@ -2315,6 +2402,7 @@ pub fn audit_benchmark_make_open_world_pve_replay_bundle(
 ) -> String {
   worker_benchmark_make_open_world_pve_replay_bundle(
     authority_seed_hex, participant_seed_hex, world_id, encounter_session_id, 1,
+    false, "",
   )
 }
 
@@ -2328,7 +2416,435 @@ pub fn audit_benchmark_make_open_world_multi_asset_pve_replay_bundle(
 ) -> String {
   worker_benchmark_make_open_world_pve_replay_bundle(
     authority_seed_hex, participant_seed_hex, world_id, encounter_session_id, asset_count,
+    false, "",
   )
+}
+
+///|
+/// Deterministic real-crypto fixture whose signed seal commits an empty
+/// one-slot registry while both the authority and n-f observers attest slot 0.
+pub fn audit_benchmark_make_open_world_missing_slot_conflict_bundle(
+  authority_seed_hex : String,
+  participant_seed_hex : String,
+  world_id : String,
+  encounter_session_id : String,
+  source : String,
+) -> String {
+  worker_benchmark_make_open_world_pve_replay_bundle(
+    authority_seed_hex, participant_seed_hex, world_id, encounter_session_id, 1,
+    true, source,
+  )
+}
+
+///|
+priv struct WorkerOpenWorldMissingSlotFixture {
+  expected_root : @bft.Digest
+  registered_count : Int
+  registration_index : Int
+  proof : @authmap.AuthMapAbsenceProof
+}
+
+///|
+fn worker_open_world_missing_slot_fixture(
+  hasher : &@bft.Hasher,
+  registered_count : Int,
+  registration_index : Int,
+) -> WorkerOpenWorldMissingSlotFixture? {
+  if registered_count <= 0 ||
+    registered_count > 16384 ||
+    registration_index < 0 ||
+    registration_index >= registered_count {
+    return None
+  }
+  let registry = @authmap.AuthenticatedMap::new(hasher)
+  for index in 0..<registered_count {
+    if index != registration_index {
+      ignore(
+        registry.put(
+          @open_world.open_world_encounter_registration_key(index),
+          hasher.hash_string(
+            "benchmark-open-world-encounter-v1:" + index.to_string(),
+          ).0,
+        ),
+      )
+    }
+  }
+  let proof = match
+    registry.absence_proof(
+      @open_world.open_world_encounter_registration_key(registration_index),
+    ) {
+    Some(value) => value
+    None => return None
+  }
+  Some({
+    expected_root: registry.root(),
+    registered_count,
+    registration_index,
+    proof,
+  })
+}
+
+///|
+fn worker_open_world_missing_slot_fixture_json(
+  fixture : WorkerOpenWorldMissingSlotFixture,
+) -> Json {
+  let directions : Array[Json] = []
+  let parent_keys : Array[Json] = []
+  let parent_values : Array[Json] = []
+  let sibling_digests : Array[Json] = []
+  for step in fixture.proof.path {
+    match step {
+      @authmap.AuthMapStep::DescendedLeft(key, value, sibling) => {
+        directions.push(Json::string("left"))
+        parent_keys.push(Json::string(key))
+        parent_values.push(Json::string(value))
+        sibling_digests.push(Json::string(sibling.0))
+      }
+      @authmap.AuthMapStep::DescendedRight(key, value, sibling) => {
+        directions.push(Json::string("right"))
+        parent_keys.push(Json::string(key))
+        parent_values.push(Json::string(value))
+        sibling_digests.push(Json::string(sibling.0))
+      }
+    }
+  }
+  Json::object({
+    "ok": Json::boolean(true),
+    "expected_root": Json::string(fixture.expected_root.0),
+    "registered_count": Json::number(fixture.registered_count.to_double()),
+    "registration_index": Json::number(fixture.registration_index.to_double()),
+    "proof_entry_count": Json::number(fixture.proof.entry_count.to_double()),
+    "directions": Json::array(directions),
+    "parent_keys": Json::array(parent_keys),
+    "parent_values": Json::array(parent_values),
+    "sibling_digests": Json::array(sibling_digests),
+  })
+}
+
+///|
+/// Deterministic benchmark input for one in-range omitted registration slot.
+pub fn audit_benchmark_make_open_world_missing_slot_proof(
+  registered_count : Int,
+  registration_index : Int,
+) -> String {
+  match
+    worker_open_world_missing_slot_fixture(
+      @crypto.ExperimentalSha256Hasher::new(),
+      registered_count,
+      registration_index,
+    ) {
+    Some(fixture) =>
+      worker_open_world_missing_slot_fixture_json(fixture).stringify()
+    None => worker_error("invalid_missing_slot_fixture")
+  }
+}
+
+///|
+/// Return the MoonBit-owned canonical key for an in-range registration index.
+pub fn audit_open_world_encounter_registration_key(
+  registration_index : Int,
+) -> String {
+  if registration_index < 0 {
+    return ""
+  }
+  @open_world.open_world_encounter_registration_key(registration_index)
+}
+
+///|
+fn worker_open_world_missing_slot_proof(
+  registered_count : Int,
+  registration_index : Int,
+  proof_entry_count : Int,
+  directions : Array[String],
+  parent_keys : Array[String],
+  parent_values : Array[String],
+  sibling_digests : Array[String],
+) -> @authmap.AuthMapAbsenceProof? {
+  let path_length = directions.length()
+  if registered_count <= 0 ||
+    registration_index < 0 ||
+    registration_index >= registered_count ||
+    proof_entry_count < 0 ||
+    path_length > 64 ||
+    parent_keys.length() != path_length ||
+    parent_values.length() != path_length ||
+    sibling_digests.length() != path_length ||
+    (proof_entry_count == 0 && path_length != 0) ||
+    (proof_entry_count > 0 && path_length == 0) {
+    return None
+  }
+  let path : Array[@authmap.AuthMapStep] = []
+  for index in 0..<path_length {
+    let parent_key = parent_keys[index]
+    let parent_value = parent_values[index]
+    let sibling_digest = sibling_digests[index]
+    if parent_key == "" ||
+      parent_key.length() > 4096 ||
+      !worker_sha256_digest_valid(parent_value) ||
+      !worker_sha256_digest_valid(sibling_digest) {
+      return None
+    }
+    let sibling = @bft.Digest(sibling_digest)
+    match directions[index] {
+      "left" => path.push(DescendedLeft(parent_key, parent_value, sibling))
+      "right" => path.push(DescendedRight(parent_key, parent_value, sibling))
+      _ => return None
+    }
+  }
+  Some({
+    key: @open_world.open_world_encounter_registration_key(registration_index),
+    entry_count: proof_entry_count,
+    path,
+  })
+}
+
+///|
+fn worker_open_world_missing_slot_transcript(
+  expected_root : @bft.Digest,
+  registered_count : Int,
+  registration_index : Int,
+  proof : @authmap.AuthMapAbsenceProof,
+  plan : @authmap.AuthMapHashVerificationPlan,
+) -> Json {
+  let checks = worker_open_world_missing_slot_hash_checks(plan)
+  Json::object({
+    "ok": Json::boolean(true),
+    "complete": Json::boolean(true),
+    "expected_root": Json::string(expected_root.0),
+    "registered_count": Json::number(registered_count.to_double()),
+    "registration_index": Json::number(registration_index.to_double()),
+    "proof_key": Json::string(proof.key),
+    "proof_entry_count": Json::number(proof.entry_count.to_double()),
+    "path": Json::array(proof.path.map(worker_authmap_step)),
+    "root_check_index": Json::number(plan.root_check_index.to_double()),
+    "hash_check_count": Json::number(plan.checks.length().to_double()),
+    "hash_checks": Json::array(checks),
+  })
+}
+
+///|
+fn worker_open_world_missing_slot_hash_checks(
+  plan : @authmap.AuthMapHashVerificationPlan,
+) -> Array[Json] {
+  let checks : Array[Json] = []
+  for index, check in plan.checks {
+    let kind = if index == 0 {
+      "authmap_non_membership_empty"
+    } else if index == plan.root_check_index {
+      "authmap_non_membership_root"
+    } else {
+      "authmap_non_membership_parent"
+    }
+    checks.push(
+      Json::object({
+        "kind": Json::string(kind),
+        "check_index": Json::number(index.to_double()),
+        "statement_segments": Json::array(
+          check.statement_segments.map(Json::string),
+        ),
+        "dependency_check_indices": Json::array(
+          check.dependency_check_indices.map(fn(dependency) {
+            Json::number(dependency.to_double())
+          }),
+        ),
+        "expected_digest": Json::string(check.expected_digest.0),
+      }),
+    )
+  }
+  checks
+}
+
+///|
+/// Verify only the right-hand absence proof needed by a missing-slot conflict.
+/// The caller must separately authenticate the sealed root and the encounter or
+/// observer-quorum evidence that establishes the slot should have existed.
+pub fn audit_verify_open_world_missing_slot_proof(
+  expected_registry_root : String,
+  registered_count : Int,
+  registration_index : Int,
+  proof_entry_count : Int,
+  directions : Array[String],
+  parent_keys : Array[String],
+  parent_values : Array[String],
+  sibling_digests : Array[String],
+) -> String {
+  if !worker_sha256_digest_valid(expected_registry_root) {
+    return worker_error("invalid_expected_registry_root")
+  }
+  let proof = match
+    worker_open_world_missing_slot_proof(
+      registered_count, registration_index, proof_entry_count, directions, parent_keys,
+      parent_values, sibling_digests,
+    ) {
+    Some(value) => value
+    None => return worker_error("invalid_non_membership_shape")
+  }
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
+  let expected_root = @bft.Digest(expected_registry_root)
+  if !@authmap.absence_proof_search_valid(proof) {
+    return worker_error("invalid_non_membership_proof")
+  }
+  let plan = @authmap.non_membership_verification_plan(hasher, proof)
+  if plan.checks[plan.root_check_index].expected_digest != expected_root {
+    return worker_error("invalid_non_membership_proof")
+  }
+  worker_open_world_missing_slot_transcript(
+    expected_root, registered_count, registration_index, proof, plan,
+  ).stringify()
+}
+
+///|
+fn worker_open_world_missing_slot_conflict_refusal_code(
+  reason : @central_replay.OpenWorldMissingSlotConflictRefusal,
+) -> String {
+  match reason {
+    MissingSlotWireRefused(_) => "missing_slot_wire_refused"
+    MissingSlotAuditBoundaryRefused(reason) =>
+      worker_open_world_refusal_code(reason)
+    MissingSlotExpectedEncounterMismatch =>
+      "expected_encounter_checkpoint_mismatch"
+    MissingSlotExpectedRegistrationIndexMismatch =>
+      "expected_registration_index_mismatch"
+    MissingSlotEncounterAuthenticationRefused(_) =>
+      "encounter_authentication_refused"
+    MissingSlotObserverPolicyRefused => "observer_policy_refused"
+    MissingSlotObserverEvidenceRefused(_) => "observer_evidence_refused"
+    MissingSlotObserverQuorumPending(_, _) => "observer_quorum_pending"
+    MissingSlotConflictNotFound => "missing_slot_conflict_not_found"
+    MissingSlotConflictEvidenceInvalid => "missing_slot_evidence_invalid"
+    MissingSlotConflictBoundaryMismatch => "missing_slot_boundary_mismatch"
+  }
+}
+
+///|
+fn worker_open_world_missing_slot_conflict_transcript(
+  verified : @central_replay.OpenWorldMissingSlotConflictVerified,
+) -> Json {
+  let conflict = verified.conflict()
+  let proof = verified.missing_registration()
+  let plan = @authmap.non_membership_verification_plan(
+    @crypto.ExperimentalSha256Hasher::new(),
+    proof,
+  )
+  let source = match conflict.source() {
+    @open_world.OpenWorldSealConflictSource::AuthoritySignedEncounter =>
+      "authority_signed_encounter"
+    @open_world.OpenWorldSealConflictSource::ObserverQuorum => "observer_quorum"
+  }
+  let observer_approvals = match conflict.observer_approval_count() {
+    Some(value) => Json::number(value.to_double())
+    None => Json::null()
+  }
+  Json::object({
+    "ok": Json::boolean(true),
+    "complete": Json::boolean(true),
+    "decision": Json::string("persist_conflict"),
+    "kind": Json::string("missing_slot"),
+    "source": Json::string(source),
+    "audit_checkpoint_digest": Json::string(
+      conflict.audit_checkpoint_digest().0,
+    ),
+    "seal_checkpoint_digest": Json::string(conflict.seal_checkpoint_digest().0),
+    "encounter_digest": Json::string(conflict.encounter_digest().0),
+    "observer_approvals": observer_approvals,
+    "expected_root": Json::string(verified.registry_root().0),
+    "registered_count": Json::number(verified.registered_count().to_double()),
+    "registration_index": Json::number(
+      conflict.registration_index().to_double(),
+    ),
+    "proof_key": Json::string(proof.key),
+    "proof_entry_count": Json::number(proof.entry_count.to_double()),
+    "path": Json::array(proof.path.map(worker_authmap_step)),
+    "root_check_index": Json::number(plan.root_check_index.to_double()),
+    "hash_check_count": Json::number(plan.checks.length().to_double()),
+    "hash_checks": Json::array(worker_open_world_missing_slot_hash_checks(plan)),
+  })
+}
+
+///|
+/// Production pre-persistence gate for an in-range omission accusation.
+/// Success means the signed seal, selected left evidence source, and exact
+/// AuthMap absence proof were checked together. The returned hash plan is for
+/// an independent standard host-crypto recomputation before mutation.
+pub fn audit_verify_open_world_missing_slot_conflict(
+  bundle_hex : String,
+  expected_world_id : String,
+  expected_authority_key : String,
+  expected_transparency_log_session_id : String,
+  expected_transparency_publisher_key : String,
+  expected_transparency_checkpoint_digest : String,
+  expected_audit_checkpoint_digest : String,
+  expected_seal_checkpoint_digest : String,
+  expected_encounter_checkpoint_digest : String,
+  expected_registration_index : Int,
+  source : String,
+) -> String {
+  let input = match worker_bytes_from_hex(bundle_hex) {
+    Some(value) => value
+    None => return worker_error("invalid_bundle_hex")
+  }
+  if expected_world_id == "" ||
+    expected_world_id.length() > 4096 ||
+    expected_transparency_log_session_id == "" ||
+    expected_transparency_log_session_id.length() > 4096 ||
+    !worker_sha256_digest_valid(expected_authority_key) ||
+    !worker_sha256_digest_valid(expected_transparency_publisher_key) ||
+    !worker_sha256_digest_valid(expected_transparency_checkpoint_digest) ||
+    !worker_sha256_digest_valid(expected_audit_checkpoint_digest) ||
+    !worker_sha256_digest_valid(expected_seal_checkpoint_digest) ||
+    !worker_sha256_digest_valid(expected_encounter_checkpoint_digest) ||
+    expected_registration_index < 0 ||
+    expected_registration_index >= 2147483647 {
+    return worker_error("invalid_missing_slot_conflict_boundary")
+  }
+  match source {
+    "authority_signed_encounter" | "observer_quorum" => ()
+    _ => return worker_error("invalid_missing_slot_evidence_source")
+  }
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
+  let verifier = @crypto.ExperimentalEd25519Verifier::new()
+  match
+    @central_replay.verify_open_world_missing_slot_conflict_bundle(
+      hasher,
+      verifier,
+      input,
+      expected_world_id~,
+      expected_authority_key=@bft.PublicKey(expected_authority_key),
+      expected_transparency_log_session_id~,
+      expected_transparency_publisher_key=@bft.PublicKey(
+        expected_transparency_publisher_key,
+      ),
+      expected_transparency_checkpoint_digest=@bft.Digest(
+        expected_transparency_checkpoint_digest,
+      ),
+      expected_audit_checkpoint_digest=@bft.Digest(
+        expected_audit_checkpoint_digest,
+      ),
+      expected_seal_checkpoint_digest=@bft.Digest(
+        expected_seal_checkpoint_digest,
+      ),
+      expected_encounter_checkpoint_digest=@bft.Digest(
+        expected_encounter_checkpoint_digest,
+      ),
+      expected_registration_index~,
+      limits=@wire.OpenWorldMissingSlotConflictWireLimits::default(),
+    ) {
+    OpenWorldMissingSlotConflictVerified(verified) => {
+      let actual_source = match verified.conflict().source() {
+        @open_world.OpenWorldSealConflictSource::AuthoritySignedEncounter =>
+          "authority_signed_encounter"
+        @open_world.OpenWorldSealConflictSource::ObserverQuorum =>
+          "observer_quorum"
+      }
+      if actual_source != source {
+        worker_error("expected_missing_slot_evidence_source_mismatch")
+      } else {
+        worker_open_world_missing_slot_conflict_transcript(verified).stringify()
+      }
+    }
+    OpenWorldMissingSlotConflictRefused(reason) =>
+      worker_error(worker_open_world_missing_slot_conflict_refusal_code(reason))
+  }
 }
 
 ///|
@@ -2831,6 +3347,53 @@ fn worker_inventory_checkpoint_semantic_transcript(
 }
 
 ///|
+fn worker_inventory_origin_semantic_transcript(
+  hasher : &@bft.Hasher,
+  origins : Array[@market.ItemReceipt],
+) -> Json {
+  let origin_entries : Array[Json] = []
+  let checks : Array[Json] = []
+  for index, origin in origins {
+    let plan = @inventory.inventory_origin_verification_plan(hasher, origin)
+    let receipt_index = index * 2
+    origin_entries.push(
+      Json::object({
+        "asset_id": Json::string(origin.asset_id),
+        "recipient_id": Json::string(origin.recipient_id),
+        "item_type": Json::string(origin.item_type),
+        "quantity": Json::number(origin.quantity.to_double()),
+        "source_event": Json::string(origin.source_event.0),
+        "output_index": Json::number(origin.output_index.to_double()),
+        "receipt_digest": Json::string(plan.receipt_digest.0),
+        "lineage_root": Json::string(plan.lineage_root.0),
+      }),
+    )
+    checks.push(
+      Json::object({
+        "kind": Json::string("inventory_origin_receipt"),
+        "check_index": Json::number(receipt_index.to_double()),
+        "canonical_statement": Json::string(plan.receipt_statement),
+        "expected_digest": Json::string(plan.receipt_digest.0),
+      }),
+    )
+    checks.push(
+      Json::object({
+        "kind": Json::string("inventory_origin_lineage"),
+        "check_index": Json::number((receipt_index + 1).to_double()),
+        "canonical_statement": Json::string(plan.lineage_statement),
+        "expected_digest": Json::string(plan.lineage_root.0),
+      }),
+    )
+  }
+  Json::object({
+    "origin_count": Json::number(origins.length().to_double()),
+    "origins": Json::array(origin_entries),
+    "hash_check_count": Json::number(checks.length().to_double()),
+    "hash_checks": Json::array(checks),
+  })
+}
+
+///|
 fn worker_inventory_membership_record(record : @inventory.AssetRecord) -> Json {
   Json::object({
     "asset_id": Json::string(record.asset_id),
@@ -2847,7 +3410,7 @@ fn worker_inventory_membership_record(record : @inventory.AssetRecord) -> Json {
 }
 
 ///|
-fn worker_inventory_membership_step(step : @authmap.AuthMapStep) -> Json {
+fn worker_authmap_step(step : @authmap.AuthMapStep) -> Json {
   match step {
     @authmap.AuthMapStep::DescendedLeft(
       parent_key,
@@ -2875,29 +3438,80 @@ fn worker_inventory_membership_step(step : @authmap.AuthMapStep) -> Json {
 }
 
 ///|
-fn worker_inventory_membership_proof(proof : @inventory.InventoryProof) -> Json {
+fn worker_inventory_membership_proof(
+  proof : @inventory.InventoryProof,
+  plan_check_start : Int,
+  plan_check_count : Int,
+  root_check_index : Int,
+) -> Json {
   Json::object({
     "record": worker_inventory_membership_record(proof.record),
+    "canonical_record": Json::string(
+      @inventory.serialize_asset_record(proof.record),
+    ),
     "key": Json::string(proof.map_proof.key),
     "value": Json::string(proof.map_proof.value),
     "left_digest": Json::string(proof.map_proof.left_digest.0),
     "right_digest": Json::string(proof.map_proof.right_digest.0),
     "entry_count": Json::number(proof.map_proof.entry_count.to_double()),
-    "path": Json::array(
-      proof.map_proof.path.map(worker_inventory_membership_step),
-    ),
+    "path": Json::array(proof.map_proof.path.map(worker_authmap_step)),
+    "plan_check_start": Json::number(plan_check_start.to_double()),
+    "plan_check_count": Json::number(plan_check_count.to_double()),
+    "root_check_index": Json::number(root_check_index.to_double()),
   })
 }
 
 ///|
 fn worker_inventory_membership_transcript(
+  hasher : &@bft.Hasher,
   expected_root : @bft.Digest,
   proofs : Array[@inventory.InventoryProof],
 ) -> Json {
+  let proof_entries : Array[Json] = []
+  let hash_checks : Array[Json] = []
+  for proof in proofs {
+    let plan = @authmap.membership_verification_plan(hasher, proof.map_proof)
+    let plan_check_start = hash_checks.length()
+    for local_index, check in plan.checks {
+      let check_index = plan_check_start + local_index
+      let kind = if local_index == 0 {
+        "authmap_membership_leaf"
+      } else if local_index == plan.root_check_index {
+        "authmap_membership_root"
+      } else {
+        "authmap_membership_parent"
+      }
+      hash_checks.push(
+        Json::object({
+          "kind": Json::string(kind),
+          "check_index": Json::number(check_index.to_double()),
+          "statement_segments": Json::array(
+            check.statement_segments.map(Json::string),
+          ),
+          "dependency_check_indices": Json::array(
+            check.dependency_check_indices.map(fn(index) {
+              Json::number((plan_check_start + index).to_double())
+            }),
+          ),
+          "expected_digest": Json::string(check.expected_digest.0),
+        }),
+      )
+    }
+    proof_entries.push(
+      worker_inventory_membership_proof(
+        proof,
+        plan_check_start,
+        plan.checks.length(),
+        plan_check_start + plan.root_check_index,
+      ),
+    )
+  }
   Json::object({
     "expected_root": Json::string(expected_root.0),
     "proof_count": Json::number(proofs.length().to_double()),
-    "proofs": Json::array(proofs.map(worker_inventory_membership_proof)),
+    "proofs": Json::array(proof_entries),
+    "hash_check_count": Json::number(hash_checks.length().to_double()),
+    "hash_checks": Json::array(hash_checks),
   })
 }
 
@@ -2983,7 +3597,12 @@ pub fn audit_verify_inventory_listing_proof_bundle(
           decoded.witnesses,
           decoded.max_faults,
         ),
+        "inventory_origins": worker_inventory_origin_semantic_transcript(
+          hasher,
+          [origin],
+        ),
         "inventory_membership": worker_inventory_membership_transcript(
+          hasher,
           decoded.signed_checkpoint.checkpoint.public_state_root,
           [decoded.proof],
         ),
@@ -3302,9 +3921,16 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
       let events = verified
         .transfer_events()
         .map(fn(event) { Json::string(event.0) })
-      let transitions = verified
-        .transitions()
-        .map(fn(transition) {
+      let transitions : Array[Json] = []
+      let lineage_hash_checks : Array[Json] = []
+      for index, transition in verified.transitions() {
+        let canonical_statement = @inventory.serialize_asset_lineage_transition(
+          transition,
+        )
+        let next_lineage_root = @inventory.asset_lineage_transition_root(
+          hasher, transition,
+        )
+        transitions.push(
           Json::object({
             "asset_id": Json::string(transition.asset_id),
             "origin_receipt_digest": Json::string(
@@ -3320,11 +3946,18 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
             "previous_lineage_root": Json::string(
               transition.previous_lineage_root.0,
             ),
-            "next_lineage_root": Json::string(
-              @inventory.asset_lineage_transition_root(hasher, transition).0,
-            ),
-          })
-        })
+            "next_lineage_root": Json::string(next_lineage_root.0),
+          }),
+        )
+        lineage_hash_checks.push(
+          Json::object({
+            "kind": Json::string("inventory_lineage_transition"),
+            "check_index": Json::number(index.to_double()),
+            "canonical_statement": Json::string(canonical_statement),
+            "expected_digest": Json::string(next_lineage_root.0),
+          }),
+        )
+      }
       let final_anchor = verified.final_anchor()
       let initial_anchor = verified.initial_anchor()
       Json::object({
@@ -3346,6 +3979,10 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
         "transfer_count": Json::number(verified.transfer_count().to_double()),
         "transfer_events": Json::array(events),
         "transitions": Json::array(transitions),
+        "hash_check_count": Json::number(
+          lineage_hash_checks.length().to_double(),
+        ),
+        "hash_checks": Json::array(lineage_hash_checks),
         "authentication_checks": Json::array(
           worker_inventory_lineage_authentication_checks(
             decoded.lineage.transfers,
@@ -3361,7 +3998,12 @@ pub fn audit_verify_inventory_lineage_proof_bundle(
           decoded.listing.witnesses,
           decoded.listing.max_faults,
         ),
+        "inventory_origins": worker_inventory_origin_semantic_transcript(
+          hasher,
+          [origin],
+        ),
         "inventory_membership": worker_inventory_membership_transcript(
+          hasher,
           decoded.listing.signed_checkpoint.checkpoint.public_state_root,
           [decoded.listing.proof],
         ),
@@ -3724,7 +4366,12 @@ pub fn audit_verify_inventory_checkpoint_proof_bundle(
           decoded.witnesses,
           decoded.max_faults,
         ),
+        "inventory_origins": worker_inventory_origin_semantic_transcript(
+          hasher,
+          expected_assets.map(fn(asset) { asset.origin }),
+        ),
         "inventory_membership": worker_inventory_membership_transcript(
+          hasher,
           decoded.signed_checkpoint.checkpoint.public_state_root,
           decoded.proofs,
         ),

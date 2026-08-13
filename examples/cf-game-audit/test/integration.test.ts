@@ -22,6 +22,7 @@ import {
   audit_benchmark_make_inventory_listing_proof_bundle,
   audit_benchmark_make_inventory_checkpoint_proof_bundle,
   audit_benchmark_make_open_world_multi_asset_pve_replay_bundle,
+  audit_benchmark_make_open_world_missing_slot_conflict_bundle,
   audit_benchmark_make_open_world_pve_replay_bundle,
   audit_benchmark_make_pve_replay_bundle,
   audit_benchmark_make_pvp_replay_bundle,
@@ -4728,6 +4729,123 @@ describe.sequential("Cloudflare game audit shard", () => {
       replay_compute: { count: 1 },
       verified_item_creations: { eligible: 1, revoked: 0 },
       verified_asset_lineages: { eligible: 1, revoked: 0 },
+    });
+  });
+
+  it("atomically stores compact open-world missing-slot conflicts", async () => {
+    const unit = crypto.randomUUID();
+    const worldId = `cf:open:conflict:${unit}`;
+    const encounterSessionId = `${worldId}:encounter-0`;
+    const anchor = fixture(worldId, "observer-open-conflict", 1, "genesis");
+    type EvidenceSource = "authority_signed_encounter" | "observer_quorum";
+    interface ConflictFixture {
+      ok: true;
+      bundle_hex: string;
+      bundle_bytes: number;
+      authority_key: string;
+      transparency_log_session_id: string;
+      transparency_publisher_key: string;
+      transparency_checkpoint_digest: string;
+      audit_checkpoint_digest: string;
+      seal_checkpoint_digest: string;
+      checkpoint_digest: string;
+    }
+    const conflictFixture = (source: EvidenceSource): ConflictFixture =>
+      JSON.parse(audit_benchmark_make_open_world_missing_slot_conflict_bundle(
+        SEED,
+        PLAYER_SEED,
+        worldId,
+        encounterSessionId,
+        source,
+      )) as ConflictFixture;
+    const authority = conflictFixture("authority_signed_encounter");
+    expect(authority.authority_key).toBe(anchor.authority_key);
+    await configure(
+      "open",
+      unit,
+      worldId,
+      anchor.authority_key,
+      anchor.epoch,
+      anchor.previous_digest,
+    );
+    const body = (value: ConflictFixture, source: EvidenceSource) => ({
+      bundle_hex: value.bundle_hex,
+      transparency_log_session_id: value.transparency_log_session_id,
+      transparency_publisher_key: value.transparency_publisher_key,
+      transparency_checkpoint_digest: value.transparency_checkpoint_digest,
+      audit_checkpoint_digest: value.audit_checkpoint_digest,
+      seal_checkpoint_digest: value.seal_checkpoint_digest,
+      encounter_checkpoint_digest: value.checkpoint_digest,
+      registration_index: 0,
+      source,
+    });
+    const submitConflict = (
+      value: ConflictFixture,
+      source: EvidenceSource,
+      authorization = true,
+      override: Record<string, unknown> = {},
+    ) => SELF.fetch(
+      `https://example.test/v1/open/${unit}/open-world-seal-conflicts`,
+      {
+        method: "POST",
+        headers: {
+          ...(authorization
+            ? { authorization: "Bearer test-admin-token" }
+            : {}),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ ...body(value, source), ...override }),
+      },
+    );
+
+    expect((await submitConflict(
+      authority,
+      "authority_signed_encounter",
+      false,
+    )).status).toBe(401);
+    const stored = await submitConflict(
+      authority,
+      "authority_signed_encounter",
+    );
+    expect(stored.status).toBe(201);
+    await expect(stored.json()).resolves.toMatchObject({
+      ok: true,
+      decision: "stored",
+      source: "authority_signed_encounter",
+      registration_index: 0,
+    });
+    const duplicate = await submitConflict(
+      authority,
+      "authority_signed_encounter",
+    );
+    expect(duplicate.status).toBe(200);
+    await expect(duplicate.json()).resolves.toMatchObject({
+      ok: true,
+      decision: "duplicate",
+    });
+
+    const refused = await submitConflict(
+      authority,
+      "authority_signed_encounter",
+      true,
+      { encounter_checkpoint_digest: "00".repeat(32) },
+    );
+    expect(refused.status).toBe(422);
+    await expect(refused.json()).resolves.toMatchObject({
+      ok: false,
+      error: "expected_encounter_checkpoint_mismatch",
+    });
+
+    const observers = conflictFixture("observer_quorum");
+    expect((await submitConflict(observers, "observer_quorum")).status).toBe(
+      201,
+    );
+    const stats = await SELF.fetch(`https://example.test/v1/open/${unit}/stats`);
+    await expect(stats.json()).resolves.toMatchObject({
+      open_world_seal_conflicts: {
+        stored: 2,
+        bytes: authority.bundle_bytes + observers.bundle_bytes,
+      },
     });
   });
 

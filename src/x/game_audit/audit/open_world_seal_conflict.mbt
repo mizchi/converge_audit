@@ -62,3 +62,30 @@ pub fn classify_open_world_seal_conflict(
   )
   decision
 }
+
+///|
+/// Fail-closed final gate for the host persistence callback. The opaque
+/// MoonBit conflict capability already subsumes the signed seal, selected
+/// left-hand evidence, and MoonBit AuthMap verification; the host must still
+/// independently recompute the root and bind that transcript exactly.
+pub fn open_world_missing_slot_persist_allowed(
+  conflict_capability_issued~ : Bool,
+  standard_non_membership_verified~ : Bool,
+  exact_transcript_binding~ : Bool,
+) -> Bool where {
+  proof_ensure: result => {
+    open_world_missing_slot_persist_post(
+      conflict_capability_issued, standard_non_membership_verified, exact_transcript_binding,
+      result,
+    )
+  },
+} {
+  let result = conflict_capability_issued &&
+    standard_non_membership_verified &&
+    exact_transcript_binding
+  proof_assert open_world_missing_slot_persist_post(
+    conflict_capability_issued, standard_non_membership_verified, exact_transcript_binding,
+    result,
+  )
+  result
+}

@@ -177,7 +177,7 @@ CRDT本体へgame ruleを持ち込まない。
   汎用audit policy/head/event-time/closure/ACK/atomic seal/
   delivery authenticationとvote semilatticeの包含・精度・exact-next・late-event・
   evidence inbox hash-chain/bounded page、poll claim/deadline/backoff step、case admission/uphold/dismissal・
-  fail-closed/収束条件が60 goals、quorum vote 8 goalsを含め計244 goals。
+  fail-closed/収束条件が60 goals、key lifecycle 5 goals、quorum vote 8 goalsを含め計249 goals。
 - 限界: verifier は数学整数を使うため machine integer overflow を証明しない。暗号の
   collision resistance、signature unforgeability、game kernel 全体の determinism も
   現在の proof 外である。
@@ -436,7 +436,10 @@ Apple M5、MoonBit `0.1.20260724`、FNV/mock signature での代表値:
 | delayed open-world sample selection | 0.666 µs/encounter |
 | Merkle-eligible provisional gate | 3.01 µs/encounter |
 | false seal-conflict accusation rejection | 1.16 µs/encounter |
-| 10,000-entry registry non-membership verification | 13.90 µs/proof |
+| 10,000-entry registry non-membership verification | 13.16 µs/proof |
+| 10,000-entry registry non-membership hash plan construction | 17.45 µs/proof |
+| 10,000-slot missing proof MoonBit open + real SHA-256/JSON plan | 210–241 µs/proof |
+| same 21-check standard WebCrypto plan | 248–278 µs/proof |
 | 4-observer (`f=1`) registration certificate | 6.01 µs/certificate |
 | 10,000-slot observed omission detection | 28.36 µs/conflict |
 | observer ledger new registration signature | 15.10 µs/signature |
@@ -498,6 +501,7 @@ single-leaf SHA-256/Ed25519 envelopeは1,064 bytesで、pure MoonBit経路は署
 | seed公開後に追加したencounterはeligible rootを横断できない | open-world capability contract | plan/close binding と偽 inclusion test | Tested |
 | open-world中央fallbackはsample/challenge/high-value/sparse economicを包含する | MoonBit contract | fail-closed routing lemmas と central replay integration test | Proven + Tested |
 | seal truncation/substitution/missing-slotだけがauthority conflict capabilityを作る | MoonBit + capability contract | exact-slot/count/non-membership lemmas、改ざん・曖昧proof regression tests | Proven + Tested |
+| missing-slot右辺証拠はMoonBit意味論検査後にだけhost planとなり、標準WebCryptoでも同じsigned rootへ帰結する | bounded canonical compact CBOR + MoonBit AuthMap/open-world contract + host crypto adapter + Durable Object SQLite transaction | empty/non-empty、range/path/root/dependency/digest substitution、authority/observer、idempotent insert、test-only framing differential | Tested。左辺証拠との最終gateはMoonBit直接検証、永続化はcapability後だけ |
 | registration observer policy は `n > 3f` と `n-f` quorumを要求する | MoonBit contract | policy/quorum/intersection/fail-closed lemmas | Proven |
 | plan-bound observer quorum は authority checkpoint がない観測済み登録の欠落を告発できる | observer/seal capability contract | roster/plan/slot/digest/signature/foreign-plan tests | Tested + Proven boundary |
 | 同一 observer の純粋判定は既存 plan/slot に別 digest を選ばない | MoonBit decision contract | never-sign-second lemma | Proven |

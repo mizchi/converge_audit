@@ -69,6 +69,66 @@ pub(all) enum OpenWorldPveCentralReplayResult {
 } derive(Eq, Debug)
 
 ///|
+pub(all) enum OpenWorldMissingSlotConflictRefusal {
+  MissingSlotWireRefused(@wire.OpenWorldMissingSlotConflictWireError)
+  MissingSlotAuditBoundaryRefused(OpenWorldPveCentralReplayRefusal)
+  MissingSlotExpectedEncounterMismatch
+  MissingSlotExpectedRegistrationIndexMismatch
+  MissingSlotEncounterAuthenticationRefused(@checkpoint.CheckpointVerification)
+  MissingSlotObserverPolicyRefused
+  MissingSlotObserverEvidenceRefused(@open_world.OpenWorldObservationAlertKind)
+  MissingSlotObserverQuorumPending(Int, Int)
+  MissingSlotConflictNotFound
+  MissingSlotConflictEvidenceInvalid
+  MissingSlotConflictBoundaryMismatch
+} derive(Eq, Debug)
+
+///|
+/// Opaque pre-persistence capability. It is created only after the signed
+/// audit/seal boundary, one authenticated left-hand claim, and the exact
+/// AuthMap non-membership proof have all been checked together.
+pub struct OpenWorldMissingSlotConflictVerified {
+  conflict : @open_world.OpenWorldSealConflict
+  registry_root : @bft.Digest
+  registered_count : Int
+  missing_registration : @authmap.AuthMapAbsenceProof
+}
+
+///|
+pub(all) enum OpenWorldMissingSlotConflictResult {
+  OpenWorldMissingSlotConflictVerified(OpenWorldMissingSlotConflictVerified)
+  OpenWorldMissingSlotConflictRefused(OpenWorldMissingSlotConflictRefusal)
+}
+
+///|
+pub fn OpenWorldMissingSlotConflictVerified::conflict(
+  self : OpenWorldMissingSlotConflictVerified,
+) -> @open_world.OpenWorldSealConflict {
+  self.conflict
+}
+
+///|
+pub fn OpenWorldMissingSlotConflictVerified::registry_root(
+  self : OpenWorldMissingSlotConflictVerified,
+) -> @bft.Digest {
+  self.registry_root
+}
+
+///|
+pub fn OpenWorldMissingSlotConflictVerified::registered_count(
+  self : OpenWorldMissingSlotConflictVerified,
+) -> Int {
+  self.registered_count
+}
+
+///|
+pub fn OpenWorldMissingSlotConflictVerified::missing_registration(
+  self : OpenWorldMissingSlotConflictVerified,
+) -> @authmap.AuthMapAbsenceProof {
+  self.missing_registration
+}
+
+///|
 pub fn OpenWorldPveCentralReplayVerified::world_id(
   self : OpenWorldPveCentralReplayVerified,
 ) -> String {
@@ -227,6 +287,117 @@ fn open_world_gate_refusal_code(
 }
 
 ///|
+priv struct OpenedOpenWorldAuditBoundary {
+  audit_checkpoint : @checkpoint.VerifiedCheckpoint
+  audit_epoch : @open_world.RevealedOpenWorldAuditEpoch
+  transparency_checkpoint_digest : @bft.Digest
+}
+
+///|
+priv struct OpenWorldAuditBoundaryMaterial {
+  signed_audit_checkpoint : @checkpoint.SignedCheckpoint
+  signed_anchor_seal_checkpoint : @checkpoint.SignedCheckpoint
+  audit_transparency : @open_world.OpenWorldAuditTransparencyEnvelope
+  game_manifest_digest : @bft.Digest
+  sample_numerator : Int
+  sample_denominator : Int
+  registered_count : Int
+  seed : String
+  observers : Array[@attestation.Participant]
+  max_faults : Int
+}
+
+///|
+/// Authenticate the common plan/seal/transparency boundary once, independently
+/// of the wire shape that carried it. Encounter replay and conflict opening
+/// deliberately consume this opaque result through separate policy paths.
+fn open_open_world_audit_boundary(
+  hasher : &@bft.Hasher,
+  verifier : &@bft.Verifier,
+  material : OpenWorldAuditBoundaryMaterial,
+  expected_world_id~ : String,
+  expected_authority_key~ : @bft.PublicKey,
+  expected_transparency_log_session_id~ : String,
+  expected_transparency_publisher_key~ : @bft.PublicKey,
+  expected_transparency_checkpoint_digest~ : @bft.Digest,
+  expected_audit_checkpoint_digest~ : @bft.Digest,
+  expected_seal_checkpoint_digest~ : @bft.Digest,
+) -> Result[OpenedOpenWorldAuditBoundary, OpenWorldPveCentralReplayRefusal] {
+  let signed_audit = material.signed_audit_checkpoint
+  let signed_seal = material.signed_anchor_seal_checkpoint
+  if signed_audit.checkpoint.session_id != expected_world_id {
+    return Err(OpenWorldExpectedWorldMismatch)
+  }
+  if signed_audit.authority_key != expected_authority_key ||
+    signed_seal.authority_key != expected_authority_key {
+    return Err(OpenWorldExpectedAuthorityMismatch)
+  }
+  if signed_audit.digest != expected_audit_checkpoint_digest {
+    return Err(OpenWorldExpectedAuditCheckpointMismatch)
+  }
+  if signed_seal.digest != expected_seal_checkpoint_digest {
+    return Err(OpenWorldExpectedSealCheckpointMismatch)
+  }
+  let audit_checkpoint = match
+    @checkpoint.open_checkpoint(
+      hasher, verifier, expected_authority_key, signed_audit,
+    ) {
+    Opened(value) => value
+    Refused(reason) =>
+      return Err(OpenWorldAuditCheckpointAuthenticationRefused(reason))
+  }
+  let seal_checkpoint = match
+    @checkpoint.open_checkpoint(
+      hasher, verifier, expected_authority_key, signed_seal,
+    ) {
+    Opened(value) => value
+    Refused(reason) =>
+      return Err(OpenWorldSealCheckpointAuthenticationRefused(reason))
+  }
+  let transparency = match
+    @open_world.open_open_world_audit_transparency_envelope(
+      hasher,
+      verifier,
+      expected_publisher_key=expected_transparency_publisher_key,
+      expected_publication_checkpoint_digest=expected_transparency_checkpoint_digest,
+      log_session_id=expected_transparency_log_session_id,
+      world_id=expected_world_id,
+      audit_checkpoint~,
+      seal_checkpoint~,
+      envelope=material.audit_transparency,
+    ) {
+    AuditTransparencyOpened(value) => value
+    AuditTransparencyRefused(reason) =>
+      return Err(OpenWorldAuditTransparencyRefused(reason))
+  }
+  let observer_manifest_digest = @open_world.open_world_observer_manifest(
+    hasher,
+    observers=material.observers,
+    max_faults=material.max_faults,
+  )
+  let audit_epoch = match
+    @open_world.reveal_open_world_audit_epoch(
+      hasher,
+      audit_checkpoint,
+      seal_checkpoint,
+      game_manifest_digest=material.game_manifest_digest,
+      observer_manifest_digest~,
+      sample_numerator=material.sample_numerator,
+      sample_denominator=material.sample_denominator,
+      registered_count=material.registered_count,
+      seed=material.seed,
+    ) {
+    AuditEpochRevealed(value) => value
+    AuditEpochRefused(reason) => return Err(OpenWorldAuditEpochRefused(reason))
+  }
+  Ok({
+    audit_checkpoint,
+    audit_epoch,
+    transparency_checkpoint_digest: transparency.publication_checkpoint_digest(),
+  })
+}
+
+///|
 /// Verify an irregular open-world encounter without trusting any checkpoint
 /// identifier carried by its bundle. Plan, seal, and encounter digests are
 /// supplied by the job boundary and all must be anchored externally.
@@ -251,87 +422,44 @@ pub fn verify_open_world_pve_replay_bundle(
     Err(reason) =>
       return OpenWorldPveReplayRefused(OpenWorldWireReplayRefused(reason))
   }
-  let signed_audit = bundle.signed_audit_checkpoint
-  let signed_seal = bundle.signed_anchor_seal_checkpoint
+  let boundary = match
+    open_open_world_audit_boundary(
+      hasher,
+      verifier,
+      {
+        signed_audit_checkpoint: bundle.signed_audit_checkpoint,
+        signed_anchor_seal_checkpoint: bundle.signed_anchor_seal_checkpoint,
+        audit_transparency: bundle.audit_transparency,
+        game_manifest_digest: bundle.game_manifest_digest,
+        sample_numerator: bundle.sample_numerator,
+        sample_denominator: bundle.sample_denominator,
+        registered_count: bundle.registered_count,
+        seed: bundle.seed,
+        observers: bundle.observers,
+        max_faults: bundle.max_faults,
+      },
+      expected_world_id~,
+      expected_authority_key~,
+      expected_transparency_log_session_id~,
+      expected_transparency_publisher_key~,
+      expected_transparency_checkpoint_digest~,
+      expected_audit_checkpoint_digest~,
+      expected_seal_checkpoint_digest~,
+    ) {
+    Ok(value) => value
+    Err(reason) => return OpenWorldPveReplayRefused(reason)
+  }
   let signed_encounter = bundle.encounter.signed_checkpoint
-  if signed_audit.checkpoint.session_id != expected_world_id {
-    return OpenWorldPveReplayRefused(OpenWorldExpectedWorldMismatch)
-  }
-  if signed_audit.authority_key != expected_authority_key ||
-    signed_seal.authority_key != expected_authority_key ||
-    signed_encounter.authority_key != expected_authority_key {
+  if signed_encounter.authority_key != expected_authority_key {
     return OpenWorldPveReplayRefused(OpenWorldExpectedAuthorityMismatch)
-  }
-  if signed_audit.digest != expected_audit_checkpoint_digest {
-    return OpenWorldPveReplayRefused(OpenWorldExpectedAuditCheckpointMismatch)
-  }
-  if signed_seal.digest != expected_seal_checkpoint_digest {
-    return OpenWorldPveReplayRefused(OpenWorldExpectedSealCheckpointMismatch)
   }
   if signed_encounter.digest != expected_encounter_checkpoint_digest {
     return OpenWorldPveReplayRefused(
       OpenWorldExpectedEncounterCheckpointMismatch,
     )
   }
-  let audit_checkpoint = match
-    @checkpoint.open_checkpoint(
-      hasher, verifier, expected_authority_key, signed_audit,
-    ) {
-    Opened(value) => value
-    Refused(reason) =>
-      return OpenWorldPveReplayRefused(
-        OpenWorldAuditCheckpointAuthenticationRefused(reason),
-      )
-  }
-  let seal_checkpoint = match
-    @checkpoint.open_checkpoint(
-      hasher, verifier, expected_authority_key, signed_seal,
-    ) {
-    Opened(value) => value
-    Refused(reason) =>
-      return OpenWorldPveReplayRefused(
-        OpenWorldSealCheckpointAuthenticationRefused(reason),
-      )
-  }
-  let transparency = match
-    @open_world.open_open_world_audit_transparency_envelope(
-      hasher,
-      verifier,
-      expected_publisher_key=expected_transparency_publisher_key,
-      expected_publication_checkpoint_digest=expected_transparency_checkpoint_digest,
-      log_session_id=expected_transparency_log_session_id,
-      world_id=expected_world_id,
-      audit_checkpoint~,
-      seal_checkpoint~,
-      envelope=bundle.audit_transparency,
-    ) {
-    AuditTransparencyOpened(value) => value
-    AuditTransparencyRefused(reason) =>
-      return OpenWorldPveReplayRefused(
-        OpenWorldAuditTransparencyRefused(reason),
-      )
-  }
-  let observer_manifest_digest = @open_world.open_world_observer_manifest(
-    hasher,
-    observers=bundle.observers,
-    max_faults=bundle.max_faults,
-  )
-  let audit_epoch = match
-    @open_world.reveal_open_world_audit_epoch(
-      hasher,
-      audit_checkpoint,
-      seal_checkpoint,
-      game_manifest_digest=bundle.game_manifest_digest,
-      observer_manifest_digest~,
-      sample_numerator=bundle.sample_numerator,
-      sample_denominator=bundle.sample_denominator,
-      registered_count=bundle.registered_count,
-      seed=bundle.seed,
-    ) {
-    AuditEpochRevealed(value) => value
-    AuditEpochRefused(reason) =>
-      return OpenWorldPveReplayRefused(OpenWorldAuditEpochRefused(reason))
-  }
+  let audit_checkpoint = boundary.audit_checkpoint
+  let audit_epoch = boundary.audit_epoch
   let opened_encounter = match
     open_decoded_pve_replay_bundle(
       hasher,
@@ -409,7 +537,7 @@ pub fn verify_open_world_pve_replay_bundle(
         world_id: expected_world_id,
         encounter_session_id: expected_encounter_session_id,
         authority_key: expected_authority_key,
-        transparency_checkpoint_digest: transparency.publication_checkpoint_digest(),
+        transparency_checkpoint_digest: boundary.transparency_checkpoint_digest,
         audit_checkpoint_digest: expected_audit_checkpoint_digest,
         seal_checkpoint_digest: expected_seal_checkpoint_digest,
         encounter_checkpoint_digest: expected_encounter_checkpoint_digest,
@@ -426,5 +554,182 @@ pub fn verify_open_world_pve_replay_bundle(
       OpenWorldPveReplayRefused(
         OpenWorldEncounterGateRefused(open_world_gate_refusal_code(refused)),
       )
+  }
+}
+
+///|
+fn open_world_missing_slot_conflict_result(
+  audit_epoch : @open_world.RevealedOpenWorldAuditEpoch,
+  missing_registration : @authmap.AuthMapAbsenceProof,
+  detection : @open_world.OpenWorldSealConflictDetection,
+) -> OpenWorldMissingSlotConflictResult {
+  match detection {
+    SealConflictDetected(conflict) =>
+      if conflict.kind() == @open_world.OpenWorldSealConflictKind::MissingSlot {
+        OpenWorldMissingSlotConflictVerified(OpenWorldMissingSlotConflictVerified::{
+          conflict,
+          registry_root: audit_epoch.eligible_registry_root(),
+          registered_count: audit_epoch.registered_count(),
+          missing_registration,
+        })
+      } else {
+        OpenWorldMissingSlotConflictRefused(MissingSlotConflictEvidenceInvalid)
+      }
+    SealConflictNotFound =>
+      OpenWorldMissingSlotConflictRefused(MissingSlotConflictNotFound)
+    SealConflictEvidenceInvalid =>
+      OpenWorldMissingSlotConflictRefused(MissingSlotConflictEvidenceInvalid)
+    SealConflictBoundaryMismatch =>
+      OpenWorldMissingSlotConflictRefused(MissingSlotConflictBoundaryMismatch)
+  }
+}
+
+///|
+/// Open the exact evidence needed before persisting an in-range omission
+/// accusation. The signed audit/seal/transparency boundary and either the
+/// authority checkpoint or an n-f observer certificate are verified in the
+/// same call as the AuthMap non-membership proof.
+pub fn verify_open_world_missing_slot_conflict_bundle(
+  hasher : &@bft.Hasher,
+  verifier : &@bft.Verifier,
+  bundle_bytes : Bytes,
+  expected_world_id~ : String,
+  expected_authority_key~ : @bft.PublicKey,
+  expected_transparency_log_session_id~ : String,
+  expected_transparency_publisher_key~ : @bft.PublicKey,
+  expected_transparency_checkpoint_digest~ : @bft.Digest,
+  expected_audit_checkpoint_digest~ : @bft.Digest,
+  expected_seal_checkpoint_digest~ : @bft.Digest,
+  expected_encounter_checkpoint_digest~ : @bft.Digest,
+  expected_registration_index~ : Int,
+  limits~ : @wire.OpenWorldMissingSlotConflictWireLimits,
+) -> OpenWorldMissingSlotConflictResult {
+  let bundle = match
+    @wire.decode_open_world_missing_slot_conflict_bundle(bundle_bytes, limits~) {
+    Ok(value) => value
+    Err(reason) =>
+      return OpenWorldMissingSlotConflictRefused(MissingSlotWireRefused(reason))
+  }
+  let boundary = match
+    open_open_world_audit_boundary(
+      hasher,
+      verifier,
+      {
+        signed_audit_checkpoint: bundle.signed_audit_checkpoint,
+        signed_anchor_seal_checkpoint: bundle.signed_anchor_seal_checkpoint,
+        audit_transparency: bundle.audit_transparency,
+        game_manifest_digest: bundle.game_manifest_digest,
+        sample_numerator: bundle.sample_numerator,
+        sample_denominator: bundle.sample_denominator,
+        registered_count: bundle.registered_count,
+        seed: bundle.seed,
+        observers: bundle.observers,
+        max_faults: bundle.max_faults,
+      },
+      expected_world_id~,
+      expected_authority_key~,
+      expected_transparency_log_session_id~,
+      expected_transparency_publisher_key~,
+      expected_transparency_checkpoint_digest~,
+      expected_audit_checkpoint_digest~,
+      expected_seal_checkpoint_digest~,
+    ) {
+    Ok(value) => value
+    Err(reason) =>
+      return OpenWorldMissingSlotConflictRefused(
+        MissingSlotAuditBoundaryRefused(reason),
+      )
+  }
+  let audit_epoch = boundary.audit_epoch
+  match bundle.source {
+    AuthoritySignedEncounter(signed_encounter) => {
+      if signed_encounter.digest != expected_encounter_checkpoint_digest {
+        return OpenWorldMissingSlotConflictRefused(
+          MissingSlotExpectedEncounterMismatch,
+        )
+      }
+      if signed_encounter.checkpoint.epoch != expected_registration_index {
+        return OpenWorldMissingSlotConflictRefused(
+          MissingSlotExpectedRegistrationIndexMismatch,
+        )
+      }
+      let encounter = match
+        @checkpoint.open_checkpoint(
+          hasher, verifier, expected_authority_key, signed_encounter,
+        ) {
+        Opened(value) => value
+        Refused(reason) =>
+          return OpenWorldMissingSlotConflictRefused(
+            MissingSlotEncounterAuthenticationRefused(reason),
+          )
+      }
+      open_world_missing_slot_conflict_result(
+        audit_epoch,
+        bundle.missing_registration,
+        @open_world.detect_open_world_seal_conflict(
+          hasher,
+          audit_epoch,
+          encounter,
+          missing_registration=bundle.missing_registration,
+        ),
+      )
+    }
+    ObserverQuorum(registration_index, encounter_digest, observations) => {
+      if encounter_digest != expected_encounter_checkpoint_digest {
+        return OpenWorldMissingSlotConflictRefused(
+          MissingSlotExpectedEncounterMismatch,
+        )
+      }
+      if registration_index != expected_registration_index {
+        return OpenWorldMissingSlotConflictRefused(
+          MissingSlotExpectedRegistrationIndexMismatch,
+        )
+      }
+      let collector = match
+        @open_world.OpenWorldRegistrationObserverCollector::new(
+          hasher,
+          verifier,
+          boundary.audit_checkpoint,
+          game_manifest_digest=bundle.game_manifest_digest,
+          sample_numerator=bundle.sample_numerator,
+          sample_denominator=bundle.sample_denominator,
+          observers=bundle.observers,
+          max_faults=bundle.max_faults,
+          registration_index~,
+          encounter_digest~,
+        ) {
+        RegistrationObserverCollectorReady(value) => value
+        _ =>
+          return OpenWorldMissingSlotConflictRefused(
+            MissingSlotObserverPolicyRefused,
+          )
+      }
+      for observation in observations {
+        match collector.deliver(observation) {
+          ObservationAccepted | ObservationDuplicate => ()
+          ObservationRejected(alert) =>
+            return OpenWorldMissingSlotConflictRefused(
+              MissingSlotObserverEvidenceRefused(alert.kind),
+            )
+        }
+      }
+      let registration = match collector.certify() {
+        RegistrationObserved(value) => value
+        RegistrationObservationPending(actual, required) =>
+          return OpenWorldMissingSlotConflictRefused(
+            MissingSlotObserverQuorumPending(actual, required),
+          )
+      }
+      open_world_missing_slot_conflict_result(
+        audit_epoch,
+        bundle.missing_registration,
+        @open_world.detect_observed_open_world_seal_conflict(
+          hasher,
+          audit_epoch,
+          registration,
+          missing_registration=bundle.missing_registration,
+        ),
+      )
+    }
   }
 }

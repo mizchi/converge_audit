@@ -4,6 +4,7 @@ import { verifyInventoryLineageSemantics } from "../src/inventory-lineage-semant
 import { verifyInventoryMembershipSemantics } from "../src/inventory-membership-semantics";
 import { verifyInventoryCheckpointCertificateAuthentication } from "../src/inventory-checkpoint-certificate";
 import { verifyInventoryCheckpointSemantics } from "../src/inventory-checkpoint-semantics";
+import { verifyInventoryOriginSemantics } from "../src/inventory-origin-semantics";
 import {
   createStandardWebCryptoBackend,
 } from "../../player-local-runtime/crypto-backend";
@@ -118,17 +119,23 @@ for (const length of LENGTHS) {
   if (!warmCheckpointSemantics.ok) {
     throw new Error(warmCheckpointSemantics.reason);
   }
+  const warmOrigins = await verifyInventoryOriginSemantics(
+    warmVerification.inventory_origins,
+    standardBackend,
+    [BENCH_ORIGIN],
+  );
+  if (!warmOrigins.ok) throw new Error(warmOrigins.reason);
   const warmMembership = await verifyInventoryMembershipSemantics(
     warmVerification.inventory_membership,
     standardBackend,
     warmVerification.public_state_root,
-    [BENCH_ORIGIN],
+    warmOrigins.origins,
   );
   if (!warmMembership.ok) throw new Error(warmMembership.reason);
   const warmSemantics = await verifyInventoryLineageSemantics(
     warmVerification,
     standardBackend,
-    BENCH_ORIGIN,
+    warmOrigins.origins[0],
   );
   if (!warmSemantics.ok) throw new Error(warmSemantics.reason);
   const generation: number[] = [];
@@ -136,8 +143,9 @@ for (const length of LENGTHS) {
   const standardAuthentication: number[] = [];
   const standardCheckpointAuthentication: number[] = [];
   const standardCheckpointSemantics: number[] = [];
-  const standardMembership: number[] = [];
-  const standardSemanticRoots: number[] = [];
+  const standardOrigins: number[] = [];
+  const standardMembershipPlan: number[] = [];
+  const standardLineagePlan: number[] = [];
   const standardTotalAuthentication: number[] = [];
   for (let index = 0; index < ITERATIONS; index++) {
     let started = performance.now();
@@ -163,13 +171,21 @@ for (const length of LENGTHS) {
     standardCheckpointSemantics.push(performance.now() - started);
     if (!checkpointSemantics.ok) throw new Error(checkpointSemantics.reason);
     started = performance.now();
+    const origins = await verifyInventoryOriginSemantics(
+      verified.inventory_origins,
+      standardBackend,
+      [BENCH_ORIGIN],
+    );
+    standardOrigins.push(performance.now() - started);
+    if (!origins.ok) throw new Error(origins.reason);
+    started = performance.now();
     const membership = await verifyInventoryMembershipSemantics(
       verified.inventory_membership,
       standardBackend,
       verified.public_state_root,
-      [BENCH_ORIGIN],
+      origins.origins,
     );
-    standardMembership.push(performance.now() - started);
+    standardMembershipPlan.push(performance.now() - started);
     if (!membership.ok) throw new Error(membership.reason);
     started = performance.now();
     const standard = await verifyInventoryLineageAuthenticationTranscript(
@@ -182,9 +198,9 @@ for (const length of LENGTHS) {
     const semantics = await verifyInventoryLineageSemantics(
       verified,
       standardBackend,
-      BENCH_ORIGIN,
+      origins.origins[0],
     );
-    standardSemanticRoots.push(performance.now() - started);
+    standardLineagePlan.push(performance.now() - started);
     standardTotalAuthentication.push(performance.now() - standardStarted);
     if (!semantics.ok) throw new Error(semantics.reason);
   }
@@ -203,8 +219,11 @@ for (const length of LENGTHS) {
     standard_checkpoint_semantics_ms: summarizeLatency(
       standardCheckpointSemantics,
     ),
-    standard_inventory_membership_ms: summarizeLatency(standardMembership),
-    standard_semantic_roots_ms: summarizeLatency(standardSemanticRoots),
+    standard_inventory_origins_ms: summarizeLatency(standardOrigins),
+    standard_inventory_membership_plan_ms: summarizeLatency(
+      standardMembershipPlan,
+    ),
+    standard_lineage_plan_ms: summarizeLatency(standardLineagePlan),
     standard_total_verification_ms: summarizeLatency(
       standardTotalAuthentication,
     ),

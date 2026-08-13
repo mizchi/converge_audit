@@ -25,6 +25,8 @@ pub fn inventory_origin_lineage_root(&@converge_audit.Hasher, @market.ItemReceip
 
 pub fn inventory_origin_receipt_digest(&@converge_audit.Hasher, @market.ItemReceipt) -> @converge_audit.Digest
 
+pub fn inventory_origin_verification_plan(&@converge_audit.Hasher, @market.ItemReceipt) -> InventoryOriginVerificationPlan
+
 pub fn inventory_proof_matches_origin_receipt(&@converge_audit.Hasher, InventoryProof, @market.ItemReceipt) -> Bool
 
 pub fn market_accepts_inventory_listing(&@converge_audit.Hasher, @attestation.FinalizedCheckpoint, InventoryProof, seller_id~ : String, rejected_ancestor~ : Bool) -> Bool
@@ -38,6 +40,10 @@ pub fn serialize_asset_lineage_transition(AssetLineageTransition) -> String
 pub fn serialize_asset_owner_key_binding(AssetOwnerKeyBinding) -> String
 
 pub fn serialize_asset_record(AssetRecord) -> String
+
+pub fn serialize_inventory_origin_lineage(@converge_audit.Digest) -> String
+
+pub fn serialize_inventory_origin_receipt(@market.ItemReceipt) -> String
 
 pub fn sign_asset_lineage_transfer(&@converge_audit.Hasher, &@converge_audit.Signer, &@converge_audit.Signer, session_id~ : String, transition~ : AssetLineageTransition) -> SignedAssetLineageTransfer
 
@@ -165,6 +171,13 @@ pub fn InventoryIndex::proof(Self, String) -> InventoryProof?
 pub fn InventoryIndex::root(Self) -> @converge_audit.Digest
 pub fn InventoryIndex::session_id(Self) -> String
 pub fn InventoryIndex::size(Self) -> Int
+
+pub(all) struct InventoryOriginVerificationPlan {
+  receipt_statement : String
+  receipt_digest : @converge_audit.Digest
+  lineage_statement : String
+  lineage_root : @converge_audit.Digest
+} derive(Eq, @debug.Debug)
 
 pub struct InventoryPlan {
   base_root : @converge_audit.Digest

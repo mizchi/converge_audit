@@ -29,6 +29,23 @@ pub(all) struct AuthMapProof {
 } derive(Eq, Debug)
 
 ///|
+/// One host-executable hash check. `statement_segments` contains one more
+/// element than `dependency_check_indices`; actual dependency digests are
+/// inserted between adjacent segments in index order.
+pub(all) struct AuthMapHashCheck {
+  statement_segments : Array[String]
+  dependency_check_indices : Array[Int]
+  expected_digest : @bft.Digest
+} derive(Eq, Debug)
+
+///|
+/// A leaf-to-root bounded hash plan for one membership proof.
+pub(all) struct AuthMapHashVerificationPlan {
+  checks : Array[AuthMapHashCheck]
+  root_check_index : Int
+} derive(Eq, Debug)
+
+///|
 /// Search path ending at an authenticated empty child for a missing key.
 pub(all) struct AuthMapAbsenceProof {
   key : String
@@ -54,17 +71,45 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 }
 
 ///|
-fn tagged_hash(
-  hasher : &@bft.Hasher,
-  tag : String,
-  fields : Array[String],
-) -> @bft.Digest {
+fn tagged_preimage(tag : String, fields : Array[String]) -> String {
   let buffer = StringBuilder::new()
   append_field(buffer, tag)
   for field in fields {
     append_field(buffer, field)
   }
-  hasher.hash_string(buffer.to_string())
+  buffer.to_string()
+}
+
+///|
+fn tagged_hash(
+  hasher : &@bft.Hasher,
+  tag : String,
+  fields : Array[String],
+) -> @bft.Digest {
+  hasher.hash_string(tagged_preimage(tag, fields))
+}
+
+///|
+pub fn serialize_authmap_empty() -> String {
+  tagged_preimage("authmap-empty-v1", [])
+}
+
+///|
+pub fn serialize_authmap_node(
+  key : String,
+  value : String,
+  left_digest : @bft.Digest,
+  right_digest : @bft.Digest,
+) -> String {
+  tagged_preimage("authmap-node-v1", [key, value, left_digest.0, right_digest.0])
+}
+
+///|
+pub fn serialize_authmap_root(
+  entry_count : Int,
+  node_digest : @bft.Digest,
+) -> String {
+  tagged_preimage("authmap-root-v1", [entry_count.to_string(), node_digest.0])
 }
 
 ///|
@@ -90,12 +135,14 @@ fn make_branch(
   left : AuthNode,
   right : AuthNode,
 ) -> AuthNode {
-  let digest = tagged_hash(hasher, "authmap-node-v1", [
-    key,
-    value,
-    left.digest(empty_digest).0,
-    right.digest(empty_digest).0,
-  ])
+  let digest = hasher.hash_string(
+    serialize_authmap_node(
+      key,
+      value,
+      left.digest(empty_digest),
+      right.digest(empty_digest),
+    ),
+  )
   Branch(key, value, priority, digest, left, right)
 }
 
@@ -340,7 +387,7 @@ fn remove_node(
 pub fn AuthenticatedMap::new(hasher : &@bft.Hasher) -> AuthenticatedMap {
   AuthenticatedMap::{
     hasher,
-    empty_digest: tagged_hash(hasher, "authmap-empty-v1", []),
+    empty_digest: hasher.hash_string(serialize_authmap_empty()),
     root_node: Empty,
     entry_count: 0,
   }
@@ -414,10 +461,7 @@ fn map_root(
   entry_count : Int,
   node_digest : @bft.Digest,
 ) -> @bft.Digest {
-  tagged_hash(hasher, "authmap-root-v1", [
-    entry_count.to_string(),
-    node_digest.0,
-  ])
+  hasher.hash_string(serialize_authmap_root(entry_count, node_digest))
 }
 
 ///|
@@ -524,12 +568,14 @@ pub fn verify_membership(
   if proof.entry_count <= 0 {
     return false
   }
-  let mut current = tagged_hash(hasher, "authmap-node-v1", [
-    proof.key,
-    proof.value,
-    proof.left_digest.0,
-    proof.right_digest.0,
-  ])
+  let mut current = hasher.hash_string(
+    serialize_authmap_node(
+      proof.key,
+      proof.value,
+      proof.left_digest,
+      proof.right_digest,
+    ),
+  )
   let mut index = proof.path.length() - 1
   while index >= 0 {
     match proof.path[index] {
@@ -537,28 +583,183 @@ pub fn verify_membership(
         if proof.key.compare(parent_key) >= 0 {
           return false
         }
-        current = tagged_hash(hasher, "authmap-node-v1", [
-          parent_key,
-          parent_value,
-          current.0,
-          right_sibling.0,
-        ])
+        current = hasher.hash_string(
+          serialize_authmap_node(
+            parent_key, parent_value, current, right_sibling,
+          ),
+        )
       }
       DescendedRight(parent_key, parent_value, left_sibling) => {
         if proof.key.compare(parent_key) <= 0 {
           return false
         }
-        current = tagged_hash(hasher, "authmap-node-v1", [
-          parent_key,
-          parent_value,
-          left_sibling.0,
-          current.0,
-        ])
+        current = hasher.hash_string(
+          serialize_authmap_node(
+            parent_key, parent_value, left_sibling, current,
+          ),
+        )
       }
     }
     index -= 1
   }
   map_root(hasher, proof.entry_count, current) == expected_root
+}
+
+///|
+fn dependent_statement_segments(
+  tag : String,
+  fields_before : Array[String],
+  dependency_digest : @bft.Digest,
+  fields_after : Array[String],
+) -> Array[String] {
+  let prefix = StringBuilder::new()
+  append_field(prefix, tag)
+  for field in fields_before {
+    append_field(prefix, field)
+  }
+  prefix.write_string(dependency_digest.0.length().to_string())
+  prefix.write_char(':')
+  let suffix = StringBuilder::new()
+  for field in fields_after {
+    append_field(suffix, field)
+  }
+  [prefix.to_string(), suffix.to_string()]
+}
+
+///|
+fn hash_dependent_statement(
+  hasher : &@bft.Hasher,
+  segments : Array[String],
+  dependency_digest : @bft.Digest,
+) -> @bft.Digest {
+  hasher.hash_string(segments[0] + dependency_digest.0 + segments[1])
+}
+
+///|
+/// Build a leaf-to-root calculation from one canonical starting statement,
+/// exposing only generic string segments and backward dependency indices.
+fn authmap_hash_verification_plan(
+  hasher : &@bft.Hasher,
+  entry_count : Int,
+  path : Array[AuthMapStep],
+  initial_statement : String,
+) -> AuthMapHashVerificationPlan {
+  let mut current = hasher.hash_string(initial_statement)
+  let checks : Array[AuthMapHashCheck] = [
+    {
+      statement_segments: [initial_statement],
+      dependency_check_indices: [],
+      expected_digest: current,
+    },
+  ]
+  let mut path_index = path.length() - 1
+  while path_index >= 0 {
+    let dependency_index = checks.length() - 1
+    let segments = match path[path_index] {
+      DescendedLeft(parent_key, parent_value, right_sibling) =>
+        dependent_statement_segments(
+          "authmap-node-v1",
+          [parent_key, parent_value],
+          current,
+          [right_sibling.0],
+        )
+      DescendedRight(parent_key, parent_value, left_sibling) =>
+        dependent_statement_segments(
+          "authmap-node-v1",
+          [parent_key, parent_value, left_sibling.0],
+          current,
+          [],
+        )
+    }
+    current = hash_dependent_statement(hasher, segments, current)
+    checks.push({
+      statement_segments: segments,
+      dependency_check_indices: [dependency_index],
+      expected_digest: current,
+    })
+    path_index -= 1
+  }
+  let dependency_index = checks.length() - 1
+  let root_segments = dependent_statement_segments(
+    "authmap-root-v1",
+    [entry_count.to_string()],
+    current,
+    [],
+  )
+  current = hash_dependent_statement(hasher, root_segments, current)
+  checks.push({
+    statement_segments: root_segments,
+    dependency_check_indices: [dependency_index],
+    expected_digest: current,
+  })
+  { checks, root_check_index: checks.length() - 1 }
+}
+
+///|
+/// Build the same leaf-to-root calculation as `verify_membership`, but expose
+/// only generic string segments and backward dependency indices to host crypto.
+/// Callers must still validate the proof key and ordered-search directions.
+pub fn membership_verification_plan(
+  hasher : &@bft.Hasher,
+  proof : AuthMapProof,
+) -> AuthMapHashVerificationPlan {
+  authmap_hash_verification_plan(
+    hasher,
+    proof.entry_count,
+    proof.path,
+    serialize_authmap_node(
+      proof.key,
+      proof.value,
+      proof.left_digest,
+      proof.right_digest,
+    ),
+  )
+}
+
+///|
+/// Build the same empty-child-to-root calculation as `verify_non_membership`.
+/// The empty map is the two-check chain `empty -> root`.
+/// Callers must still validate count/path shape and ordered-search directions.
+pub fn non_membership_verification_plan(
+  hasher : &@bft.Hasher,
+  proof : AuthMapAbsenceProof,
+) -> AuthMapHashVerificationPlan {
+  authmap_hash_verification_plan(
+    hasher,
+    proof.entry_count,
+    proof.path,
+    serialize_authmap_empty(),
+  )
+}
+
+///|
+fn absence_proof_shape_valid(proof : AuthMapAbsenceProof) -> Bool {
+  !(proof.entry_count < 0 ||
+  (proof.entry_count == 0 && proof.path.length() != 0) ||
+  (proof.entry_count > 0 && proof.path.length() == 0))
+}
+
+///|
+fn absence_step_search_valid(key : String, step : AuthMapStep) -> Bool {
+  match step {
+    DescendedLeft(parent_key, _, _) => key.compare(parent_key) < 0
+    DescendedRight(parent_key, _, _) => key.compare(parent_key) > 0
+  }
+}
+
+///|
+/// Validate only the ordered-search semantics and empty/non-empty path shape.
+/// Root authentication remains the caller's hash-plan or verifier step.
+pub fn absence_proof_search_valid(proof : AuthMapAbsenceProof) -> Bool {
+  if !absence_proof_shape_valid(proof) {
+    return false
+  }
+  for step in proof.path {
+    if !absence_step_search_valid(proof.key, step) {
+      return false
+    }
+  }
+  true
 }
 
 ///|
@@ -569,38 +770,29 @@ pub fn verify_non_membership(
   expected_root : @bft.Digest,
   proof : AuthMapAbsenceProof,
 ) -> Bool {
-  if proof.entry_count < 0 ||
-    (proof.entry_count == 0 && proof.path.length() != 0) ||
-    (proof.entry_count > 0 && proof.path.length() == 0) {
+  if !absence_proof_shape_valid(proof) {
     return false
   }
-  let empty_digest = tagged_hash(hasher, "authmap-empty-v1", [])
+  let empty_digest = hasher.hash_string(serialize_authmap_empty())
   let mut current = empty_digest
   let mut index = proof.path.length() - 1
   while index >= 0 {
+    if !absence_step_search_valid(proof.key, proof.path[index]) {
+      return false
+    }
     match proof.path[index] {
-      DescendedLeft(parent_key, parent_value, right_sibling) => {
-        if proof.key.compare(parent_key) >= 0 {
-          return false
-        }
-        current = tagged_hash(hasher, "authmap-node-v1", [
-          parent_key,
-          parent_value,
-          current.0,
-          right_sibling.0,
-        ])
-      }
-      DescendedRight(parent_key, parent_value, left_sibling) => {
-        if proof.key.compare(parent_key) <= 0 {
-          return false
-        }
-        current = tagged_hash(hasher, "authmap-node-v1", [
-          parent_key,
-          parent_value,
-          left_sibling.0,
-          current.0,
-        ])
-      }
+      DescendedLeft(parent_key, parent_value, right_sibling) =>
+        current = hasher.hash_string(
+          serialize_authmap_node(
+            parent_key, parent_value, current, right_sibling,
+          ),
+        )
+      DescendedRight(parent_key, parent_value, left_sibling) =>
+        current = hasher.hash_string(
+          serialize_authmap_node(
+            parent_key, parent_value, left_sibling, current,
+          ),
+        )
     }
     index -= 1
   }

@@ -62,3 +62,21 @@ test "bench: verify 1000 non-membership proofs in 10000 entries" (b : @bench.T) 
     }
   })
 }
+
+///|
+test "bench: build 1000 non-membership hash plans in 10000 entries" (
+  b : @bench.T,
+) {
+  let hasher = @bft.FnvHasher::new()
+  let map = benchmark_map(10000)
+  let proof = match map.absence_proof("asset-missing") {
+    Some(proof) => proof
+    None => abort("benchmark map non-membership proof missing")
+  }
+  b.bench(fn() {
+    for _ in 0..<1000 {
+      let plan = non_membership_verification_plan(hasher, proof)
+      b.keep(plan.checks[plan.root_check_index].expected_digest)
+    }
+  })
+}

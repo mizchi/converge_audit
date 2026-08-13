@@ -1,0 +1,32 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/converge_audit/x/game_audit/inventory_transition"
+
+import {
+  "mizchi/converge_audit",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn inventory_lineage_transition_root(&@converge_audit.Hasher, InventoryLineageTransition) -> @converge_audit.Digest
+
+pub fn inventory_lineage_transition_valid(InventoryLineageTransition) -> Bool
+
+pub fn serialize_inventory_lineage_transition(InventoryLineageTransition) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct InventoryLineageTransition {
+  asset_id : String
+  origin_receipt_digest : @converge_audit.Digest
+  from_owner : String
+  to_owner : String
+  expected_version : Int
+  previous_event : @converge_audit.Digest
+  source_event : @converge_audit.Digest
+  previous_lineage_root : @converge_audit.Digest
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits

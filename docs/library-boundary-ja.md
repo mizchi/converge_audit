@@ -1,6 +1,6 @@
 # mizchi/converge_audit のライブラリ境界
 
-更新日: 2026-08-11
+更新日: 2026-08-12
 
 ## 結論
 
@@ -39,7 +39,7 @@ deployment policyである。
 | package | 判断 | 理由 |
 | --- | --- | --- |
 | `audit/commitment` | 汎用 | payloadを解釈せずrootとparentを拘束する |
-| `audit/merkle`, `audit/authmap` | 汎用 | inclusion/non-inclusion proofだけを扱う |
+| `audit/merkle`, `audit/authmap` | 汎用 | inclusion/non-inclusion proof、canonical statement、host暗号向け依存hash planだけを扱う |
 | `audit/layered` | 汎用 | opaque canonical eventをwatermarkで集約する |
 | `audit/runtime` | 汎用 | seal/outbox/ACK/local store/peer retryの純粋契約 |
 | `audit/delivery_auth` | 汎用 | destination固有statementとproducer/witness認証だけを扱う |
@@ -50,6 +50,9 @@ deployment policyである。
 | `x/game_audit/checkpoint` | ゲームadapter | game checkpointを共通commitmentへ射影する |
 | `x/game_audit/attestation` | ゲームpolicy | 汎用quorumをreplay/finalityへ接続する |
 | `x/game_audit/replay`, `pvp_session`, `open_world` | ゲーム固有 | 状態遷移と合法性を解釈する |
+| `x/game_audit/inventory_origin` | 軽量game contract | browser/serverが共有するorigin canonical化と2段hash plan。状態・Map・JSONへ依存しない |
+| `x/game_audit/inventory_record` | 軽量game contract | browser/serverが共有するcurrent inventory record canonical化。状態・Map・JSONへ依存しない |
+| `x/game_audit/inventory_transition` | 軽量game contract | browser/serverが共有するparent-bound lineage transition canonical化。状態・Map・JSONへ依存しない |
 | `x/game_audit/inventory`, `market` | 実験的domain | asset生成・所有・出品規則を持つ |
 | `x/game_audit/wire`, `crypto`, `worker` | ゲームadapter | bundle schema、暗号backend、deploy用compositionを持つ |
 | `x/game_audit/quint_asset_driver` | 検証adapter | `quint_connect`のITFをgame asset policyへ射影する。runtime dependencyではない |

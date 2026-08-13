@@ -7,6 +7,18 @@ import {
 }
 
 // Values
+pub fn absence_proof_search_valid(AuthMapAbsenceProof) -> Bool
+
+pub fn membership_verification_plan(&@converge_audit.Hasher, AuthMapProof) -> AuthMapHashVerificationPlan
+
+pub fn non_membership_verification_plan(&@converge_audit.Hasher, AuthMapAbsenceProof) -> AuthMapHashVerificationPlan
+
+pub fn serialize_authmap_empty() -> String
+
+pub fn serialize_authmap_node(String, String, @converge_audit.Digest, @converge_audit.Digest) -> String
+
+pub fn serialize_authmap_root(Int, @converge_audit.Digest) -> String
+
 pub fn verify_membership(&@converge_audit.Hasher, @converge_audit.Digest, AuthMapProof) -> Bool
 
 pub fn verify_non_membership(&@converge_audit.Hasher, @converge_audit.Digest, AuthMapAbsenceProof) -> Bool
@@ -18,6 +30,17 @@ pub(all) struct AuthMapAbsenceProof {
   key : String
   entry_count : Int
   path : Array[AuthMapStep]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct AuthMapHashCheck {
+  statement_segments : Array[String]
+  dependency_check_indices : Array[Int]
+  expected_digest : @converge_audit.Digest
+} derive(Eq, @debug.Debug)
+
+pub(all) struct AuthMapHashVerificationPlan {
+  checks : Array[AuthMapHashCheck]
+  root_check_index : Int
 } derive(Eq, @debug.Debug)
 
 pub(all) enum AuthMapMutation {

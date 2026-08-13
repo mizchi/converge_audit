@@ -72,3 +72,63 @@ test "browser and server share replay-witness manifest framing" {
     "",
   )
 }
+
+///|
+test "browser exposes both MoonBit-owned inventory origin statements" {
+  let receipt_statement = audit_browser_inventory_origin_receipt_statement(
+    "asset-1", "alice", "raid-token", 2, "loot-event", 3,
+  )
+  let receipt_digest = audit_browser_sha256(receipt_statement)
+  let lineage_statement = audit_browser_inventory_origin_lineage_statement(
+    receipt_digest,
+  )
+  assert_true(receipt_statement != "")
+  assert_true(lineage_statement != "")
+  assert_true(audit_browser_sha256(lineage_statement) != receipt_digest)
+  assert_eq(
+    audit_browser_inventory_origin_receipt_statement(
+      "", "alice", "raid-token", 2, "loot-event", 3,
+    ),
+    "",
+  )
+  assert_eq(audit_browser_inventory_origin_lineage_statement(""), "")
+}
+
+///|
+test "browser exposes the MoonBit-owned inventory lineage transition statement" {
+  let statement = audit_browser_inventory_lineage_transition_statement(
+    "asset-雪😀", "origin-digest", "alice-猫", "bob-犬", 2, "previous-event",
+    "transfer-event", "previous-root",
+  )
+  assert_true(statement != "")
+  assert_true(audit_browser_sha256(statement) != "")
+  assert_eq(
+    audit_browser_inventory_lineage_transition_statement(
+      "", "origin-digest", "alice", "bob", 2, "previous", "source", "root",
+    ),
+    "",
+  )
+}
+
+///|
+test "browser exposes MoonBit-owned inventory record and AuthMap statements" {
+  let record = audit_browser_inventory_record_statement(
+    "asset-雪😀", "alice-猫", "raid-token", 2, "loot-event", 3, "origin-digest",
+    1, "transfer-event", "lineage-root",
+  )
+  let leaf = audit_browser_authmap_node_statement(
+    "asset-雪😀", record, "left-digest", "right-digest",
+  )
+  let leaf_digest = audit_browser_sha256(leaf)
+  let root = audit_browser_authmap_root_statement(1, leaf_digest)
+  let empty = audit_browser_authmap_empty_statement()
+  let empty_digest = audit_browser_sha256(empty)
+  let empty_root = audit_browser_authmap_root_statement(0, empty_digest)
+  assert_true(record != "")
+  assert_true(leaf != "")
+  assert_true(root != "")
+  assert_true(empty != "")
+  assert_true(empty_root != "")
+  assert_true(audit_browser_sha256(root) != leaf_digest)
+  assert_eq(audit_browser_authmap_root_statement(-1, empty_digest), "")
+}

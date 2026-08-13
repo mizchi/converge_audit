@@ -1,6 +1,9 @@
 import type { InventoryCheckpointCertificateAuthenticationTranscript } from "./inventory-checkpoint-certificate";
 import type { InventoryCheckpointSemanticTranscript } from "./inventory-checkpoint-semantics";
 import type { InventoryMembershipTranscript } from "./inventory-membership-semantics";
+import type { InventoryOriginSemanticTranscript } from "./inventory-origin-semantics";
+import type { OpenWorldMissingSlotTranscript } from "./open-world-missing-slot-semantics";
+import type { DigestVerificationPlan } from "../../player-local-runtime/digest-verification-plan";
 
 type AuditModule = typeof import("../../../_build/js/release/build/x/game_audit/worker/worker.js");
 
@@ -15,6 +18,11 @@ export interface LoadedCheckpointRuntime {
 const loadedCheckpointRuntimeCapability: LoadedCheckpointRuntime = Object.freeze({
   [loadedCheckpointRuntime]: true as const,
 });
+
+function moonBitNonNegativeInt(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0 &&
+    (value as number) <= 2_147_483_647;
+}
 
 async function loadAuditModule(): Promise<AuditModule> {
   auditModule ??= await import(
@@ -317,6 +325,59 @@ export type OpenWorldPveReplayVerification =
   | VerifiedOpenWorldPveReplay
   | RefusedOpenWorldPveReplay;
 
+export interface OpenWorldMissingSlotProofInput {
+  expectedRegistryRoot: string;
+  registeredCount: number;
+  registrationIndex: number;
+  proofEntryCount: number;
+  directions: Array<"left" | "right">;
+  parentKeys: string[];
+  parentValues: string[];
+  siblingDigests: string[];
+}
+
+export interface RefusedOpenWorldMissingSlotProof {
+  ok: false;
+  error: string;
+}
+
+export type OpenWorldMissingSlotProofVerification =
+  | OpenWorldMissingSlotTranscript
+  | RefusedOpenWorldMissingSlotProof;
+
+export type OpenWorldMissingSlotEvidenceSource =
+  | "authority_signed_encounter"
+  | "observer_quorum";
+
+export interface OpenWorldMissingSlotConflictInput {
+  bundleHex: string;
+  expectedWorldId: string;
+  expectedAuthorityKey: string;
+  expectedTransparencyLogSessionId: string;
+  expectedTransparencyPublisherKey: string;
+  expectedTransparencyCheckpointDigest: string;
+  expectedAuditCheckpointDigest: string;
+  expectedSealCheckpointDigest: string;
+  expectedEncounterCheckpointDigest: string;
+  expectedRegistrationIndex: number;
+  evidenceSource: OpenWorldMissingSlotEvidenceSource;
+}
+
+export interface OpenWorldMissingSlotConflictTranscript
+  extends OpenWorldMissingSlotTranscript {
+  decision: "persist_conflict";
+  kind: "missing_slot";
+  source: OpenWorldMissingSlotEvidenceSource;
+  audit_checkpoint_digest: string;
+  seal_checkpoint_digest: string;
+  encounter_digest: string;
+  observer_approvals: number | null;
+}
+
+export type OpenWorldMissingSlotConflictVerification =
+  | OpenWorldMissingSlotConflictTranscript
+  | RefusedOpenWorldMissingSlotProof;
+
 export interface VerifiedInventoryListing {
   ok: true;
   complete: true;
@@ -335,6 +396,7 @@ export interface VerifiedInventoryListing {
   required_approvals: number;
   checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
   checkpoint_semantics: InventoryCheckpointSemanticTranscript;
+  inventory_origins: InventoryOriginSemanticTranscript;
   inventory_membership: InventoryMembershipTranscript;
   bundle_bytes: number;
 }
@@ -389,6 +451,7 @@ export interface VerifiedInventoryCheckpoint {
   required_approvals: number;
   checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
   checkpoint_semantics: InventoryCheckpointSemanticTranscript;
+  inventory_origins: InventoryOriginSemanticTranscript;
   inventory_membership: InventoryMembershipTranscript;
   bundle_bytes: number;
 }
@@ -430,7 +493,7 @@ export interface InventoryLineageAuthenticationCheck {
   signature: string;
 }
 
-export interface VerifiedInventoryLineage {
+export interface VerifiedInventoryLineage extends DigestVerificationPlan {
   ok: true;
   complete: true;
   checkpoint_digest: string;
@@ -448,6 +511,7 @@ export interface VerifiedInventoryLineage {
   authentication_checks: InventoryLineageAuthenticationCheck[];
   checkpoint_authentication: InventoryCheckpointCertificateAuthenticationTranscript;
   checkpoint_semantics: InventoryCheckpointSemanticTranscript;
+  inventory_origins: InventoryOriginSemanticTranscript;
   inventory_membership: InventoryMembershipTranscript;
   final_owner_id: string;
   final_version: number;
@@ -758,6 +822,19 @@ export async function marketplaceCreationPersistAllowed(input: {
   );
 }
 
+export async function openWorldMissingSlotPersistAllowed(input: {
+  conflictCapabilityIssued: boolean;
+  standardNonMembershipVerified: boolean;
+  exactTranscriptBinding: boolean;
+}): Promise<boolean> {
+  const audit = await loadAuditModule();
+  return audit.audit_open_world_missing_slot_persist_allowed(
+    input.conflictCapabilityIssued,
+    input.standardNonMembershipVerified,
+    input.exactTranscriptBinding,
+  );
+}
+
 export async function inventoryHeadAdvanceAllowed(input: {
   creationEligible: boolean;
   proofVerified: boolean;
@@ -955,6 +1032,111 @@ export async function verifyOpenWorldPveReplayBundle(
       expectedEncounterCheckpointDigest,
     ),
   ) as OpenWorldPveReplayVerification;
+}
+
+export async function openWorldEncounterRegistrationKey(
+  registrationIndex: number,
+): Promise<string> {
+  if (!moonBitNonNegativeInt(registrationIndex)) return "";
+  const audit = await loadAuditModule();
+  return audit.audit_open_world_encounter_registration_key(registrationIndex);
+}
+
+/**
+ * Open the authenticated-map absence half of missing-slot evidence in MoonBit.
+ * This does not authenticate the signed seal or the encounter/observer claim.
+ */
+export async function verifyOpenWorldMissingSlotProof(
+  input: OpenWorldMissingSlotProofInput,
+): Promise<OpenWorldMissingSlotProofVerification> {
+  if (typeof input !== "object" || input === null) {
+    return { ok: false, error: "invalid_non_membership_shape" };
+  }
+  if (!/^[0-9a-f]{64}$/.test(input.expectedRegistryRoot)) {
+    return { ok: false, error: "invalid_expected_registry_root" };
+  }
+  if (!Array.isArray(input.directions)) {
+    return { ok: false, error: "invalid_non_membership_shape" };
+  }
+  const pathLength = input.directions.length;
+  if (
+    !moonBitNonNegativeInt(input.registeredCount) ||
+    input.registeredCount <= 0 ||
+    !moonBitNonNegativeInt(input.registrationIndex) ||
+    input.registrationIndex >= input.registeredCount ||
+    !moonBitNonNegativeInt(input.proofEntryCount) || pathLength > 64 ||
+    !Array.isArray(input.parentKeys) || input.parentKeys.length !== pathLength ||
+    !Array.isArray(input.parentValues) ||
+    input.parentValues.length !== pathLength ||
+    !Array.isArray(input.siblingDigests) ||
+    input.siblingDigests.length !== pathLength
+  ) {
+    return { ok: false, error: "invalid_non_membership_shape" };
+  }
+  const audit = await loadAuditModule();
+  return JSON.parse(
+    audit.audit_verify_open_world_missing_slot_proof(
+      input.expectedRegistryRoot,
+      input.registeredCount,
+      input.registrationIndex,
+      input.proofEntryCount,
+      input.directions,
+      input.parentKeys,
+      input.parentValues,
+      input.siblingDigests,
+    ),
+  ) as OpenWorldMissingSlotProofVerification;
+}
+
+/**
+ * Open a missing-slot accusation only after authenticating the signed
+ * audit/seal boundary and one independently authenticated left-hand source.
+ * The successful transcript must still be recomputed with standard host
+ * crypto before a mutation is allowed.
+ */
+export async function openWorldMissingSlotConflict(
+  input: OpenWorldMissingSlotConflictInput,
+): Promise<OpenWorldMissingSlotConflictVerification> {
+  const digestValid = (value: unknown): value is string =>
+    typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+  const boundedText = (value: unknown): value is string =>
+    typeof value === "string" && value.length > 0 && value.length <= 4_096;
+  if (
+    typeof input !== "object" || input === null ||
+    typeof input.bundleHex !== "string" || input.bundleHex.length === 0 ||
+    input.bundleHex.length > 2_097_152 || input.bundleHex.length % 2 !== 0 ||
+    !/^[0-9a-f]+$/.test(input.bundleHex) ||
+    !boundedText(input.expectedWorldId) ||
+    !boundedText(input.expectedTransparencyLogSessionId) ||
+    !digestValid(input.expectedAuthorityKey) ||
+    !digestValid(input.expectedTransparencyPublisherKey) ||
+    !digestValid(input.expectedTransparencyCheckpointDigest) ||
+    !digestValid(input.expectedAuditCheckpointDigest) ||
+    !digestValid(input.expectedSealCheckpointDigest) ||
+    !digestValid(input.expectedEncounterCheckpointDigest) ||
+    !moonBitNonNegativeInt(input.expectedRegistrationIndex) ||
+    input.expectedRegistrationIndex >= 2_147_483_647 ||
+    (input.evidenceSource !== "authority_signed_encounter" &&
+      input.evidenceSource !== "observer_quorum")
+  ) {
+    return { ok: false, error: "invalid_missing_slot_conflict_input" };
+  }
+  const audit = await loadAuditModule();
+  return JSON.parse(
+    audit.audit_verify_open_world_missing_slot_conflict(
+      input.bundleHex,
+      input.expectedWorldId,
+      input.expectedAuthorityKey,
+      input.expectedTransparencyLogSessionId,
+      input.expectedTransparencyPublisherKey,
+      input.expectedTransparencyCheckpointDigest,
+      input.expectedAuditCheckpointDigest,
+      input.expectedSealCheckpointDigest,
+      input.expectedEncounterCheckpointDigest,
+      input.expectedRegistrationIndex,
+      input.evidenceSource,
+    ),
+  ) as OpenWorldMissingSlotConflictVerification;
 }
 
 export async function verifyInventoryListingProofBundle(

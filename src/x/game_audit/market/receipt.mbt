@@ -55,15 +55,14 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 ///|
 /// Canonical payload committed as a Merkle leaf.
 pub fn serialize_item_receipt(receipt : ItemReceipt) -> String {
-  let buffer = StringBuilder::new()
-  append_field(buffer, "item-receipt-v1")
-  append_field(buffer, receipt.asset_id)
-  append_field(buffer, receipt.recipient_id)
-  append_field(buffer, receipt.item_type)
-  append_field(buffer, receipt.quantity.to_string())
-  append_field(buffer, receipt.source_event.0)
-  append_field(buffer, receipt.output_index.to_string())
-  buffer.to_string()
+  @inventory_origin.serialize_item_receipt({
+    asset_id: receipt.asset_id,
+    recipient_id: receipt.recipient_id,
+    item_type: receipt.item_type,
+    quantity: receipt.quantity,
+    source_event: receipt.source_event,
+    output_index: receipt.output_index,
+  })
 }
 
 ///|
