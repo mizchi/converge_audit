@@ -15,6 +15,18 @@ export interface LoadedCheckpointRuntime {
   readonly [loadedCheckpointRuntime]: true;
 }
 
+export type OpenWorldObserverSigningDecision =
+  | "sign_new"
+  | "reuse_existing"
+  | "reject_conflict"
+  | "reject_invalid";
+
+export interface OpenWorldObserverSigningStoreSnapshot {
+  ok: true;
+  root: string;
+  size: number;
+}
+
 const loadedCheckpointRuntimeCapability: LoadedCheckpointRuntime = Object.freeze({
   [loadedCheckpointRuntime]: true as const,
 });
@@ -568,6 +580,57 @@ export async function openCheckpointClosure(input: {
 export async function loadCheckpointRuntime(): Promise<LoadedCheckpointRuntime> {
   await loadAuditModule();
   return loadedCheckpointRuntimeCapability;
+}
+
+export function classifyOpenWorldObserverSigningSync(
+  runtime: LoadedCheckpointRuntime,
+  input: {
+    targetValid: boolean;
+    previousObservationPresent: boolean;
+    previousDigestMatches: boolean;
+  },
+): OpenWorldObserverSigningDecision {
+  if (runtime !== loadedCheckpointRuntimeCapability || !auditModule) {
+    throw new Error("MoonBit checkpoint runtime must be loaded before observer signing");
+  }
+  return auditModule.audit_classify_open_world_observer_signing(
+    input.targetValid,
+    input.previousObservationPresent,
+    input.previousDigestMatches,
+  ) as OpenWorldObserverSigningDecision;
+}
+
+export function openWorldObserverSigningKeySync(
+  runtime: LoadedCheckpointRuntime,
+  auditCheckpointDigest: string,
+  registrationIndex: number,
+): string {
+  if (runtime !== loadedCheckpointRuntimeCapability || !auditModule) {
+    throw new Error("MoonBit checkpoint runtime must be loaded before observer signing");
+  }
+  return auditModule.audit_open_world_observer_signing_key(
+    auditCheckpointDigest,
+    registrationIndex,
+  );
+}
+
+export function openWorldObserverSigningStoreSnapshotSync(
+  runtime: LoadedCheckpointRuntime,
+  records: ReadonlyArray<{ signingKey: string; encounterDigest: string }>,
+): OpenWorldObserverSigningStoreSnapshot {
+  if (runtime !== loadedCheckpointRuntimeCapability || !auditModule) {
+    throw new Error("MoonBit checkpoint runtime must be loaded before observer signing");
+  }
+  const result = JSON.parse(
+    auditModule.audit_open_world_observer_signing_store_snapshot(
+      records.map((record) => record.signingKey),
+      records.map((record) => record.encounterDigest),
+    ),
+  ) as OpenWorldObserverSigningStoreSnapshot | { ok: false; error: string };
+  if (!result.ok) {
+    throw new Error(`MoonBit observer signing snapshot refused: ${result.error}`);
+  }
+  return result;
 }
 
 /**

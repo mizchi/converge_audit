@@ -49,4 +49,3 @@ pub(all) enum PvpReplayWitnessSigningResult {
 // Type aliases
 
 // Traits
-

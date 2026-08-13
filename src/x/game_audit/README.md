@@ -67,10 +67,14 @@ link under world/epoch-specific authenticated-map keys. See
 constraints.
 
 `OpenWorldObserverSigningStore` is the persistence boundary. Its in-memory
-adapter tests sequential compare-and-set behavior; a production adapter must
-atomically and durably reserve a slot before returning success. Restoring a
-ledger can require an exact trusted `(observer, key, root, size)` anchor, which
-rejects empty or foreign snapshots. A domain-separated authority checkpoint
+adapter tests sequential compare-and-set behavior. The Cloudflare reference
+uses a SQLite-backed Durable Object to atomically commit the reservation and
+monotonic sequence before a separate signer is called. Exact retry is allowed;
+a conflicting digest is rejected without changing the authenticated root.
+Fault injection, signer failure, eviction/restart, concurrent conflicts,
+schema mismatch, and row corruption are tested. Restoring a ledger can require
+an exact trusted `(observer, key, root, size)` anchor, which rejects empty,
+stale, or foreign snapshots. A domain-separated authority checkpoint
 can publish a key-unique authenticated map of these anchors; exact membership
 opens an opaque capability consumed by ledger restore. A concrete
 head tracker advances only through the exact next parent and creates opaque
@@ -79,8 +83,8 @@ ordered gap response is planned without mutation and committed only when every
 head is valid. `wire` adds versioned canonical CBOR, allocation preflight, and
 receiver budgets. `crypto` connects the unaudited `experimental_crypto`
 SHA-256/Ed25519 implementation for known-vector integration and realistic cost
-measurement; it is not a production-security claim. A concrete
-crash-safe/concurrent store, production socket/gossip transport, audited crypto
+measurement; it is not a production-security claim. A device/mobile store,
+external signer credential, production socket/gossip transport, audited crypto
 backend, and durable head-history transaction remain integration work.
 `worker` exposes the narrow JS/wasm-gc bridge used by
 `examples/cf-game-audit`: benchmark fixture generation, full envelope opening,
@@ -113,8 +117,8 @@ still omit transfer history. The Worker retains at most 256 challenged
 transfers per asset and blocks listings and head advancement until all open
 revocations are appealed. Both decision endpoints now require a
 domain-separated external-arbiter certificate, persist provisional/finalized
-decision metadata, and enforce an exact timed appeal target. Observer
-signing-store durability, transparency-head remote witness quorum, Merkle
+decision metadata, and enforce an exact timed appeal target. Device-side
+observer signing persistence and key custody, transparency-head remote witness quorum, Merkle
 pruning beyond the hard retention cap, player-local persistence for the
 multi-asset write set, production arbiter key rotation, and production
 cryptography remain open.

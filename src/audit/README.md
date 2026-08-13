@@ -1,9 +1,10 @@
-# 汎用 checkpoint audit 層
+# Generic checkpoint audit layer
 
-`src/audit/` は、CRDT や local-first DB に接続できるゲーム非依存の監査契約を提供する。
-ここで扱うのは checkpoint の構造、保持期間から得られる検証精度、head 遷移、
-Merkle/authenticated-map の compact proof である。cooldown、命中、loot、勝敗などの
-ゲーム規則は application が deterministic kernel として実装する。
+`src/audit/` provides game-independent audit contracts that can attach to a
+CRDT or local-first database. It defines checkpoint structure, localization
+precision derived from retention, head transitions, and compact Merkle and
+authenticated-map proofs. Cooldowns, hits, loot, and victory conditions belong
+to an application-specific deterministic kernel.
 
 ```text
 authenticated canonical events ── layered watermark builder
@@ -18,56 +19,62 @@ application checkpoint ── CheckpointAdapter ── CheckpointCommitment
                                       application-owned replay policy
 ```
 
-## パッケージ境界
+## Package boundary
 
-| package | 汎用契約 |
+| Package | Generic contract |
 | --- | --- |
-| `audit` | checkpoint cadence/retention capability、精度・finality 見積り、storage 非依存 head classifier、MoonBit proof |
-| `audit/commitment` | ゲーム固有 checkpoint を共通 commitment へ射影する trait |
-| `audit/merkle` | immutable Merkle tree と inclusion proof |
-| `audit/authmap` | deterministic authenticated treap と membership/non-membership proof |
-| `audit/layered` | watermark駆動のevent→micro→macro builderと二段 inclusion proof |
-| `audit/runtime` | trusted closure、atomic seal/outbox/ACK、player-local論理DB、peer fanout/retry選択 |
-| `audit/delivery_auth` | destination固有checkpointのproducer署名とdistinct witness quorumをopaque capabilityへ変換 |
-| `audit/key_lifecycle` | historical key binding、有効期間、effective revocationのfail-closed admissionとproof |
-| `audit/quorum` | opaque subjectへのdomain-separated vote、roster認証、重複排除、equivocation収束 |
-| `audit/quorum/vote` | vote join-semilatticeと可換・結合・冪等・equivocation吸収のproof |
-| `audit/runtime/bridge` | Node/Worker等から利用するprimitive/JSONの小さいJS/Wasm bridge |
+| `audit` | Cadence/retention capabilities, precision and finality estimates, storage-neutral head classification, and MoonBit proofs |
+| `audit/commitment` | Trait that projects an application checkpoint into a common commitment |
+| `audit/merkle` | Immutable Merkle trees and inclusion proofs |
+| `audit/authmap` | Deterministic authenticated treaps and membership/non-membership proofs |
+| `audit/layered` | Watermark-driven event → micro → macro construction and two-level proofs |
+| `audit/runtime` | Trusted closure, atomic seal/outbox/ACK contracts, a logical player-local store, and peer fanout/retry selection |
+| `audit/delivery_auth` | Producer signatures and distinct-witness quorum for destination-specific checkpoints, exposed as opaque capabilities |
+| `audit/key_lifecycle` | Fail-closed historical key binding, validity, effective revocation, and proofs |
+| `audit/quorum` | Domain-separated votes over opaque subjects, roster authentication, deduplication, and convergent equivocation handling |
+| `audit/quorum/vote` | Vote join-semilattice with commutative, associative, idempotent, and equivocation-absorbing proofs |
+| `audit/runtime/bridge` | Small primitive/JSON JS and Wasm bridge for Node, Workers, and other hosts |
 
-`CheckpointCommitment` は scope、epoch、previous checkpoint、manifest、event、state、
-effect、任意の sealed-state commitment だけを固定する。digest の具体表現、署名、event decode、
-replay、永続化 transaction は adapter 側の責務である。
+`CheckpointCommitment` fixes only the scope, epoch, previous checkpoint,
+manifest, event, state, effect, and optional sealed-state commitment. Concrete
+digest representation, signatures, event decoding, replay, and persistence
+transactions remain adapter responsibilities.
 
-persistence/transport adapterが満たすべきatomic seal、durable outbox、ACK、ordered retry、
-crash recoveryの規範は
-[ゲーム監査 persistence / transport 実装契約](../../docs/game-audit-implementation-contract-ja.md)に置く。
-現在の`LayeredCheckpointBuilder`自体はin-memory builderである。`PlayerLocalAuditStore`は
-event/equivocation/checkpoint/head/closure/outbox/ACK履歴を同一revisionでcommitし、公開された
-永続row DTOからrestart復元する参照adapterを提供する。ACK済みoutboxだけで対応ACK履歴がないimageは
-復元しない。SQLite/IndexedDBの物理transaction、row encoding、fsyncは
-host adapterの責務であり、端末用production DBが完成したという意味ではない。
+The normative atomic-seal, durable-outbox, ACK, ordered-retry, and crash-
+recovery requirements are in the
+[persistence and transport contract](../../docs/game-audit-implementation-contract-ja.md).
+`LayeredCheckpointBuilder` is currently an in-memory builder.
+`PlayerLocalAuditStore` is a logical reference adapter that commits event,
+equivocation, checkpoint, head, closure, outbox, and ACK history under one
+revision and restores from public durable row DTOs. It rejects an image that
+contains acknowledged outbox rows without corresponding ACK history. Physical
+SQLite/IndexedDB transactions, row encoding, fsync, and device hardening remain
+host concerns.
 
-peer transportについては、persist済みleast-recently-attempted順のbounded fanout、in-flight
-backpressure、上限付き指数backoff、成功reset、認証済みresponseの最速選択、認証済み異digestの
-fork優先をpure contractとして持つ。socket/WebTransport/WebSocketと端末credentialは未接続である。
+Peer transport has pure contracts for persisted least-recently-attempted
+bounded fanout, in-flight backpressure, capped exponential backoff, success
+reset, fastest authenticated-response selection, and preference for an
+authenticated conflicting digest as fork evidence. Socket/WebTransport/
+WebSocket I/O and device credentials are not part of this generic layer.
 
-ゲーム固有の preset、PvE/PvP kernel、witness rosterの選定とfinality条件、open-world sampling、
-inventory、marketplace は `src/x/game_audit/` に残す。したがって `mizchi/converge_audit` の汎用層を使っても、
-「その操作がゲーム上合法」という結論は application の replay verifier なしには得られない。
-詳細な昇格基準と保証境界は
-[ライブラリ境界](../../docs/library-boundary-ja.md)に記録する。
+Game presets, PvE/PvP kernels, witness-roster selection and finality policy,
+open-world sampling, inventory, and marketplaces remain under
+`src/x/game_audit/`. Using the generic layer alone never proves that an action
+was legal under a game's rules. See the
+[library boundary](../../docs/library-boundary-ja.md) for promotion criteria
+and explicit non-guarantees.
 
-## 精度と計算量
+## Precision and complexity
 
-検証済み policy は次の包含関係を満たす。
+The verified policy enforces:
 
 ```text
 0 < event interval <= micro interval <= macro interval
 macro interval <= event retention <= micro retention <= macro retention
 ```
 
-証拠の age を `a`、各 interval を `δ`, `μ`, `T` とすると、保持中の時間方向の局所化精度は
-次のように段階的に粗くなる。境界値は保持側に含む。
+For evidence age `a` and intervals `δ`, `μ`, and `T`, temporal localization
+degrades in steps. Retention boundaries are inclusive.
 
 ```text
 a <= event retention : δ
@@ -76,70 +83,88 @@ a <= macro retention : T
 otherwise             : evidence expired
 ```
 
-一つの macro checkpoint が覆う event leaf 数は `ceil(T / δ)`、二分探索で不一致を
-一 leaf まで絞る round 数は `ceil(log2(ceil(T / δ)))` である。API は整数の反復 ceiling
-division で計算する。
+One macro checkpoint covers `ceil(T / δ)` event leaves. Binary localization to
+one leaf needs `ceil(log2(ceil(T / δ)))` rounds. The API uses iterative integer
+ceiling division.
 
-event が macro interval に一様に到着すると仮定した finality 見積りは、平均が
-`floor(T / 2) + mean validation latency`、上限見積りが
-`T + supplied p99 validation latency` である。これは測定値から作る engineering estimate
-であり、network/disk の SLA や cheat 検出率の保証ではない。
+Assuming events arrive uniformly within a macro interval, estimated finality is
+`floor(T / 2) + mean validation latency` on average and
+`T + supplied p99 validation latency` conservatively. These are engineering
+estimates derived from measurements, not network/disk SLAs or cheat-detection
+probabilities.
 
-## 階層checkpoint builder
+## Layered checkpoint builder
 
-`LayeredCheckpointBuilder` は認証済みcanonical eventをevent timeとともに保持し、単調な
-watermarkがwindow境界を越えたときだけsealする。event timeはclient wall clockではなく、
-applicationが認証・割当したaudit timeでなければならない。
+`LayeredCheckpointBuilder` retains authenticated canonical events with event
+time and seals only when a monotonic watermark crosses a window boundary.
+Event time must be audit time authenticated or assigned by the application,
+not an untrusted client wall clock.
 
-- `event_time < watermark` はlate eventとして拒否する。
-- `event_time == watermark` は次の未確定範囲として受理する。
-- 同じcanonical payloadの再送はpending中idempotentに扱う。
-- window内payloadはsortしてからMerkle化するためarrival orderに依存しない。
-- canonical payloadにはsession内で一意なevent IDを含める。
-- macro境界がmicro境界と一致しない場合、最後のmicroをmacro境界でforce-closeする。
-- macroは直前macro digestを含み、各microのmetadataとevent rootをMerkle rootへ拘束する。
-- catch-upは`max_windows`を超えると一切mutationせず拒否し、拒否判定も
-  `max_windows + 1`走査で打ち切る。
+- `event_time < watermark` is rejected as late.
+- `event_time == watermark` belongs to the next unsealed range.
+- An exact canonical-payload retry is idempotent while pending.
+- Payloads are sorted before Merkle construction, so arrival order is irrelevant.
+- Canonical payloads must contain session-unique event IDs.
+- If macro and micro boundaries do not align, the final micro window is forcibly
+  closed at the macro boundary.
+- A macro binds the previous macro digest plus every micro's metadata and event
+  root under a Merkle root.
+- Catch-up beyond `max_windows` refuses without mutation, and refusal scanning
+  stops after `max_windows + 1` windows.
 
-保持中はevent→microとmicro→macroの二段inclusion proofを生成できる。compact metadataだけへ
-stripした後はleaf proof生成能力を失うが、外部から提示されたproofの検証は可能である。
+While full retention remains, the builder can produce event→micro and
+micro→macro inclusion proofs. After compaction to metadata it can still verify
+externally supplied proofs, but can no longer generate leaf proofs.
 
-pending duplicate lookupはexpected `O(1)`、一windowのsealはcanonical sortを含む
-`O(n log n)`、proof生成・検証は`O(log n)`である。FNV test backendによる現在のbenchmarkでは、
-1000 eventを一microへsealして約1.0 ms、15 microを含むmacroまでsealして約1.2 msだった。
-production hashでの値ではないため、採用gameのbackendで再測定する。
+Expected pending-duplicate lookup is `O(1)`. Sealing one window is
+`O(n log n)` because of canonical sorting; proof generation and verification
+are `O(log n)`. The current FNV test backend seals 1,000 events into one micro
+in roughly 1.0 ms and through a 15-micro macro in roughly 1.2 ms. Re-measure
+with the production hash backend chosen by the application.
 
-## head 遷移
+## Head transitions
 
-`classify_checkpoint_head` は認証済み入力と storage lookup の結果だけを受け取り、
-`Advance`, `Duplicate`, `SameEpochFork`, `ParentFork`, `Gap`, `Stale`,
-`BoundaryMismatch` のいずれかを返す。永続化は pure classifier の外で transaction として行う。
-境界不一致は fork accusation にせず、同一 epoch の異なる digest と exact-next epoch の
-wrong parent だけを fork として分類する。
+`classify_checkpoint_head` consumes only authenticated input and storage-lookup
+facts and returns one of `Advance`, `Duplicate`, `SameEpochFork`, `ParentFork`,
+`Gap`, `Stale`, or `BoundaryMismatch`. Persistence is a transaction outside the
+pure classifier. A boundary mismatch is not a fork accusation. Only a different
+digest at the same epoch or a wrong parent at the exact next epoch is classified
+as a fork.
 
-## atomic seal plan
+## Atomic seal plan
 
-`prepare_atomic_checkpoint_seal`はtransaction内で取得したstorage snapshot、canonical
-checkpoint draft、`TrustedEpochClosure`、必要destinationを検査する。exact-nextかつparent一致で、
-closure未消費、destination重複なし、outbox容量内の場合だけopaqueな
-`AtomicCheckpointSealPlan`を返す。planはhistory追加、head更新、全outbox entry追加、closure消費を
-一つのwrite setとして表す。既知digestの完全なcommitは`AlreadyCommitted`、既知異digestや
-parent fork、不完全な既知commitはconflict、gap/stale/capacity不足はrefusalになる。
+`prepare_atomic_checkpoint_seal` checks a storage snapshot read inside the
+transaction, a canonical checkpoint draft, `TrustedEpochClosure`, required
+destinations, and capacity. It returns an opaque `AtomicCheckpointSealPlan` only
+for an exact-next checkpoint with an exact parent, unconsumed closure, distinct
+destinations, and sufficient outbox capacity. The plan represents checkpoint
+history insertion, head update, every outbox insertion, and closure consumption
+as one write set.
 
-plan生成はDB commitではない。adapterは同じtransactionでexpected snapshotをCASし、plan全体を
-適用する必要がある。これによりpure contractはDB/Cloudflare/SQLite固有実装から分離される。
+An exact known complete commit is `AlreadyCommitted`. A known different digest,
+parent fork, or incomplete known commit is a conflict. Gap, stale input, and
+capacity failure are refusals.
 
-## 証明と限界
+Plan construction is not a database commit. The adapter must compare-and-set
+the expected snapshot and apply the entire plan in the same transaction. This
+keeps the pure contract independent of SQLite, Cloudflare, or another physical
+database.
 
-`policy.mbtp`、`head.mbtp`、`time.mbtp`と`quorum/vote/participant_vote.mbtp`は、policyの
-包含関係、保持精度、finalityの算術、headのexact-next/fork、vote mergeの可換・結合・冪等、
-equivocation吸収、watermark未満のlate-event拒否、atomic seal成功時の
-boundary/closure/exact-next/parent/destination/capacity/order条件を Why3/Z3 で検査する。
-runtime testはcapabilityの構築不能性、atomic planの全-or-nothing結果、player-local restart、
-ACK永続化、peer retry/fork選択、階層Merkle生成、境界値、game classifierとの互換性を補う。
+## Proof scope and limitations
 
-証明していないものは hash collision resistance、署名偽造困難性、machine integer overflow、
-storage/transport の liveness、ゲーム kernel の完全性、aimbot 等の観測不能な不正である。
+`policy.mbtp`, `head.mbtp`, `time.mbtp`, and the quorum vote proofs check policy
+containment, retention precision, finality arithmetic, exact-next/fork
+classification, vote-merge algebra, equivocation absorption, late-event
+rejection, and the boundary/closure/parent/destination/capacity/order
+postconditions of a successful atomic seal through Why3/Z3.
+
+Runtime tests cover capability unconstructibility, all-or-nothing plans,
+player-local restart, ACK persistence, peer retry/fork selection, layered
+Merkle construction, boundary values, and compatibility with game classifiers.
+
+This does not prove hash collision resistance, signature unforgeability,
+machine-integer overflow safety, storage/transport liveness, completeness of a
+game kernel, or unobservable cheating such as aimbots.
 
 ```sh
 just test-audit

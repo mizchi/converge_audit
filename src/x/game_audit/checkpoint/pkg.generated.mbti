@@ -76,4 +76,3 @@ pub fn VerifiedCheckpoint::digest(Self) -> @converge_audit.Digest
 // Type aliases
 
 // Traits
-

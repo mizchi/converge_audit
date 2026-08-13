@@ -1,74 +1,87 @@
 # Node player-local audit runtime SQLite adapter
 
-`src/audit/runtime` の `PlayerLocalAuditStore` を、Node.js 24 の組み込み
-`node:sqlite` へ写す参照 adapter である。ゲーム規則は含めず、1 player・1 audit
-boundary を一つの SQLite transaction domain として保存する。
+This is a reference mapping of `src/audit/runtime`'s
+`PlayerLocalAuditStore` to the Node.js 24 built-in `node:sqlite` API. It does
+not contain game rules. One player and one audit boundary share a single
+SQLite transaction domain.
 
-## 境界
+## Trust boundary
 
-- event は署名・digest・boundary 検証後の `PlayerLocalAuditEvent` だけを受け取る。
-- seal は MoonBit の `PlayerLocalSealPlan::write_set()` が出した
-  `PlayerLocalSealWriteSet` だけを受け取る。
-- ACK は MoonBit の opaque authentication gate を通過した evidence だけを渡す。
-- TypeScript の構造型だけでは上の capability を保証できないため、未認証 network
-  payload を直接この adapter へ渡してはならない。
+- It accepts only `PlayerLocalAuditEvent` values whose signature, digest, and
+  boundary were already verified.
+- It accepts only `PlayerLocalSealWriteSet` values emitted by MoonBit's
+  `PlayerLocalSealPlan::write_set()`.
+- ACK evidence must already have passed the opaque MoonBit authentication gate.
+- TypeScript structural typing cannot establish those capabilities. Never pass
+  unauthenticated network payloads directly to this adapter.
 
-公開 DTO は共通host contractの
-[contracts.ts](../player-local-runtime/contracts.ts)をre-exportし、再生成可能な物理実装は
-[player-local-sqlite.ts](./src/player-local-sqlite.ts) に分離した。
+Public DTOs are re-exported from the shared host contract in
+[contracts.ts](../player-local-runtime/contracts.ts). The replaceable physical
+implementation is isolated in
+[player-local-sqlite.ts](./src/player-local-sqlite.ts).
 
-seal は次を一つの `BEGIN IMMEDIATE` で適用する。
+A seal applies this write set under one `BEGIN IMMEDIATE` transaction:
 
 ```text
 revision/snapshot CAS
   -> checkpoint history
   -> head CAS
-  -> all destination outbox rows
+  -> every destination outbox row
   -> consumed closure evidence
   -> next created-order + revision
 ```
 
-途中の4書込み点へ障害を注入した場合は全relationをrollbackする。起動時には全rowから
-論理imageを再構築し、orphan head、欠けたclosure/outbox、ACK evidenceのない
-acknowledged rowを拒否する。event、equivocation、checkpoint、outbox、ACKは線形走査で
-検証し、SQLiteのkey/indexで重複とlookupを制約する。
+Faults injected after any of the four write stages roll the entire transaction
+back. Startup reconstructs the logical image from all rows and rejects orphan
+heads, missing closure/outbox rows, or acknowledged rows without ACK evidence.
+Events, equivocations, checkpoints, outbox entries, and ACKs are validated by a
+linear scan; SQLite keys and indexes constrain duplicates and lookups.
 
-outboxの`capacity`は`pending + in_flight`の配送作業数である。`acknowledged` rowとACK履歴は
-duplicate/retry/appeal用の証跡として残るが、次のsealの配送容量は消費しない。
+Outbox `capacity` counts delivery work in `pending + in_flight`. Acknowledged
+rows and ACK history remain as duplicate/retry/appeal evidence, but no longer
+consume delivery capacity for the next seal.
 
-retentionは配送容量と分離する。MoonBitのpruning guardを通った、appeal floorより古い
-全配送先ACK済みの連続prefixだけを削除し、最後のcheckpoint digestをdurable anchorへ保存する。
-未ACK、equivocation、明示的protected epoch、durableなactive fork/challenge/appeal holdでは停止する。
-holdの配置・解決はcheckpoint/referenceへのexact bindingと認証成功をMoonBit gateで確認し、
-`active -> resolved`をrevision更新と同じtransactionで保存する。resolved holdは対応checkpointの
-prefix prune時にだけ削除する。外部payloadは共通`evidence-hold-wire.ts`のdomain-separated
-canonical statementを設定済みsourceのauthenticatorで検証してから、このlow-level adapterへ渡す。
-low-level `applyEvidenceInbox`は検証済みのhold mutationとsource別hash-chain cursorを同じ
-`BEGIN IMMEDIATE`へ入れ、hold後・cursor後の障害注入でも両方をrollbackする。
-event/checkpoint/outbox/anchorの4障害点は`BEGIN IMMEDIATE`全体をrollbackする。
+Retention is separate from delivery capacity. Only the contiguous prefix that
+is older than the appeal floor, acknowledged by every destination, and accepted
+by the MoonBit pruning guard may be deleted. Its final checkpoint digest becomes
+a durable anchor. Pruning stops at unacknowledged epochs, equivocations,
+explicitly protected epochs, or durable active fork/challenge/appeal holds.
+
+Hold placement and resolution require exact checkpoint/reference binding and a
+successful MoonBit authentication gate. The `active -> resolved` transition is
+stored in the same revision transaction. Resolved holds disappear only when
+their checkpoint prefix is pruned. External payloads use the domain-separated
+canonical statement in `evidence-hold-wire.ts` and a configured authenticator.
+`applyEvidenceInbox` atomically stores verified hold mutations with each
+source's hash-chain cursor; injected faults after either write roll both back.
 
 ## Quint trace replay
 
-[moonbit-checkpoint-policy.ts](./src/moonbit-checkpoint-policy.ts) は汎用MoonBit bridgeのseal、
-authority head分類、ACK gateを型付きで公開する。
-[quint-checkpoint-mbt.ts](./scripts/quint-checkpoint-mbt.ts) は
-`formal/quint/CheckpointDeliveryMbt.qnt`が生成したITF traceをSQLiteへ再生し、各stepで
-event、checkpoint chain、未ACK outbox、authority headを比較する。
+[moonbit-checkpoint-policy.ts](./src/moonbit-checkpoint-policy.ts) exposes the
+generic MoonBit seal, authority-head classifier, and ACK gate with typed
+wrappers. [quint-checkpoint-mbt.ts](./scripts/quint-checkpoint-mbt.ts) replays
+the ITF trace generated by `formal/quint/CheckpointDeliveryMbt.qnt` into
+SQLite and compares the event set, checkpoint chain, unacknowledged outbox, and
+authority head after every step.
 
 ```sh
 just quint-mbt
 ```
 
-capacity 1でACK後に次epochをsealするため、acknowledged tombstoneを容量へ数える実装差も検出する。
+The trace uses capacity 1 and seals the next epoch after ACK, so it also catches
+an implementation that incorrectly counts acknowledged tombstones as capacity.
 
 ## Peer fanout
 
-[moonbit-peer-policy.ts](./src/moonbit-peer-policy.ts) は、生成済みMoonBit JSから
-bounded fair selection、指数backoff、success reset、複数response/fork分類を呼ぶ。
-[peer-route-sqlite.ts](./src/peer-route-sqlite.ts) はendpoint、試行順、retry時刻、durable lease、
-quarantine、認証済みfork evidenceを同じplayer DBへ保存する。
-[peer-checkpoint-transport.ts](./src/peer-checkpoint-transport.ts) は状態とpolicyから分離したI/O driverで、
-差し替え可能なsenderに加えてbounded HTTP POST実装を持つ。
+- [moonbit-peer-policy.ts](./src/moonbit-peer-policy.ts) calls bounded fair
+  selection, exponential backoff, success reset, and multi-response/fork
+  classification from generated MoonBit JS.
+- [peer-route-sqlite.ts](./src/peer-route-sqlite.ts) stores endpoints, attempt
+  order, retry times, durable leases, quarantine state, and authenticated fork
+  evidence in the same player database.
+- [peer-checkpoint-transport.ts](./src/peer-checkpoint-transport.ts) separates
+  state and policy from I/O and supplies both a replaceable sender and bounded
+  HTTP POST implementation.
 
 ```text
 SQLite routes + active leases
@@ -77,15 +90,17 @@ SQLite routes + active leases
   -> parallel HTTP POST
   -> application-provided signature/authentication verifier
   -> MoonBit response/fork classification
-  -> success/backoff、またはfork evidence + quarantineをSQLite commit
+  -> success/backoff, or fork evidence + quarantine commit
 ```
 
-未認証bytes、HTTP error、timeout、response byte上限超過はfork evidenceにせずbackoffする。
-認証済みの異digestだけをforkとして永続化する。senderの最大試行時間がdurable leaseより長い構成は
-起動時に拒否する。`now_ms`はaudit unitのmanifestで固定したclock originからの相対時間であり、
-process再起動後も同じoriginから再構築しなければならない。
+Unauthenticated bytes, HTTP errors, timeouts, and response-size violations
+produce backoff, not fork evidence. Only an authenticated different digest is
+persisted as a fork. Configuration is rejected when the sender's maximum
+attempt duration exceeds the durable lease. `now_ms` is relative to the clock
+origin fixed by the audit-unit manifest and must be reconstructed from the same
+origin after restart.
 
-## 実行
+## Run
 
 ```sh
 pnpm install
@@ -93,12 +108,16 @@ pnpm typecheck
 pnpm test
 ```
 
-Node 24 時点の `node:sqlite` は experimental API である。本番の端末DBへ採用する場合は、
-runtime version固定、migration、fsync/端末強制終了試験、key custody、暗号化at-restを別途
-満たす必要がある。IndexedDB adapterとMoonBit seal write-set接続はreference browserへ実装済みである。
-mobile SQLite、暗号化at-rest、Node側の実Ed25519 verifier、ゲーム固有のappeal裁定、
-WebSocket/WebTransport senderは未実装である。共通host contractとNode SQLite/IndexedDBには
-source別poll job、期限付きlease、単調attempt token、completion CAS、`expired`/`escalated`を実装した。
-browser参照runtimeではMoonBit Ed25519 adapter、署名済みhold envelope、durable source cursor、
-件数/byte/timeout/受信deadline付きsingle-page HTTP poller、指数backoff付きdurable schedulerまで接続済みである。
-poll jobの期限切れやescalationはactive evidence holdを解決しない。
+`node:sqlite` is still experimental in Node 24. A production device database
+also needs a pinned runtime, migrations, fsync/forced-termination testing, key
+custody, and encryption at rest. The IndexedDB adapter and MoonBit seal write
+set are connected to the reference browser runtime. Mobile SQLite, encryption
+at rest, a real Node Ed25519 verifier, game-specific appeal adjudication, and
+WebSocket/WebTransport senders remain pending.
+
+The shared host contract and both Node SQLite and IndexedDB implement durable
+per-source poll jobs, expiring leases, monotonic attempt tokens, completion CAS,
+and `expired`/`escalated` states. The browser reference also connects the
+MoonBit Ed25519 adapter, signed hold envelopes, durable source cursors, bounded
+single-page HTTP polling, and exponential-backoff scheduling. Job expiry or
+escalation never resolves an active evidence hold.

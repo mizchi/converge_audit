@@ -139,4 +139,3 @@ pub fn SealedMicroCheckpoint::event_proof(Self, String) -> @merkle.MerkleProof?
 // Type aliases
 
 // Traits
-

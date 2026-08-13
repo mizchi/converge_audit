@@ -215,7 +215,9 @@ visibility、projectile、wire/manifest migrationは`Pending`。
 状態: selection/conflict/publication/central replay contractは`Proven + Tested`。公開pull、端末ローカル署名、
 submit、durable quorum、sealまでのreference fanoutは`全mode Tested locally + remote E2E`。加えて
 player-local SQLite leaseからMoonBit policyを経由するbounded HTTP pushをloopbackで検査した。
-production端末のdurable observer signing store、実credential付きpersistent socket、異なる実source間の
+Cloudflare Durable Object SQLiteのobserver signing storeは予約先行、eviction復元、署名器失敗、
+同時競合、schema/行破損fail-closedを`Tested locally`、2 slot/2 digestのcrash safetyをQuint/TLCで
+`Model checked`。production端末/mobile DB、実credential付きpersistent socket、異なる実source間の
 global fairnessは`Pending`。
 
 ## 6. item、inventory、marketplace
@@ -297,7 +299,8 @@ storeはIndexedDBへ接続済みだが、multi-asset inventory record自体のlo
 direct authority RPC、lease/alarm retry/ACK、restart testは`Tested locally + remote E2E`。
 2 peer・2 epochのQuint/TLC有限モデルではcrash/drop/partitionとbounded outbox下の安全性、network安定後の
 authority finalityを`Model checked`。player-local論理DB、Node SQLite、browser IndexedDB参照adapterの
-atomic seal/restart/ACK/破損検知は`Tested`。observer DB、mobile SQLiteへのproduction接続、
+atomic seal/restart/ACK/破損検知は`Tested`。observer DBはCloudflare SQLite referenceまで`Tested`、
+mobile SQLiteへのproduction接続、
 witness quorum収集は公開pull/署名submit型referenceと有限Quint/TLCモデルまで`Tested locally / Model checked`。
 端末側のローカル署名clientとhashed sourceごとのfixed-window隔離は`Tested locally + 全mode remote E2E`。
 東京clientから全modeの`apac-ne`、PvPの`wnam`/`weur` hintを各20 run測り、単一egressのrate-limit
@@ -436,7 +439,8 @@ source of truthとする。件数は機能追加で増えるため固定しな�
 優先順は次のとおり。
 
 1. 監査済みcrypto、key custody、rotation/revocation
-2. observer signing store、mobile SQLite player DB、fsync/暗号化at-rest（IndexedDB referenceは実装済み）
+2. mobile observer/player SQLite DB、fsync/暗号化at-rest、外部署名credential接続
+   （Cloudflare observer signing storeとIndexedDB referenceは実装済み）
 3. remote witness/transparency socket fanoutと端末credential（pure retry/fork選択は実装済み）
 4. 汎用inventoryのMerkle lineage pruning、appeal window、multi-asset checkpointのplayer-local DB接続
 5. projectile/visibility、raid lootを含む実ゲームkernel完全化とmanifest/wire migration

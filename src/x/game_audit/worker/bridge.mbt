@@ -1299,6 +1299,78 @@ pub fn audit_evidence_case_source_resolution_allowed(
 }
 
 ///|
+/// Stable host bridge to the proved single-slot observer signing decision.
+/// Storage owns presence/matching facts; MoonBit owns their interpretation.
+pub fn audit_classify_open_world_observer_signing(
+  target_valid : Bool,
+  previous_observation_present : Bool,
+  previous_digest_matches : Bool,
+) -> String {
+  match
+    @audit.classify_open_world_observer_signing(
+      target_valid~,
+      previous_observation_present~,
+      previous_digest_matches~,
+    ) {
+    SignNewObservation => "sign_new"
+    ReuseExistingObservation => "reuse_existing"
+    RejectConflictingObservation => "reject_conflict"
+    RejectInvalidObservation => "reject_invalid"
+  }
+}
+
+///|
+/// Canonical durable-store key for one exact audit-plan registration slot.
+pub fn audit_open_world_observer_signing_key(
+  audit_checkpoint_digest : String,
+  registration_index : Int,
+) -> String {
+  if !worker_sha256_digest_valid(audit_checkpoint_digest) ||
+    registration_index < 0 ||
+    registration_index >= 2147483647 {
+    ""
+  } else {
+    @open_world.open_world_observer_signing_key(
+      @bft.Digest(audit_checkpoint_digest),
+      registration_index,
+    )
+  }
+}
+
+///|
+/// Rebuild the canonical authenticated-map snapshot over durable reservation
+/// rows. The deterministic treap makes the root independent of SQL row order.
+pub fn audit_open_world_observer_signing_store_snapshot(
+  signing_keys : Array[String],
+  encounter_digests : Array[String],
+) -> String {
+  if signing_keys.length() != encounter_digests.length() ||
+    signing_keys.length() > 16384 {
+    return worker_error("invalid_observer_signing_store_shape")
+  }
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
+  let commitment = @authmap.AuthenticatedMap::new(hasher)
+  let seen : Map[String, Bool] = Map([])
+  for index in 0..<signing_keys.length() {
+    let key = signing_keys[index]
+    let digest = encounter_digests[index]
+    if key == "" ||
+      key.length() > 4096 ||
+      !worker_sha256_digest_valid(digest) ||
+      seen.contains(key) {
+      return worker_error("invalid_observer_signing_store_record")
+    }
+    seen[key] = true
+    ignore(commitment.put(key, digest))
+  }
+  Json::object({
+    "ok": Json::boolean(true),
+    "root": Json::string(commitment.root().0),
+    "size": Json::number(commitment.size().to_double()),
+  }).stringify()
+}
+
+///|
 fn worker_accept_pve_event(
   adapter : @bft.AuditAdapter,
   signed : @bft.SignedEvent,

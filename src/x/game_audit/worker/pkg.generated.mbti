@@ -36,6 +36,8 @@ pub fn audit_classify_anchor_head(Bool, Bool, Bool, Int, Int, Bool) -> String
 
 pub fn audit_classify_central_replay(Bool, Bool, Bool, Bool, Bool) -> String
 
+pub fn audit_classify_open_world_observer_signing(Bool, Bool, Bool) -> String
+
 pub fn audit_evidence_case_source_resolution_allowed(Bool, Bool, Bool, Bool) -> Bool
 
 pub fn audit_evidence_lineage_case_admission_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
@@ -55,6 +57,10 @@ pub fn audit_open_checkpoint_closure(Int, String, String, String, String, Int, S
 pub fn audit_open_world_encounter_registration_key(Int) -> String
 
 pub fn audit_open_world_missing_slot_persist_allowed(Bool, Bool, Bool) -> Bool
+
+pub fn audit_open_world_observer_signing_key(String, Int) -> String
+
+pub fn audit_open_world_observer_signing_store_snapshot(Array[String], Array[String]) -> String
 
 pub fn audit_prepare_atomic_checkpoint_seal(Int, String, String, String, String, Int, String, String, String, Int, String, Bool, Bool, Bool, Bool, Int, Int, Int, Int, String, String, String, Array[String]) -> String
 
@@ -97,4 +103,3 @@ pub fn audit_verify_pvp_replay_bundle(String, String, String, String) -> String
 // Type aliases
 
 // Traits
-

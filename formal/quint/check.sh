@@ -13,6 +13,8 @@ quint typecheck formal/quint/EvidenceLineageCase.qnt
 quint typecheck formal/quint/EvidenceLineageCaseModels.qnt
 quint typecheck formal/quint/KeyLifecycle.qnt
 quint typecheck formal/quint/KeyLifecycleModels.qnt
+quint typecheck formal/quint/ObserverSigningStore.qnt
+quint typecheck formal/quint/ObserverSigningStoreModels.qnt
 
 quint verify formal/quint/CheckpointDeliveryModels.qnt \
   --backend=tlc \
@@ -124,4 +126,14 @@ quint verify formal/quint/KeyLifecycleModels.qnt \
     acceptedCheckpointHasExactKeyBinding \
     acceptedCheckpointWasIssuedInKeyWindow \
     acceptedCheckpointPredatesEffectiveRevocation \
+  --verbosity=1
+
+quint verify formal/quint/ObserverSigningStoreModels.qnt \
+  --backend=tlc \
+  --main=observerSigningStoreSafety \
+  --invariants \
+    typeOk \
+    oneReservationPerSlot \
+    everySignatureHasExactReservation \
+    noDoubleSigning \
   --verbosity=1

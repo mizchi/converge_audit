@@ -523,4 +523,3 @@ pub fn TrustedEpochClosure::evidence(Self) -> EpochClosureEvidence
 // Type aliases
 
 // Traits
-

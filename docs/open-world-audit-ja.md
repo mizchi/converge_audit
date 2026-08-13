@@ -128,9 +128,15 @@ hostは標準WebCryptoの成功と全digest/source/indexのexact bindingを確�
 honest observer の local receipt 消失は解かない。signing API は署名前に
 `reserve(plan-slot, digest)` を呼ぶ persistence boundary を持ち、予約失敗時は signer を
 一度も呼ばない。共有 store を使う ledger 間でも先着 digest だけが署名へ進む。実装付属の
-in-memory store はこの compare-and-set の逐次参照実装であり、process restart や実並行実行を
-保証しない。production store は `SigningSlotReserved` を返す前に予約を atomic かつ durable に
-commit し、root/size snapshot を atomic に読む必要がある。
+in-memory store に加え、Cloudflare Durable Object SQLite adapterはこの境界を一つの
+`transactionSync`で実装する。予約行と単調sequenceを署名器呼出し前にcommitし、同時競合はDOの
+直列化とDBのunique/CASで一勝一敗にする。署名器が失敗しても予約は残り、eviction/restart後はexact
+retryだけを許す。予約途中の2 fault pointはtransaction全体をrollbackする。Merkle root/sizeは
+checkpoint時に全予約から再計算し、信頼済みanchorとの完全一致に失敗すればfail-closedにする。
+authoritative reservationには個別削除APIを持たせない。削除すると同じslotの別digestを再予約できるため、
+observer/key単位のretention終了とkey失効後にledger全体を廃棄する。容量は1 ledgerあたり16,384予約で、
+超過時は署名せずfail-closedにする。診断用conflict attemptだけは時刻境界より古く、appeal/evidence
+windowでprotectされていないkeyをpruneできる。
 
 復元時は、信頼済みの `(observer id, signer key, Merkle root, size)` と store snapshot の
 完全一致を要求できる。空 snapshot への巻き戻しと別 observer/key は拒否する。さらに authority
@@ -337,6 +343,8 @@ Apple M5 arm64、MoonBit `0.1.20260724`、FNV/mock signature の構造コスト:
 | conflicting observer 署名拒否 × 1,000 | 561.21 µs |
 | trusted signing anchor 検証 × 1,000 | 660.84 µs |
 | rolled-back signing store 拒否 × 1,000 | 524.94 µs |
+| Durable Object SQLite予約 1,024件 × 3（local workerd） | mean 0.046 ms / p99 1 ms、約500 bytes/予約 |
+| 同1,024件からMerkle snapshot再構築 × 3（local workerd） | p50 255 ms / p95 268 ms |
 | 1,024-observer anchor map の publication 検証 × 1,000 | 12.45 ms |
 | signing anchor head の連続更新 × 1,000 | 141.55 µs |
 | signing anchor gap の atomic batch 回復 × 1,000 | 231.21 µs |
@@ -368,6 +376,14 @@ network、storage、完全 game replay の測定ではない。実際に
 FNV はテスト作成中に異なる単一-leaf payload の root collision を起こしたため、本番の
 安全性判断には一切使えない。
 
+Durable signing store値は2026-08-13の各件数3回local workerd runである。各予約はMoonBitのcanonical
+signing key/classifierとSQLite reservation/sequence transactionを通るが、外部署名器とremote RTTは
+含まない。workerdの時計は1 ms粒度なのでsub-ms percentileは上限評価に向かない。snapshotは
+authenticated mapを再構築するため予約件数に比例して増える一方、通常の予約経路には含めない。
+実測artifactは
+[`observer-signing-store-local-2026-08-13.json`](../examples/cf-game-audit/benchmarks/observer-signing-store-local-2026-08-13.json)
+に保存した。
+
 同じ環境で versioned codec と `experimental_crypto@0.0.2` adapter を分離して測った。
 
 | Benchmark batch | Mean |
@@ -392,7 +408,7 @@ checkpoint の検証 cache、edge/peer との検証分担を先に設計する�
 - 監査済み・side-channel 要件を満たす SHA-256/BLAKE3 と Ed25519 の production adapter
 - zone/epoch 委任 key と key rotation
 - 動的 zone/interest-group observer assignment と observer key rotation
-- `OpenWorldObserverSigningStore` の production durable/CAS adapter と crash/concurrency test
+- device/mobile側observer signing store、fsync/暗号化at-rest、外部署名credentialとの接続
 - anchor checkpoint head gossip の production transport / fanout / remote witness quorumへの接続
 - head history と signed checkpoint envelope の durable 保存、pruning、外部 fork alert
 - gap transport の socket adapter、再試行/backpressure、複数 peer の応答選択

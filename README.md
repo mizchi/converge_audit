@@ -3,7 +3,7 @@
 Adversarial event authentication and verifiable checkpoint auditing for the
 [`mizchi/converge`](https://github.com/mizchi/converge) local-first CRDT.
 
-[日本語版 / Japanese](README-ja.md)
+[Japanese version](README-ja.md)
 
 ## Goal
 
@@ -62,6 +62,8 @@ histories; it does not define the game rules themselves.
 - Fail closed when classifying exact parents, duplicates, gaps, and forks.
 - Specify atomic seal, durable outbox, ACK, lease, retry, and crash recovery
   contracts.
+- Reserve open-world observer slots durably before signing, reject conflicting
+  digests across restart, and checkpoint reservations as an authenticated map.
 
 The normal central-server payload is intended to approach a small set of roots,
 metadata, and witness signatures that does not grow with the event count, rather
@@ -150,7 +152,7 @@ Each claim uses the smallest appropriate verifier.
 | Subject | Method | Current checked scope |
 | --- | --- | --- |
 | Cadence, retention, heads, seals, vote merge | MoonBit proof → Why3/Z3 | All configured proof obligations over pure predicates and mathematical integers |
-| Crash, drop, retry, bounded outbox, witness quorum, key rotation | Quint / TLC | Every configured healthy model completes without a counterexample |
+| Crash, drop, retry, bounded outbox, witness quorum, key rotation, observer reserve-before-sign | Quint / TLC | Every configured healthy model completes without a counterexample |
 | Whether guards are load-bearing | Deliberately broken Quint modules | Every configured broken model produces its expected counterexample |
 | Quint model ↔ MoonBit policy projection | `mizchi/quint_connect` ITF replay | 32 seeded asset traces / 288 states plus a state-divergence negative control |
 | SQLite/DO/Queue/HTTP mapping | Integration tests and fault injection | Atomic rollback, restart, duplicate, fork, and ACK-loss behavior |

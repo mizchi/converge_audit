@@ -225,4 +225,3 @@ pub fn VerifiedCheckpointPolicy::policy(Self) -> CheckpointPolicy
 // Type aliases
 
 // Traits
-

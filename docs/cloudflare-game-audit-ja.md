@@ -469,6 +469,7 @@ pnpm bench:witness
 | 実暗号open-world v2 bundleは4 checkpoint・2 publication proofs・遅延seed・`n-f` observer・eligible inclusion・PvE replay後だけverifiedになる | MoonBit verifier + workerd Queue integration | Tested locally |
 | open-world encounterが署名済みeligible sealに含まれる | Merkle capability + workerd integration | Tested locally |
 | open-world missing-slotはsigned plan/seal/transparency、authority encounterまたはobserver quorum、exact non-membership、標準WebCrypto再計算をすべて通る | bounded canonical compact CBOR + opaque MoonBit conflict capability + proved 3条件persistence gate + Durable Object SQLite transaction/idempotency integration | Proven core + Tested locally |
+| observer署名slotは署名器呼出し前に予約され、eviction/競合後も別digestへ二重予約されない | MoonBit proved classifier + Durable Object SQLite reservation/sequence transaction + internal-only RPC + Quint crash model | Proven core + Model checked + Tested locally |
 | audit plan/sealが独立publisherのtransparency checkpointに含まれる | exact map membership capability + trusted head digest + workerd integration | Tested locally |
 | TS側遷移がMoonBit proofと同じ | Worker bridgeがproved classifierを直接呼ぶ | Proven core + Tested bridge |
 | current-owner listingはauthority checkpoint、`n-f` replay witness、origin receipt、inventory root membershipを要求する | MoonBit central verifier + real-crypto workerd integration + apac-ne benchmark | Tested locally + remote |

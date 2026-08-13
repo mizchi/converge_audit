@@ -21,6 +21,9 @@
 | `LineageAppeal.qnt` | 外部arbiter decision、revision、時間制appeal、finalized/expiredの状態機械とproperty |
 | `LineageAppealModels.qnt` | 正常構成と認証/time/revision/target/deadlineを外したRed構成 |
 | `LineageAppealTests.qnt` | provisional revoke、期限切れ、exact target、独立revoke、duplicateのscenario |
+| `ObserverSigningStore.qnt` | reserve-before-sign、exact retry、署名失敗、crash/restartの状態機械とproperty |
+| `ObserverSigningStoreModels.qnt` | durable予約の正常構成と、crashで予約を失うRed構成 |
+| `ObserverSigningStoreTests.qnt` | exact retry、競合拒否、署名失敗後のrestartを通るscenario |
 | `src/x/game_audit/quint_asset_driver` | `quint_connect`でAssetOwnershipのrandom ITF traceをMoonBit pure policyへ射影するadapter |
 | `ConfigContracts.qnt` | 許可しない定数構成 |
 | `check*.sh` | scenario、正常検証、Red反例、設定契約をCIへ接続するscript |
@@ -46,6 +49,9 @@ asset ownershipを読む場合は、`ownerVersion`をassetごとの単調なhead
 `LineageAppeal.qnt`ではcertificateの`expires`を署名付き命令の受理可否、`appealDeadline`を保存済み
 revokeの上書き可否として分離する。`Expired`はassetの自動restoreではなく、`Revoked`のまま期限が
 終わったcaseである。
+`ObserverSigningStore.qnt`では`reservations`をdurable state、`signatures`を外部へ出た署名として読む。
+署名器の一時失敗は予約を戻さず、exact retryだけが再署名へ進める。実装のSQLite transactionと
+内部RPC直列化はモデル外なので、workerd fault/concurrency testを同時に通す。
 
 ## Quintの定義種別
 

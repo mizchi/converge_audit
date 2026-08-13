@@ -163,17 +163,19 @@ creates an accusation. A plan-bound `n - f` observer certificate can replace
 the authority-signed encounter as evidence that a registration was seen, so an
 authority cannot avoid the conflict merely by withholding its encounter
 checkpoint after observers accepted the request. Registration observers do not
-assert replay correctness. Dynamic zone assignment, a production durable
-signing-store adapter, delegated referee keys, and append-only transparency
-remain future work.
+assert replay correctness. Dynamic zone assignment, delegated referee keys,
+device-side durable storage, and append-only transparency remain future work.
 
 The public signing path now reserves `(plan, slot, digest)` through an
 `OpenWorldObserverSigningStore` before calling the signer. Store failure and a
 different previously reserved digest return without emitting a signature.
 Exact retry signs the same statement again; signature-byte identity is not part
 of the production contract. The bundled authenticated in-memory store is a
-sequential compare-and-set reference adapter. Production implementations must
-make reservation atomic and durable before returning success. Restore can
+sequential compare-and-set reference adapter. The Cloudflare reference stores
+the reservation and monotonic sequence in one Durable Object SQLite transaction
+before invoking the signer. It survives eviction and signer failure, serializes
+concurrent conflicts, and fails closed on schema or row corruption. A device
+adapter must preserve the same reserve-before-sign boundary. Restore can
 require an exact trusted `(observer id, signer key, root, size)` anchor, which
 rejects empty or foreign snapshots. A domain-separated authority checkpoint can
 now publish a key-unique authenticated map from `(observer id, signer key)` to
@@ -633,7 +635,7 @@ cryptography.
 | Observer certificate plus exact seal proof can expose an authority-hidden registration | observer/seal capability contract | missing-slot, foreign-plan, and tampered-proof tests | Tested + Proven boundary |
 | A missing-slot mutation occurs only after compact canonical decoding, MoonBit capability issuance, standard-crypto root recomputation, and exact transcript binding | compact conflict wire + Cloudflare D1 adapter | authority/observer, size/shape, callback refusal, idempotent transaction integration | Proven core + Tested locally |
 | Observer signing decision cannot select a second digest for an existing plan/slot | MoonBit pure decision contract | never-sign-second proof | Proven |
-| Signing-store reservation precedes signature emission | signing-store API contract | unavailable-store call-count and shared-store conflict tests | Tested for reference/control flow; production durability assumed |
+| Signing-store reservation precedes signature emission and survives crash | MoonBit classifier + signing-store transaction + Quint model | signer failure, transaction fault, eviction, concurrent conflict, volatile-reservation counterexamples | Proven core + Model checked + Cloudflare SQLite tested; device adapter pending |
 | Trusted signing anchor rejects rollback/foreign restore | restore contract | exact-match, empty-store, and foreign-observer tests | Tested |
 | Published anchor requires valid identity, log session, domain manifest, and state membership | MoonBit + checkpoint capability contract | six proof goals; invalid/session/manifest/substitution tests | Proven + Tested |
 | One anchor batch has only one value per observer/key | authenticated-map contract | same-key replacement leaves size one and invalidates the old value | Tested |
@@ -667,8 +669,9 @@ inventory slices are now present. The remaining integration work is:
 3. anchor the implemented open-world plan/seal digests in an external
    transparency log, and collect the already-verifiable PvP/open-world statements from
    remote peers with retry and appeal-window retention;
-4. implement a crash-safe concurrent `OpenWorldObserverSigningStore`, persist
-   the now-transportable anchor-checkpoint envelopes and heads, add production
+4. port the crash-safe Cloudflare `OpenWorldObserverSigningStore` contract to
+   device/mobile storage and an external signer credential, persist the
+   now-transportable anchor-checkpoint envelopes and heads, add production
    gossip/retry/multi-peer adapters, then extend the fixed observer certificate
    with zone/epoch assignment and delegated referee keys;
 5. replace the test doubles/experimental adapter with an audited production

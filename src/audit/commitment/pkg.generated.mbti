@@ -30,4 +30,3 @@ pub(all) struct CheckpointCommitment {
 pub(open) trait CheckpointAdapter {
   fn checkpoint_commitment(Self) -> CheckpointCommitment
 }
-

@@ -87,4 +87,3 @@ pub fn AuthenticatedMap::size(Self) -> Int
 // Type aliases
 
 // Traits
-

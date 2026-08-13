@@ -110,6 +110,7 @@ quint-docs:
   nix develop path:. --command quint docs formal/quint/LineageAppeal.qnt
   nix develop path:. --command quint docs formal/quint/EvidenceLineageCase.qnt
   nix develop path:. --command quint docs formal/quint/KeyLifecycle.qnt
+  nix develop path:. --command quint docs formal/quint/ObserverSigningStore.qnt
 
 # Confirm that all load-bearing Quint guards produce counterexamples
 quint-counterexamples:

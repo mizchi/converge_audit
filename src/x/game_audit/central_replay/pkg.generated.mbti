@@ -369,4 +369,3 @@ pub(all) struct VerifiedItemCreation {
 // Type aliases
 
 // Traits
-

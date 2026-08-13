@@ -132,6 +132,10 @@ import {
 } from "../../player-local-runtime/crypto-backend";
 import { createAsyncAuditDigestAdapter } from "../../player-local-runtime/merkle-digest";
 import { persistOpenWorldMissingSlotConflictIfVerified } from "./open-world-seal-conflict";
+import {
+  OpenWorldObserverSigningStore,
+  type OpenWorldObserverSigningAnchor,
+} from "./open-world-observer-signing-store";
 
 export interface Env {
   AUDIT_SHARD: DurableObjectNamespace<GameAuditShard>;
@@ -933,6 +937,7 @@ export class GameAuditShard extends DurableObject<Env> {
   private readonly checkpointRuntime: CheckpointRuntimeStore;
   private readonly checkpointReceiver: CheckpointReceiverStore;
   private readonly checkpointWitnessCollections: CheckpointWitnessCollectionStore;
+  private readonly observerSigningStore: OpenWorldObserverSigningStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -940,6 +945,9 @@ export class GameAuditShard extends DurableObject<Env> {
     this.checkpointRuntime = new CheckpointRuntimeStore(this.ctx.storage);
     this.checkpointReceiver = new CheckpointReceiverStore(this.ctx.storage);
     this.checkpointWitnessCollections = new CheckpointWitnessCollectionStore(
+      this.ctx.storage,
+    );
+    this.observerSigningStore = new OpenWorldObserverSigningStore(
       this.ctx.storage,
     );
     this.ctx.storage.sql.exec(`
@@ -1580,6 +1588,18 @@ export class GameAuditShard extends DurableObject<Env> {
         return this.submitCheckpointWitnessApproval(request, mode, unit);
       case "POST checkpoint-seals":
         return this.sealCheckpoint(request, mode, unit);
+      case "POST observer-signing-configure":
+        return request.headers.get("x-audit-internal") === "observer-signer"
+          ? this.configureObserverSigningStore(request, mode)
+          : jsonError("not_found", 404);
+      case "POST observer-signing-reservations":
+        return request.headers.get("x-audit-internal") === "observer-signer"
+          ? this.reserveObserverSigningSlot(request, mode)
+          : jsonError("not_found", 404);
+      case "GET observer-signing-anchor":
+        return request.headers.get("x-audit-internal") === "observer-signer"
+          ? this.getObserverSigningAnchor(mode)
+          : jsonError("not_found", 404);
       case "POST anchors":
         return this.submitAnchor(request, mode, unit);
       case "POST replay":
@@ -1765,6 +1785,109 @@ export class GameAuditShard extends DurableObject<Env> {
       { ok: true, decision: "configured", mode, unit },
       201,
     );
+  }
+
+  private async configureObserverSigningStore(
+    request: Request,
+    mode: AuditMode,
+  ): Promise<Response> {
+    if (mode !== "open") return jsonError("open_world_mode_required", 400);
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const observerId = stringField(body.value, "observer_id");
+    const signerKey = stringField(body.value, "signer_key");
+    const trusted = objectField(body.value, "trusted_anchor");
+    let trustedAnchor: OpenWorldObserverSigningAnchor | undefined;
+    if (trusted !== undefined) {
+      const trustedObserverId = stringField(trusted, "observer_id");
+      const trustedSignerKey = stringField(trusted, "signer_key");
+      const root = stringField(trusted, "root");
+      const size = numberField(trusted, "size");
+      if (
+        !trustedObserverId || !trustedSignerKey || !root || size === undefined
+      ) return jsonError("invalid_observer_signing_anchor", 400);
+      trustedAnchor = {
+        observer_id: trustedObserverId,
+        signer_key: trustedSignerKey,
+        root,
+        size,
+      };
+    }
+    if (!observerId || !signerKey) {
+      return jsonError("invalid_observer_signing_identity", 400);
+    }
+    const runtime = await loadCheckpointRuntime();
+    const result = this.observerSigningStore.open(runtime, {
+      observerId,
+      signerKey,
+      trustedAnchor,
+    });
+    if (result.decision === "configured" || result.decision === "restored") {
+      return jsonResponse(
+        { ok: true, ...result },
+        result.decision === "configured" ? 201 : 200,
+      );
+    }
+    const status = result.decision === "identity_mismatch" ||
+        result.decision === "anchor_mismatch"
+      ? 409
+      : result.decision === "incompatible_schema" ||
+          result.decision === "corrupt_store"
+      ? 503
+      : 422;
+    return jsonResponse({ ok: false, ...result }, status);
+  }
+
+  private async reserveObserverSigningSlot(
+    request: Request,
+    mode: AuditMode,
+  ): Promise<Response> {
+    if (mode !== "open") return jsonError("open_world_mode_required", 400);
+    const body = await readJsonBody(request);
+    if (!body.ok) return body.response;
+    const auditCheckpointDigest = stringField(
+      body.value,
+      "audit_checkpoint_digest",
+    );
+    const registrationIndex = numberField(body.value, "registration_index");
+    const encounterDigest = stringField(body.value, "encounter_digest");
+    if (
+      !auditCheckpointDigest || registrationIndex === undefined ||
+      !encounterDigest
+    ) return jsonError("invalid_observer_signing_target", 400);
+    const runtime = await loadCheckpointRuntime();
+    const result = this.observerSigningStore.reserve(runtime, {
+      auditCheckpointDigest,
+      registrationIndex,
+      encounterDigest,
+    });
+    switch (result.decision) {
+      case "reserved":
+        return jsonResponse({ ok: true, ...result }, 201);
+      case "reused":
+        return jsonResponse({ ok: true, ...result });
+      case "conflict":
+        return jsonResponse({ ok: false, ...result }, 409);
+      case "invalid":
+        return jsonResponse({ ok: false, ...result }, 422);
+      case "capacity":
+        return jsonResponse({ ok: false, ...result }, 507);
+      case "unavailable":
+        return jsonResponse({ ok: false, ...result }, 503);
+    }
+  }
+
+  private async getObserverSigningAnchor(mode: AuditMode): Promise<Response> {
+    if (mode !== "open") return jsonError("open_world_mode_required", 400);
+    const runtime = await loadCheckpointRuntime();
+    try {
+      return jsonResponse({
+        ok: true,
+        ...this.observerSigningStore.snapshot(runtime),
+      });
+    } catch {
+      return jsonError("observer_signing_store_unavailable", 503);
+    }
   }
 
   private async storeOpenWorldSealConflict(

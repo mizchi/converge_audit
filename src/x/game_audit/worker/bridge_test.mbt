@@ -546,6 +546,58 @@ test "worker bridge binds signed left evidence to a missing-slot proof" {
 }
 
 ///|
+test "worker bridge owns observer signing decisions keys and store roots" {
+  let plan_a = "11".repeat(32)
+  let plan_b = "22".repeat(32)
+  let encounter_a = "33".repeat(32)
+  let encounter_b = "44".repeat(32)
+  assert_eq(
+    audit_classify_open_world_observer_signing(true, false, false),
+    "sign_new",
+  )
+  assert_eq(
+    audit_classify_open_world_observer_signing(true, true, true),
+    "reuse_existing",
+  )
+  assert_eq(
+    audit_classify_open_world_observer_signing(true, true, false),
+    "reject_conflict",
+  )
+  let key_a = audit_open_world_observer_signing_key(plan_a, 0)
+  let key_b = audit_open_world_observer_signing_key(plan_b, 1)
+  guard @json.parse(
+      audit_open_world_observer_signing_store_snapshot([key_a, key_b], [
+        encounter_a, encounter_b,
+      ]),
+    )
+    is Object(first) &&
+    first["ok"] is True &&
+    first["root"] is String(root) &&
+    first["size"] is Number(2.0, ..) else {
+    fail("expected observer signing store snapshot")
+  }
+  guard @json.parse(
+      audit_open_world_observer_signing_store_snapshot([key_b, key_a], [
+        encounter_b, encounter_a,
+      ]),
+    )
+    is Object(second) &&
+    second["root"] is String(second_root) else {
+    fail("expected reordered observer signing store snapshot")
+  }
+  assert_eq(root, second_root)
+  guard @json.parse(
+      audit_open_world_observer_signing_store_snapshot([key_a, key_a], [
+        encounter_a, encounter_b,
+      ]),
+    )
+    is Object(refused) &&
+    refused["ok"] is False else {
+    fail("expected duplicate signing key refusal")
+  }
+}
+
+///|
 test "worker bridge verifies real-crypto current-owner inventory proof" {
   let authority_seed = "000102030405060708090a0b0c0d0e0f" +
     "101112131415161718191a1b1c1d1e1f"

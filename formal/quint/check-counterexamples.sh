@@ -39,6 +39,8 @@ quint typecheck formal/quint/EvidenceLineageCase.qnt
 quint typecheck formal/quint/EvidenceLineageCaseModels.qnt
 quint typecheck formal/quint/KeyLifecycle.qnt
 quint typecheck formal/quint/KeyLifecycleModels.qnt
+quint typecheck formal/quint/ObserverSigningStore.qnt
+quint typecheck formal/quint/ObserverSigningStoreModels.qnt
 
 audit_quint_tmp="$(mktemp -d "${TMPDIR:-/tmp}/converge-audit-quint.XXXXXX")"
 trap 'rm -rf -- "$audit_quint_tmp"' EXIT HUP INT TERM
@@ -241,3 +243,15 @@ check_expected_failure \
   invariant \
   acceptedCheckpointPredatesEffectiveRevocation \
   "$audit_quint_tmp/key-lifecycle-revocation.log"
+check_expected_failure \
+  formal/quint/ObserverSigningStoreModels.qnt \
+  observerSigningStoreBrokenDurability \
+  invariant \
+  everySignatureHasExactReservation \
+  "$audit_quint_tmp/observer-signing-durability.log"
+check_expected_failure \
+  formal/quint/ObserverSigningStoreModels.qnt \
+  observerSigningStoreBrokenDurability \
+  invariant \
+  noDoubleSigning \
+  "$audit_quint_tmp/observer-signing-double-signing.log"

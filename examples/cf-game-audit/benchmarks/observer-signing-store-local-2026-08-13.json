@@ -1,0 +1,45 @@
+{
+  "environment": {
+    "kind": "local-workerd",
+    "date": "2026-08-13",
+    "note": "Three iterations per size; 1 ms clock resolution; external signer and remote RTT excluded"
+  },
+  "results": [
+    {
+      "reservations": 1,
+      "iterations": 3,
+      "reserve_ms": { "count": 3, "mean_ms": 0.333, "p50_ms": 0, "p95_ms": 1, "p99_ms": 1, "max_ms": 1 },
+      "snapshot_ms": { "count": 3, "mean_ms": 1.333, "p50_ms": 1, "p95_ms": 3, "p99_ms": 3, "max_ms": 3 },
+      "sqlite_bytes_mean": 528384,
+      "sqlite_bytes_per_reservation_mean": 0,
+      "snapshot_additional_bytes_mean": 0
+    },
+    {
+      "reservations": 64,
+      "iterations": 3,
+      "reserve_ms": { "count": 192, "mean_ms": 0.068, "p50_ms": 0, "p95_ms": 1, "p99_ms": 1, "max_ms": 1 },
+      "snapshot_ms": { "count": 3, "mean_ms": 15.667, "p50_ms": 15, "p95_ms": 18, "p99_ms": 18, "max_ms": 18 },
+      "sqlite_bytes_mean": 561152,
+      "sqlite_bytes_per_reservation_mean": 512,
+      "snapshot_additional_bytes_mean": 0
+    },
+    {
+      "reservations": 256,
+      "iterations": 3,
+      "reserve_ms": { "count": 768, "mean_ms": 0.034, "p50_ms": 0, "p95_ms": 0, "p99_ms": 1, "max_ms": 1 },
+      "snapshot_ms": { "count": 3, "mean_ms": 45.667, "p50_ms": 41, "p95_ms": 58, "p99_ms": 58, "max_ms": 58 },
+      "sqlite_bytes_mean": 651264,
+      "sqlite_bytes_per_reservation_mean": 480,
+      "snapshot_additional_bytes_mean": 0
+    },
+    {
+      "reservations": 1024,
+      "iterations": 3,
+      "reserve_ms": { "count": 3072, "mean_ms": 0.046, "p50_ms": 0, "p95_ms": 0, "p99_ms": 1, "max_ms": 1 },
+      "snapshot_ms": { "count": 3, "mean_ms": 254.667, "p50_ms": 255, "p95_ms": 268, "p99_ms": 268, "max_ms": 268 },
+      "sqlite_bytes_mean": 1040384,
+      "sqlite_bytes_per_reservation_mean": 500,
+      "snapshot_additional_bytes_mean": 0
+    }
+  ]
+}

@@ -30,7 +30,8 @@
     "bench:witness": "tsx scripts/bench-witness.ts",
     "bench:lineage": "tsx scripts/bench-lineage.ts",
     "bench:open-world-missing-slot": "tsx scripts/bench-open-world-missing-slot.ts",
-    "bench:inventory-checkpoint": "vitest run --config vitest.bench.config.ts --disableConsoleIntercept",
+    "bench:inventory-checkpoint": "vitest run --config vitest.bench.config.ts bench/inventory-checkpoint.test.ts --disableConsoleIntercept",
+    "bench:observer-signing-store": "vitest run --config vitest.bench.config.ts bench/open-world-observer-signing-store.test.ts --disableConsoleIntercept",
     "bench:player-local-indexeddb": "node scripts/bench-player-local-indexeddb.ts",
     "bench:player-local-indexeddb:browser": "playwright test --config playwright.bench.config.ts",
     "witness": "tsx scripts/witness-client.ts"

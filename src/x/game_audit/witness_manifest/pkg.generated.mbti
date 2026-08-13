@@ -22,4 +22,3 @@ pub(all) struct ReplayWitnessIdentity {
 // Type aliases
 
 // Traits
-

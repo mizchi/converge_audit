@@ -150,4 +150,3 @@ pub fn WitnessReplayCertificate::witness_count(Self) -> Int
 // Type aliases
 
 // Traits
-

@@ -1,70 +1,91 @@
 # converge documentation
 
-このディレクトリは、CRDT を基盤にしたリアルタイムゲーム監査について、
-研究上の根拠、ゲーム設計、実装済み contract、測定結果を分離して記録する。
-ゲーム非依存のcheckpoint contractは `src/audit/`、用途依存の実装は
-`src/x/game_audit/` の実験的namespaceに分離する。
+This directory separates the research basis, game-design constraints,
+implementation contracts, and measurements for CRDT-based real-time game
+auditing. Game-independent checkpoint contracts live under `src/audit/`.
+Use-case-specific implementations remain in the experimental
+`src/x/game_audit/` namespace.
 
-## 最初に読む文書
+Most detailed design documents currently have Japanese filenames and content.
+This index is the English entry point; the root [README](../README.md) is the
+shortest project overview.
 
-- [ライブラリとして一般化する境界](./library-boundary-ja.md)
-  - mechanism / policy / game semanticsの分離、package昇格条件、保証しないこと
-- [MoonBit JS共有検証アーキテクチャ](./moonbit-js-shared-verification-ja.md)
-  - client/server共有ロジック、verification plan、WebCrypto/I/O adapter、移行順序
-- [ゲーム監査prototypeの全体像](./game-audit-overview-ja.md)
-  - 何を作ったか、三modeの違い、実装package、保証境界、残ロードマップ
-- [実装が満たすべき要求仕様](./game-audit-requirements-ja.md)
-  - MUST/SHOULD、信頼境界、mode別要件、受入条件、現在の充足状態
-- [persistence / transport 実装契約](./game-audit-implementation-contract-ja.md)
-  - DB relation、atomic seal、durable outbox、ACK、retry、gap recovery、crash consistency
-- [署名鍵ライフサイクルと過去checkpoint検証契約](./key-lifecycle-ja.md)
-  - key ID/version、有効期間、rotation、effective revocation、custody、v1 migration
-- [Quint配送・永続化モデル](../formal/quint/README.md)
-  - crash、drop、partition、durable outbox、exact-parent、witness quorum、条件付きliveness
-- [汎用 checkpoint audit 層](../src/audit/README.md)
-  - cadence/retention、精度式、commitment adapter、head、Merkle/AuthMap、証明限界
-- [研究とアーキテクチャの統合サーベイ](./research-and-architecture-ja.md)
-  - 文献から採用した考え、全体構成、1:N/N:N の違い、保証と未保証、roadmap
-- [検証可能なリアルタイムゲームの設計](./telegraph-game-design-ja.md)
-  - 予兆、回避窓、client prediction、ゲームの面白さを損ねにくい表現
-- [Cloudflare参照ゲーム: Audit Survivors](./reference-hack-and-slash-game-ja.md)
-  - 30Hz決定的kernel、予兆回避、seed固定drop、provisional itemと出品gate
-- [公開状態 PvP epoch と N:N 相互検証](./pvp-epoch-ja.md)
-  - 同時移動/攻撃/score、equivocation、witness接続、計算量と実測
-- [不規則 encounter の選択的アンチチート](./open-world-audit-ja.md)
-  - open world の遅延抽選、Merkle anchor seal、peer finality、中央 replay budget
+## Reading order
+
+- [Library boundary](./library-boundary-ja.md)
+  - Separation of mechanism, policy, and game semantics; package promotion
+    criteria; and explicit non-guarantees.
+- [Shared MoonBit JS verification architecture](./moonbit-js-shared-verification-ja.md)
+  - Client/server shared logic, bounded verification plans, WebCrypto/I/O
+    adapters, and migration order.
+- [Game-audit prototype overview](./game-audit-overview-ja.md)
+  - Implemented modes, packages, guarantee boundary, and roadmap.
+- [Game-audit requirements](./game-audit-requirements-ja.md)
+  - MUST/SHOULD requirements, trust boundaries, mode-specific acceptance
+    criteria, and current status.
+- [Persistence and transport implementation contract](./game-audit-implementation-contract-ja.md)
+  - Database relations, atomic seals, durable outboxes, ACKs, retries, gap
+    recovery, and crash consistency.
+- [Key lifecycle contract](./key-lifecycle-ja.md)
+  - Key IDs and versions, validity windows, rotation, effective revocation,
+    custody, and v1 migration.
+- [Quint delivery and persistence models](../formal/quint/README.md)
+  - Crash, loss, partitions, durable outboxes, exact parents, witness quorum,
+    observer signing, and conditional liveness.
+- [Generic checkpoint audit layer](../src/audit/README.md)
+  - Cadence and retention, precision formulas, commitment adapters, heads,
+    Merkle/AuthMap structures, and proof limits.
+- [Research and architecture survey](./research-and-architecture-ja.md)
+  - Prior work, the full architecture, 1:N and N:N differences, guarantees,
+    non-guarantees, and roadmap.
+- [Verifiable real-time game design](./telegraph-game-design-ja.md)
+  - Telegraphs, dodge windows, client prediction, and mechanics that preserve
+    responsiveness under audit constraints.
+- [Cloudflare reference game: Audit Survivors](./reference-hack-and-slash-game-ja.md)
+  - A deterministic 30 Hz kernel, telegraph dodging, seeded drops,
+    provisional items, and the marketplace gate.
+- [Public-state PvP epochs](./pvp-epoch-ja.md)
+  - Simultaneous movement and attacks, score, equivocation, witness integration,
+    complexity, and measurements.
+- [Selective auditing for irregular encounters](./open-world-audit-ja.md)
+  - Delayed sampling, Merkle anchor seals, peer finality, observer reservation,
+    and the central replay budget.
 - [Multiplayer checkpoint audit prototype](./game-audit-prototype.md)
-  - capability pipeline、形式証明、benchmark、contract reconciliation ledger
+  - Capability pipeline, formal verification, benchmarks, and the contract
+    reconciliation ledger.
 - [BFT-CRDT research summary](./bft-crdt-research.md)
-  - CRDT/BFT 層に限定した背景と現在の adapter 境界
+  - Background limited to the CRDT/BFT layer and the current adapter boundary.
 - [Experimental game-audit stack](../src/x/game_audit/README.md)
-  - 実験的namespaceの責務、package構成、個別の検証コマンド
-- [Game audit wire protocol v1 / open-world replay v2](./game-audit-wire-ja.md)
-  - versioned canonical CBOR、decode budget、実暗号adapter、wire/crypto実測
-- [Cloudflare Workers game-audit evaluation](./cloudflare-game-audit-ja.md)
-  - 1:N、N:N、open-worldのSQLite-backed Durable Object実装とlocal workerd実測
+  - Responsibilities, package structure, and focused verification commands.
+- [Game-audit wire protocols](./game-audit-wire-ja.md)
+  - Versioned canonical CBOR, decode budgets, crypto adapters, and wire costs.
+- [Cloudflare Workers evaluation](./cloudflare-game-audit-ja.md)
+  - SQLite-backed Durable Object implementations and local/remote measurements.
 - [Node player-local SQLite adapter](../examples/node-audit-runtime/README.md)
-  - event/equivocation、atomic seal、outbox/ACK、peer route lease、bounded HTTP fanout、fork隔離の端末参照実装
+  - Event/equivocation storage, atomic seals, outbox/ACK state, peer leases,
+    bounded HTTP fanout, and fork quarantine.
 - [Player-local host contract](../examples/player-local-runtime/README.md)
-  - Node/mobile SQLiteとIndexedDBで共有するDTO、validator、MoonBit write-set wrapper、conformance suite
+  - Shared DTOs, validators, MoonBit write-set wrappers, and conformance tests
+    for Node/mobile SQLite and IndexedDB.
 
-## Source of truth
+## Sources of truth
 
-| 対象 | Source of truth | 確認方法 |
+| Subject | Source of truth | Validation |
 | --- | --- | --- |
-| 公開 API と capability の構築可能性 | `src/**/pkg.generated.mbti` | `moon info` |
-| 実行時の受理・拒否条件 | `src/**/*.mbt` | `moon test`, `moon check --target all` |
-| 論理 predicate と不変条件 | `src/audit/*.mbtp`, `src/x/game_audit/audit/*.mbtp` | `just prove` |
-| 配送・永続化・asset裁定・鍵rotationの有限状態遷移 | `formal/quint/CheckpointDelivery.qnt`, `WitnessQuorum.qnt`, `AssetOwnership.qnt`, `LineageAppeal.qnt`, `EvidenceLineageCase.qnt`, `KeyLifecycle.qnt` | `just formal-check` |
-| production runtimeの実装要件 | `docs/game-audit-implementation-contract-ja.md` | contract受入テスト、fault injection |
-| 暗号・永続化・完全 transcript | `crypto`、三mode bundle verifier、Cloudflare DO/Queue | PvE/PvP/open-world prototype実装済み、production監査未達 |
-| 性能値 | benchmark の当該実行結果 | `just bench` |
-| 面白さ・知覚上の妥当性 | playtest と telemetry | 現在は設計仮説 |
+| Public APIs and constructible capabilities | `src/**/pkg.generated.mbti` | `moon info` |
+| Runtime admission and refusal behavior | `src/**/*.mbt` | `moon test`, `moon check --target all` |
+| Logical predicates and invariants | `src/audit/*.mbtp`, `src/x/game_audit/audit/*.mbtp` | `just prove` |
+| Finite delivery, persistence, settlement, key, and observer-signing transitions | `formal/quint/*.qnt` | `just formal-check` |
+| Production runtime requirements | `docs/game-audit-implementation-contract-ja.md` | Contract tests and fault injection |
+| Cryptography, durable persistence, and complete transcripts | Crypto adapters, mode-specific verifiers, Cloudflare DO/Queue | Integration and conformance tests; production audit still pending |
+| Performance | The artifact produced by the relevant benchmark run | `just bench` or the package-specific benchmark |
+| Fun and perceptual fairness | Playtests and telemetry | Design hypothesis only today |
 
-文書とコードが食い違う場合、証明済み contract を無断で弱めない。実装を直すか、
-仕様判断が必要なら最小の反例と未解決事項を ledger に残す。
+If documentation and code disagree, do not silently weaken a proved contract.
+Fix the implementation, or record the smallest counterexample and unresolved
+decision in the reconciliation ledger.
 
-## 現在の検証コマンド
+## Validation commands
 
 ```sh
 just check-all
@@ -85,10 +106,10 @@ just test-node-audit-runtime
 just check-node-audit-runtime
 ```
 
-2026-08-05 時点で、汎用checkpoint policy/head/event-time/closure/ACK/atomic seal/delivery
-authenticationとvote semilattice、およびcentral replay artifact、公開PvP gate、
-open-world transparency/中央検証、marketplace生成記録の永続化gateとcurrent-owner inventory
-head gate、multi-asset checkpoint gate、cooldown/objective、raid clearを含む全proof obligationが成功している。
-FNV/mockに加えて
-experimental SHA-256/Ed25519 adapterを実測するが、未監査なのでproduction securityの
-根拠にはしない。test総数は実行時の`moon test`出力をsource of truthとする。
+Configured proof obligations cover the generic checkpoint policy, heads,
+event-time closure, ACK and atomic-seal gates, delivery authentication, vote
+semilattices, central replay artifacts, public-state PvP, open-world
+transparency and central verification, marketplace creation persistence,
+current-owner and multi-asset inventory gates, cooldown/objective mechanics,
+and raid-clear preconditions. Test counts are intentionally not frozen here;
+the current `moon test` output is authoritative.

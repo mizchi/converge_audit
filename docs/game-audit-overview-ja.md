@@ -140,7 +140,8 @@ prototypeのprotocol骨格は通ったが、production完成ではない。優�
    browser custodyとcheckpoint配送の標準WebCrypto + MoonBit dual verificationまでは実装済み。
 2. transparency headとwitness certificateのpersistent remote socket、端末credential、fork alert。
    pure bounded fanout/retry/multi-peer response選択と、SQLite lease + bounded HTTP loopbackは実装済み。
-3. observer signing storeとmobile SQLiteへのproduction persistence、暗号化at-rest、外部裁定システム接続。
+3. Cloudflare observer signing storeをdevice/mobile SQLiteへ移植し、暗号化at-rest、外部署名credential、
+   外部裁定システムへ接続する。server-side Durable Object SQLite referenceは実装済み。
    player-local論理DB、共通host contract、Node SQLite/IndexedDBのatomic seal/restart/ACK復元と
    ACK済みprefix pruning/durable anchor、active/resolved evidence hold registry、署名済みhash-chain
    hold envelope、source別durable cursorとatomic apply、件数/byte/timeout/受信deadline付きsingle-page

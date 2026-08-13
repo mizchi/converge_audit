@@ -339,10 +339,12 @@ fault bound を commit し、`n-f` の署名済み registration receipt を opaq
 
 この保証は「faulty observer は `f` 以下」「honest observer は受領・保存した一つの
 slot/digest だけへ署名する」という仮定付きである。observer 到達前の遮断、plan roster の
-Sybil 支配、receipt の永続化、動的 zone assignment は別途扱う。prototype は署名前に
+Sybil 支配、動的 zone assignment、device側receiptの永続化は別途扱う。prototype は署名前に
 `OpenWorldObserverSigningStore.reserve` を呼び、失敗時と別 digest 予約済み時には signer を
-呼ばない。付属 in-memory adapter は共有 ledger 間の逐次 CAS をテストする。production で
-process restart と並行 worker をまたぐには、同じ contract の durable atomic 実装が必要である。
+呼ばない。付属 in-memory adapter は共有 ledger 間の逐次 CAS をテストする。Cloudflare referenceは
+Durable Object SQLiteの一transactionへ予約行と単調sequenceを保存し、eviction/restart、署名器失敗、
+同時競合、途中fault、schema/行破損を検査する。署名器はcommit後にだけ呼ばれ、署名失敗時も予約を
+戻さない。device/mobile adapterでは同じdurable atomic contractを満たす必要がある。
 復元時の trusted `(observer, key, root, size)` 完全一致は empty/foreign snapshot を拒否するが、
 anchor は authority-verified checkpoint の key-unique authenticated map に batch 公開できる。
 session、domain manifest、exact key/value membership を満たす場合だけ opaque capability が
@@ -373,7 +375,7 @@ bounded single-page polling、source別durable poll job/lease/attempt fencing/�
 Workerへ提出し、exact case ID付きarbiter uphold/dismiss certificateと時間制appealへ接続済みである。
 dismissalはassetを変更せず、hold resolutionはsource別durable noticeへ置き、arbiter certificate再検証後の
 source署名だけをnext cursorへCAS publishする。zone/epoch key の委任、動的 observer assignment、
-production durable store、checkpoint-head transport、case自動提出、source workerの自動schedule/credential、transfer case、
+device/mobile durable storeと外部署名credential、checkpoint-head transport、case自動提出、source workerの自動schedule/credential、transfer case、
 階層Merkle pruningは未実装である。詳細は
 [不規則 encounter の選択的アンチチート](./open-world-audit-ja.md)を参照する。
 
@@ -505,7 +507,7 @@ single-leaf SHA-256/Ed25519 envelopeは1,064 bytesで、pure MoonBit経路は署
 | registration observer policy は `n > 3f` と `n-f` quorumを要求する | MoonBit contract | policy/quorum/intersection/fail-closed lemmas | Proven |
 | plan-bound observer quorum は authority checkpoint がない観測済み登録の欠落を告発できる | observer/seal capability contract | roster/plan/slot/digest/signature/foreign-plan tests | Tested + Proven boundary |
 | 同一 observer の純粋判定は既存 plan/slot に別 digest を選ばない | MoonBit decision contract | never-sign-second lemma | Proven |
-| store 予約は署名発行より先に成功する | signing-store API contract | failure 時 signer call-count=0、共有 store の競合 test | 参照実装/control flow は Tested、production durability は Assumed |
+| store 予約は署名発行より先に成功し、crash後も別digestへ再予約されない | MoonBit classifier + signing-store transaction + Quint temporal contract | signer failure、2 fault rollback、eviction、同時競合、volatile予約Red反例 | Proven core + Model checked + Cloudflare SQLite Tested locally。device/mobile adapterはPending |
 | trusted signing anchor は rollback/foreign restore を拒否する | restore contract | exact/empty/foreign snapshot tests | Tested |
 | anchor 公開は identity/session/manifest/membership の全条件を要求する | MoonBit + checkpoint capability contract | 6 proof goals と invalid/cross-boundary/substitution tests | Proven + Tested |
 | 同じ batch の observer/key は一つの anchor value だけを持つ | authenticated-map contract | same-key replacement regression | Tested |
@@ -554,7 +556,7 @@ discharge したことを意味する。暗号仮定、I/O、overflow、モデ�
    checkpoint 公開、head fork tracker、wire envelope と in-memory gap transport は実装済み。
    1:N PvE、N:N PvP、open-world eligible-set/observerのversioned central replay bundleも
    DO/Queueまで接続済み。plan/sealの外部transparency-log inclusionもv2で接続した。次は
-   production durable/CAS adapter、persistent gossip/multi-peer transport、transparency headのremote witness、
+   Cloudflare SQLite referenceをdevice/mobile DBと外部署名credentialへ移植し、persistent gossip/multi-peer transport、transparency headのremote witness、
    zone observer assignment、委任 keyを
    実装する。
 4. player-local論理DBに加え、storage-neutral seal write-setとNode 24 SQLite参照adapterを実装した。
