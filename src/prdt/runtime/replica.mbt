@@ -175,3 +175,38 @@ pub fn[S : ToJson, C : Eq + ToJson, E : ToJson, R : ToJson] Replica::close_next_
   self.outbox.push({ proposals: [], closures: [certificate] })
   Some(certificate)
 }
+
+///|
+pub fn[S, C, E, R] Replica::digest(
+  self : Replica[S, C, E, R],
+) -> @prdt.KnowledgeDigest {
+  self.object.digest()
+}
+
+///|
+/// Everything a peer with `digest` is missing, including our base if the peer
+/// is behind it.
+pub fn[S, C, E, R] Replica::catchup_since(
+  self : Replica[S, C, E, R],
+  digest : @prdt.KnowledgeDigest,
+) -> @prdt.Catchup[S, C] {
+  self.object.catchup_since(digest)
+}
+
+///|
+pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Replica::receive_catchup(
+  self : Replica[S, C, E, R],
+  catchup : @prdt.Catchup[S, C],
+) -> Unit raise @prdt.ProtocolError {
+  self.object.apply_catchup(catchup)
+}
+
+///|
+/// Fold finalized history into the base and persist the smaller snapshot.
+pub fn[S : ToJson, C : ToJson, E : ToJson, R : ToJson] Replica::compact(
+  self : Replica[S, C, E, R],
+  retain_ticks~ : Int,
+) -> Unit {
+  self.object.compact(retain_ticks~)
+  let _ = self.checkpoint()
+}

@@ -151,3 +151,36 @@ pub impl[C : Eq] JoinSemilattice for ProposalState[C] with fn join(a, b) {
 pub impl[C : Eq] JoinSemilattice for ProposalState[C] with fn equivalent(a, b) {
   a.equals(b)
 }
+
+///|
+/// Drop every tick below `tick` (compaction / GC of finalized history).
+pub fn[C] ProposalState::prune_below(
+  self : ProposalState[C],
+  tick : Int,
+) -> ProposalState[C] {
+  let by_tick : Map[Int, Map[String, Envelope[C]]] = Map([])
+  for known_tick, envelopes in self.by_tick {
+    if known_tick >= tick {
+      by_tick[known_tick] = copy_tick(envelopes)
+    }
+  }
+  { by_tick, }
+}
+
+///|
+/// Ids known for ticks at or above `tick`, sorted.
+pub fn[C] ProposalState::ids_from(
+  self : ProposalState[C],
+  tick : Int,
+) -> Array[String] {
+  let ids = []
+  for known_tick, envelopes in self.by_tick {
+    if known_tick >= tick {
+      for id, _ in envelopes {
+        ids.push(id)
+      }
+    }
+  }
+  ids.sort()
+  ids
+}

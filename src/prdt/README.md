@@ -23,7 +23,7 @@ platform crypto; `examples/prdt` hosts it in a Cloudflare Durable Object.
 | --- | --- |
 | `prdt` | Envelope, canonical JSON + SHA-256 hashing, canonical order, `Domain`, `resolve_batch`, proposal / closure / committed lattices, `Protocol`, `ReplicatedDomain`, finalizers, laws |
 | `prdt/mmo` | MMO sample: world, commands, events, rejections, reducer, phase order, reference scenario |
-| `prdt/runtime` | Seeded PRNG, adversarial in-memory network, checkpoint store, replica with outbox, randomized simulator |
+| `prdt/runtime` | Seeded PRNG, adversarial in-memory network, checkpoint store, replica with outbox, quorum agent, randomized simulator (single-authority or quorum mode, compaction, digest anti-entropy with state transfer) |
 | `prdt/mmo/simulation` | MMO wiring for the simulator, scenario generator, property-style and negative tests |
 | `prdt/worker` | JSON-string bridge exported to JS / wasm-gc for hosts such as Durable Objects |
 
@@ -75,6 +75,26 @@ committed batch. The committed prefix is derived from knowledge and is never
 transported; `Protocol::restore` re-derives it and refuses a snapshot whose
 persisted prefix disagrees.
 
+### Compaction, digests, and state transfer
+
+`State` carries a `Base[S]`: the decision hash and domain state at
+`next_tick - 1` (genesis by default). `Protocol::compact(state, retain_ticks~)`
+folds the oldest materialized batches into the base and forgets proposals and
+closures below it. Compaction is administrative, not a join: it never changes
+a verdict, but `decision` stops reporting commands of compacted ticks, and
+proposals for compacted ticks are dropped on ingest.
+
+`Protocol::join` adopts the later base and refuses (`PrefixConflict`) a peer
+whose committed prefix contradicts it. `Protocol::digest` summarizes what a
+replica knows (`base_next_tick`, `next_tick`, retained ids, closed ticks) and
+`delta_since` / `catchup_since` return only what a peer with that digest is
+missing; a `Catchup` also carries the sender's base so a peer that fell behind
+a compacted history can resume. **Trust note:** a base cannot be re-derived
+once its history is forgotten, so `apply_catchup` adopts a base only when the
+receiver's own prefix cannot contradict it. Authenticating bases (a checkpoint
+certificate signed by the authority or a quorum, as in `audit/`) is future
+work.
+
 ### Finalizers
 
 ```moonbit
@@ -88,8 +108,15 @@ pub(open) trait Finalizer {
 - `QuorumFinalizer` / `Voter` / `VoteState`: a tick closes when at least
   `threshold` distinct roster members sign the same payload. `QuorumRoster::new`
   enforces `2 * threshold > roster.length()`, so at most one payload per tick
-  can qualify; an equivocating voter is excluded from every tally. Leader
-  election and retry (liveness) are not implemented.
+  can qualify; an equivocating voter is excluded from every tally. Certificate
+  identity is the payload, so certificates assembled from different vote
+  subsets are the same decision.
+- `runtime/QuorumAgent`: any replica may propose to close its next tick; a
+  voter signs the first proposal that targets its next tick, chains from its
+  head, and lists only known commands in canonical order (one vote per tick).
+  Whoever collects a majority assembles the certificate and gossips it. Safety
+  comes from the vote lattice; liveness is best effort (no leader election or
+  view change).
 
 `SharedSecretAuthenticator` is an HMAC-SHA256 MAC for tests and development,
 not a signature.
@@ -98,9 +125,9 @@ not a signature.
 
 | Property | Where |
 | --- | --- |
-| Domain rules, batch order independence, conflicts, closure uniqueness, prefix conflicts, late commands, forged / malformed / wrong-parent / non-canonical certificates, snapshot restore and tamper detection, quorum assembly and equivocation | `*_test.mbt` in `prdt` and `prdt/mmo` |
+| Domain rules, batch order independence, conflicts, closure uniqueness, prefix conflicts, late commands, forged / malformed / wrong-parent / non-canonical certificates, snapshot restore and tamper detection, quorum assembly and equivocation, compaction, digest deltas, catchup, join across bases | `*_test.mbt` in `prdt` and `prdt/mmo` |
 | Lattice laws for proposal / closure / log / vote / whole state; delivery order, duplication, and merge-tree invariance; snapshot round trip; decision monotonicity under `apply_delta` and `join`; closure uniqueness; prefix safety; late-command finality; domain validity (`Accepted(SkillActivated) => hp > 0 && mp >= cost` immediately before, `hp >= 0`) | `prdt/mmo/simulation/property_test.mbt` (seeded generators) |
-| 3-replica convergence under reorder, duplication, partition, restart from checkpoint; reproducibility by seed | `prdt/mmo/simulation/simulation_test.mbt` |
+| Convergence under reorder, duplication, partition, restart from checkpoint, compaction with state transfer, single-authority and quorum closure (3 and 5 replicas, with an equivocating voter); reproducibility by seed | `prdt/mmo/simulation/simulation_test.mbt` |
 | Unstable `alive` guard; premature acceptance breaks monotonicity | `prdt/mmo/simulation/negative_test.mbt` |
 | JSON bridge round trip and error reporting | `prdt/worker/bridge_test.mbt` |
 
@@ -121,8 +148,8 @@ just test-prdt-worker   # Cloudflare Durable Object host
 - Byzantine fault tolerance beyond excluding equivocating quorum voters.
 - Quorum liveness: leader election, view change, vote retry.
 - `MoveToNextTick` late-command policy (only `RejectAsLate`).
-- Delta-since-cursor dissemination; the bridge serves full anti-entropy deltas.
-- Compaction / GC of proposals and the committed prefix.
+- Authenticated bases (checkpoint certificates) for state transfer; the JS
+  bridge still serves full anti-entropy deltas.
 - Entity/zone sharding and cross-scope transactions.
 - Why3 proof obligations (`.mbtp`) for the lattice laws; today they are checked
   by seeded property tests only.

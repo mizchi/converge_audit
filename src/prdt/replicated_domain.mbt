@@ -22,10 +22,70 @@ pub struct Protocol[S, C, E, R] {
 }
 
 ///|
+/// Compacted history: the decision hash and domain state at `next_tick - 1`.
+/// The genesis base carries the initial state and the genesis hash. Every
+/// tick below `next_tick` has been finalized and may have been forgotten.
+pub(all) struct Base[S] {
+  next_tick : Int
+  decision_hash : String
+  state : S
+} derive(Eq, Debug)
+
+///|
 pub struct State[S, C, E, R] {
+  base : Base[S]
   proposals : ProposalState[C]
   closures : ClosureMap
   committed : CommittedLog[ResolvedBatch[S, C, E, R]]
+}
+
+///|
+/// What one replica already knows, so a peer can send only the rest.
+/// Ticks below `next_tick` are finalized on the requester and never needed.
+pub(all) struct KnowledgeDigest {
+  /// Ticks below this were compacted on the requester; it cannot store them.
+  base_next_tick : Int
+  /// Ticks below this are finalized on the requester.
+  next_tick : Int
+  /// Ids known for ticks at or above `base_next_tick` (late ones included).
+  known_ids : Array[String]
+  /// Closed ticks at or above `next_tick`.
+  closed_ticks : Array[Int]
+} derive(Eq, Debug)
+
+///|
+pub impl ToJson for KnowledgeDigest with fn to_json(self) {
+  {
+    "base_next_tick": self.base_next_tick.to_json(),
+    "next_tick": self.next_tick.to_json(),
+    "known_ids": self.known_ids.to_json(),
+    "closed_ticks": self.closed_ticks.to_json(),
+  }
+}
+
+///|
+pub impl @json.FromJson for KnowledgeDigest with fn from_json(json, path) {
+  guard json is Object(fields) else {
+    raise @json.JsonDecodeError((path, "KnowledgeDigest: expected object"))
+  }
+  {
+    base_next_tick: @json.from_json(
+      json_field(fields, "base_next_tick", path),
+      path=path.add_key("base_next_tick"),
+    ),
+    next_tick: @json.from_json(
+      json_field(fields, "next_tick", path),
+      path=path.add_key("next_tick"),
+    ),
+    known_ids: @json.from_json(
+      json_field(fields, "known_ids", path),
+      path=path.add_key("known_ids"),
+    ),
+    closed_ticks: @json.from_json(
+      json_field(fields, "closed_ticks", path),
+      path=path.add_key("closed_ticks"),
+    ),
+  }
 }
 
 ///|
@@ -140,12 +200,21 @@ pub fn[S, C, E, R] Protocol::domain(
 pub fn[S, C, E, R] Protocol::initial(
   self : Protocol[S, C, E, R],
 ) -> State[S, C, E, R] {
-  ignore(self)
   {
+    base: {
+      next_tick: self.genesis_tick,
+      decision_hash: self.genesis_hash,
+      state: (self.domain.initial_state)(),
+    },
     proposals: ProposalState::empty(),
     closures: ClosureMap::empty(),
     committed: CommittedLog::empty(),
   }
+}
+
+///|
+pub fn[S, C, E, R] State::base(self : State[S, C, E, R]) -> Base[S] {
+  self.base
 }
 
 ///|
@@ -172,9 +241,10 @@ pub fn[S, C, E, R] Protocol::domain_state(
   self : Protocol[S, C, E, R],
   state : State[S, C, E, R],
 ) -> S {
+  ignore(self)
   match state.committed.last() {
     Some(batch) => batch.result.resulting_state
-    None => (self.domain.initial_state)()
+    None => state.base.state
   }
 }
 
@@ -183,7 +253,8 @@ pub fn[S, C, E, R] Protocol::next_tick(
   self : Protocol[S, C, E, R],
   state : State[S, C, E, R],
 ) -> Int {
-  self.genesis_tick + state.committed.length()
+  ignore(self)
+  state.base.next_tick + state.committed.length()
 }
 
 ///|
@@ -218,12 +289,12 @@ fn[S : ToJson, C, E : ToJson, R : ToJson] Protocol::advance(
   let mut log = state.committed
   let mut domain_state = self.domain_state(state)
   while true {
-    let tick = self.genesis_tick + log.length()
+    let tick = state.base.next_tick + log.length()
     let certificate = match state.closures.for_tick(tick) {
       Closed(certificate) => certificate
       ClosurePending => break
     }
-    let parent = log.head_decision_hash(self.genesis_hash)
+    let parent = log.head_decision_hash(state.base.decision_hash)
     if certificate.parent_decision_hash != parent {
       raise ChainMismatch(tick)
     }
@@ -283,7 +354,12 @@ fn[S : ToJson, C, E : ToJson, R : ToJson] Protocol::advance(
       result: batch,
     })
   }
-  { proposals: state.proposals, closures: state.closures, committed: log }
+  {
+    base: state.base,
+    proposals: state.proposals,
+    closures: state.closures,
+    committed: log,
+  }
 }
 
 ///|
@@ -299,32 +375,165 @@ pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Protocol::apply_delta(
     if !is_valid_tick(envelope.tick) {
       raise InvalidTick(envelope.id)
     }
+    // Ticks below the base were finalized and compacted; nothing about them
+    // can change, so their proposals are not retained.
+    if envelope.tick < state.base.next_tick {
+      continue
+    }
     proposals = proposals.add(envelope)
   }
+  let retained : Array[ClosureCertificate] = []
   for certificate in delta.closures {
+    if certificate.tick < state.base.next_tick {
+      continue
+    }
     self.validate_certificate_shape(certificate)
     if !self.finalizer.verify_closure(certificate) {
       raise InvalidCertificate(certificate.tick)
     }
+    retained.push(certificate)
   }
-  let closures = state.closures.merge(
-    ClosureMap::from_certificates(delta.closures),
-  )
-  self.advance({ proposals, closures, committed: state.committed })
+  let closures = state.closures.merge(ClosureMap::from_certificates(retained))
+  self.advance({
+    base: state.base,
+    proposals,
+    closures,
+    committed: state.committed,
+  })
 }
 
 ///|
 /// Whole-state join. Verifies nothing; use `apply_delta` for untrusted input.
+///
+/// The join adopts the later base. The other side's committed prefix must
+/// agree with that base where it overlaps (`PrefixConflict` otherwise), and
+/// everything below the adopted base is pruned.
 pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Protocol::join(
   self : Protocol[S, C, E, R],
   left : State[S, C, E, R],
   right : State[S, C, E, R],
 ) -> State[S, C, E, R] raise ProtocolError {
-  self.advance({
-    proposals: left.proposals.merge(right.proposals),
-    closures: left.closures.merge(right.closures),
-    committed: left.committed.merge(right.committed),
-  })
+  let (lead, other) = if left.base.next_tick >= right.base.next_tick {
+    (left, right)
+  } else {
+    (right, left)
+  }
+  let other_log = self.rebase_log(other, lead.base)
+  let committed = lead.committed.merge(other_log)
+  let proposals = lead.proposals
+    .merge(other.proposals)
+    .prune_below(lead.base.next_tick)
+  let closures = lead.closures
+    .merge(other.closures)
+    .prune_below(lead.base.next_tick)
+  self.advance({ base: lead.base, proposals, closures, committed })
+}
+
+///|
+/// Express `state`'s committed log relative to `base`, checking that the
+/// overlap agrees with the base decision hash.
+fn[S, C, E, R] Protocol::rebase_log(
+  self : Protocol[S, C, E, R],
+  state : State[S, C, E, R],
+  base : Base[S],
+) -> CommittedLog[ResolvedBatch[S, C, E, R]] raise ProtocolError {
+  ignore(self)
+  if state.base.next_tick == base.next_tick {
+    if state.base.decision_hash != base.decision_hash {
+      raise PrefixConflict(0)
+    }
+    return state.committed
+  }
+  if state.base.next_tick > base.next_tick {
+    abort("rebase_log: state base is ahead of the target base")
+  }
+  // Position of the batch that produced `base` inside `state`'s log.
+  let index = base.next_tick - 1 - state.base.next_tick
+  let batches = state.committed.batches()
+  if index < batches.length() {
+    if batches[index].result_hash != base.decision_hash {
+      raise PrefixConflict(index)
+    }
+    { batches: batches[index + 1:].to_owned() }
+  } else {
+    // `state` has not reached the base yet; it contributes nothing beyond it.
+    CommittedLog::empty()
+  }
+}
+
+///|
+/// Fold the oldest committed batches into the base, keeping `retain_ticks`
+/// materialized batches, and forget proposals and closures below the new base.
+///
+/// Compaction is an administrative operation, not a lattice join: it forgets
+/// finalized history, so `decision` no longer reports commands of compacted
+/// ticks. It never changes a verdict.
+pub fn[S, C, E, R] Protocol::compact(
+  self : Protocol[S, C, E, R],
+  state : State[S, C, E, R],
+  retain_ticks~ : Int,
+) -> State[S, C, E, R] {
+  ignore(self)
+  if retain_ticks < 0 {
+    abort("retain_ticks must be non-negative")
+  }
+  let batches = state.committed.batches()
+  let drop = batches.length() - retain_ticks
+  if drop <= 0 {
+    return state
+  }
+  let boundary = batches[drop - 1]
+  let base : Base[S] = {
+    next_tick: boundary.tick + 1,
+    decision_hash: boundary.result_hash,
+    state: boundary.result.resulting_state,
+  }
+  {
+    base,
+    proposals: state.proposals.prune_below(base.next_tick),
+    closures: state.closures.prune_below(base.next_tick),
+    committed: { batches: batches[drop:].to_owned() },
+  }
+}
+
+///|
+pub fn[S, C, E, R] Protocol::digest(
+  self : Protocol[S, C, E, R],
+  state : State[S, C, E, R],
+) -> KnowledgeDigest {
+  let next_tick = self.next_tick(state)
+  {
+    base_next_tick: state.base.next_tick,
+    next_tick,
+    known_ids: state.proposals.ids_from(state.base.next_tick),
+    closed_ticks: state.closures.closed_ticks_from(next_tick),
+  }
+}
+
+///|
+/// The part of `state` a peer with `digest` is missing: proposals and
+/// closures for ticks the peer has not finalized, minus what it already knows.
+pub fn[S, C, E, R] Protocol::delta_since(
+  self : Protocol[S, C, E, R],
+  state : State[S, C, E, R],
+  digest : KnowledgeDigest,
+) -> Delta[C] {
+  ignore(self)
+  let known : Map[String, Unit] = Map([])
+  for id in digest.known_ids {
+    known[id] = ()
+  }
+  let closed : Map[Int, Unit] = Map([])
+  for tick in digest.closed_ticks {
+    closed[tick] = ()
+  }
+  let proposals = state.proposals
+    .list()
+    .filter(fn(e) { e.tick >= digest.base_next_tick && !known.contains(e.id) })
+  let closures = state.closures
+    .list()
+    .filter(fn(c) { c.tick >= digest.next_tick && !closed.contains(c.tick) })
+  { proposals, closures }
 }
 
 ///|
@@ -334,6 +543,8 @@ pub fn[S, C : Eq, E, R] Protocol::states_equal(
   right : State[S, C, E, R],
 ) -> Bool {
   ignore(self)
+  left.base.next_tick == right.base.next_tick &&
+  left.base.decision_hash == right.base.decision_hash &&
   left.proposals.equals(right.proposals) &&
   left.closures.equals(right.closures) &&
   left.committed.equals(right.committed)
@@ -354,6 +565,7 @@ pub fn[S, C, E, R] Protocol::decision(
   self : Protocol[S, C, E, R],
   state : State[S, C, E, R],
 ) -> Decision[E, R] {
+  ignore(self)
   let commands : Map[String, CommandDecision[E, R]] = Map([])
   let verdict_by_tick : Map[Int, Map[String, Verdict[E, R]]] = Map([])
   for batch in state.committed.batches {
@@ -401,7 +613,9 @@ pub fn[S, C, E, R] Protocol::decision(
   {
     commands,
     committed_ticks: state.committed.batches.map(fn(b) { b.tick }),
-    head_decision_hash: state.committed.head_decision_hash(self.genesis_hash),
+    head_decision_hash: state.committed.head_decision_hash(
+      state.base.decision_hash,
+    ),
   }
 }
 
@@ -412,8 +626,14 @@ pub fn[S, C : ToJson, E, R] Protocol::state_hash(
   state : State[S, C, E, R],
 ) -> String {
   hash_json(self.hasher, {
+    "base": {
+      "next_tick": state.base.next_tick.to_json(),
+      "decision_hash": state.base.decision_hash.to_json(),
+    },
     "proposals": state.proposals.list().to_json(),
-    "closures": state.closures.list().to_json(),
+    "closures": Json::array(
+      state.closures.list().map(fn(c) { c.payload_json() }),
+    ),
     "committed": state.committed.result_hashes().to_json(),
   })
 }
@@ -542,7 +762,7 @@ pub impl[R : @json.FromJson] @json.FromJson for CommittedBatch[R] with fn from_j
 }
 
 ///|
-pub let snapshot_version : Int = 1
+pub let snapshot_version : Int = 2
 
 ///|
 pub fn[S : ToJson, C : ToJson, E : ToJson, R : ToJson] Protocol::snapshot(
@@ -552,6 +772,11 @@ pub fn[S : ToJson, C : ToJson, E : ToJson, R : ToJson] Protocol::snapshot(
   {
     "version": snapshot_version.to_json(),
     "genesis_tick": self.genesis_tick.to_json(),
+    "base": {
+      "next_tick": state.base.next_tick.to_json(),
+      "decision_hash": state.base.decision_hash.to_json(),
+      "state": state.base.state.to_json(),
+    },
     "proposals": state.proposals.list().to_json(),
     "closures": state.closures.list().to_json(),
     "committed": state.committed.batches.to_json(),
@@ -610,6 +835,25 @@ pub fn[
   if genesis_tick != self.genesis_tick {
     raise SnapshotMismatch("genesis tick mismatch")
   }
+  let base_json = snapshot_field(fields, "base")
+  guard base_json is Object(base_fields) else {
+    raise SnapshotMismatch("base: expected object")
+  }
+  let base : Base[S] = {
+    next_tick: snapshot_decode(
+      snapshot_field(base_fields, "next_tick"),
+      "base.next_tick",
+    ),
+    decision_hash: snapshot_decode(
+      snapshot_field(base_fields, "decision_hash"),
+      "base.decision_hash",
+    ),
+    state: snapshot_decode(snapshot_field(base_fields, "state"), "base.state"),
+  }
+  if base.next_tick == self.genesis_tick &&
+    base.decision_hash != self.genesis_hash {
+    raise SnapshotMismatch("genesis base hash mismatch")
+  }
   let proposals : Array[Envelope[C]] = snapshot_decode(
     snapshot_field(fields, "proposals"),
     "proposals",
@@ -628,10 +872,13 @@ pub fn[
   }
   let closure_map = ClosureMap::from_certificates(closures)
   let recomputed = self.advance({
-    proposals: proposal_state,
-    closures: closure_map,
+    base,
+    proposals: proposal_state.prune_below(base.next_tick),
+    closures: closure_map.prune_below(base.next_tick),
     committed: CommittedLog::empty(),
-  })
+  }) catch {
+    error => raise SnapshotMismatch("recomputation failed: " + error.kind())
+  }
   let persisted_log : CommittedLog[ResolvedBatch[S, C, E, R]] = {
     batches: persisted,
   }
@@ -807,4 +1054,146 @@ pub fn[
     state: protocol.restore(snapshot_field(fields, "state")),
     next_local_sequence,
   }
+}
+
+///|
+pub impl[S : ToJson] ToJson for Base[S] with fn to_json(self) {
+  {
+    "next_tick": self.next_tick.to_json(),
+    "decision_hash": self.decision_hash.to_json(),
+    "state": self.state.to_json(),
+  }
+}
+
+///|
+pub impl[S : @json.FromJson] @json.FromJson for Base[S] with fn from_json(
+  json,
+  path,
+) {
+  guard json is Object(fields) else {
+    raise @json.JsonDecodeError((path, "Base: expected object"))
+  }
+  {
+    next_tick: @json.from_json(
+      json_field(fields, "next_tick", path),
+      path=path.add_key("next_tick"),
+    ),
+    decision_hash: @json.from_json(
+      json_field(fields, "decision_hash", path),
+      path=path.add_key("decision_hash"),
+    ),
+    state: @json.from_json(
+      json_field(fields, "state", path),
+      path=path.add_key("state"),
+    ),
+  }
+}
+
+///|
+/// State transfer for a peer that fell behind a compacted history: the
+/// sender's base plus the delta the peer is missing.
+///
+/// Trust note: a base cannot be re-derived by the receiver once the sender
+/// has forgotten the history behind it. `apply_catchup` therefore adopts a
+/// base only when the receiver's own committed prefix cannot contradict it;
+/// authenticating bases (a checkpoint certificate signed by the authority or
+/// a quorum, as in `audit/`) is future work.
+pub(all) struct Catchup[S, C] {
+  base : Base[S]
+  delta : Delta[C]
+}
+
+///|
+pub impl[S : ToJson, C : ToJson] ToJson for Catchup[S, C] with fn to_json(self) {
+  { "base": self.base.to_json(), "delta": self.delta.to_json() }
+}
+
+///|
+pub impl[S : @json.FromJson, C : @json.FromJson] @json.FromJson for Catchup[
+  S,
+  C,
+] with fn from_json(json, path) {
+  guard json is Object(fields) else {
+    raise @json.JsonDecodeError((path, "Catchup: expected object"))
+  }
+  {
+    base: @json.from_json(
+      json_field(fields, "base", path),
+      path=path.add_key("base"),
+    ),
+    delta: @json.from_json(
+      json_field(fields, "delta", path),
+      path=path.add_key("delta"),
+    ),
+  }
+}
+
+///|
+pub fn[S, C, E, R] Protocol::catchup_since(
+  self : Protocol[S, C, E, R],
+  state : State[S, C, E, R],
+  digest : KnowledgeDigest,
+) -> Catchup[S, C] {
+  { base: state.base, delta: self.delta_since(state, digest) }
+}
+
+///|
+/// Adopt a later base when local knowledge cannot contradict it, then apply
+/// the delta. A base at or below the local base is ignored.
+pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Protocol::apply_catchup(
+  self : Protocol[S, C, E, R],
+  state : State[S, C, E, R],
+  catchup : Catchup[S, C],
+) -> State[S, C, E, R] raise ProtocolError {
+  let rebased = if catchup.base.next_tick > state.base.next_tick {
+    let log = self.rebase_log(state, catchup.base)
+    {
+      base: catchup.base,
+      proposals: state.proposals.prune_below(catchup.base.next_tick),
+      closures: state.closures.prune_below(catchup.base.next_tick),
+      committed: log,
+    }
+  } else {
+    state
+  }
+  self.apply_delta(rebased, catchup.delta)
+}
+
+///|
+pub fn[S, C, E, R] ReplicatedDomain::compact(
+  self : ReplicatedDomain[S, C, E, R],
+  retain_ticks~ : Int,
+) -> Unit {
+  self.state = self.protocol.compact(self.state, retain_ticks~)
+}
+
+///|
+pub fn[S, C, E, R] ReplicatedDomain::digest(
+  self : ReplicatedDomain[S, C, E, R],
+) -> KnowledgeDigest {
+  self.protocol.digest(self.state)
+}
+
+///|
+pub fn[S, C, E, R] ReplicatedDomain::delta_since(
+  self : ReplicatedDomain[S, C, E, R],
+  digest : KnowledgeDigest,
+) -> Delta[C] {
+  self.protocol.delta_since(self.state, digest)
+}
+
+///|
+pub fn[S, C, E, R] ReplicatedDomain::catchup_since(
+  self : ReplicatedDomain[S, C, E, R],
+  digest : KnowledgeDigest,
+) -> Catchup[S, C] {
+  self.protocol.catchup_since(self.state, digest)
+}
+
+///|
+pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] ReplicatedDomain::apply_catchup(
+  self : ReplicatedDomain[S, C, E, R],
+  catchup : Catchup[S, C],
+) -> Unit raise ProtocolError {
+  self.state = self.protocol.apply_catchup(self.state, catchup)
 }

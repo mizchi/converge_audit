@@ -1,45 +1,45 @@
 ///|
 /// Adversarial in-memory network: delay, reorder, duplicate, partition, heal.
-/// It never corrupts a delta; authenticity is the finalizer's job and payload
-/// conflicts are the proposal lattice's job.
-pub(all) struct Message[C] {
+/// It never corrupts a payload; authenticity is the finalizer's job and
+/// payload conflicts are the proposal lattice's job.
+pub(all) struct Message[M] {
   sequence : Int
   sender : String
   receiver : String
-  delta : @prdt.Delta[C]
+  payload : M
 }
 
 ///|
-pub struct InMemoryNetwork[C] {
-  queue : Array[Message[C]]
+pub struct InMemoryNetwork[M] {
+  queue : Array[Message[M]]
   mut sequence : Int
   mut groups : Map[String, Int]?
 }
 
 ///|
-pub fn[C] InMemoryNetwork::new() -> InMemoryNetwork[C] {
+pub fn[M] InMemoryNetwork::new() -> InMemoryNetwork[M] {
   { queue: [], sequence: 0, groups: None }
 }
 
 ///|
-pub fn[C] InMemoryNetwork::send(
-  self : InMemoryNetwork[C],
+pub fn[M] InMemoryNetwork::send(
+  self : InMemoryNetwork[M],
   sender : String,
   receiver : String,
-  delta : @prdt.Delta[C],
+  payload : M,
 ) -> Unit {
-  self.queue.push({ sequence: self.sequence, sender, receiver, delta })
+  self.queue.push({ sequence: self.sequence, sender, receiver, payload })
   self.sequence += 1
 }
 
 ///|
-pub fn[C] InMemoryNetwork::pending(self : InMemoryNetwork[C]) -> Int {
+pub fn[M] InMemoryNetwork::pending(self : InMemoryNetwork[M]) -> Int {
   self.queue.length()
 }
 
 ///|
-fn[C] InMemoryNetwork::deliverable_indices(
-  self : InMemoryNetwork[C],
+fn[M] InMemoryNetwork::deliverable_indices(
+  self : InMemoryNetwork[M],
 ) -> Array[Int] {
   let out = []
   for index in 0..<self.queue.length() {
@@ -57,10 +57,10 @@ fn[C] InMemoryNetwork::deliverable_indices(
 
 ///|
 /// Remove and return one deliverable message: FIFO, or a random one when `rng` is given.
-pub fn[C] InMemoryNetwork::deliver_one(
-  self : InMemoryNetwork[C],
+pub fn[M] InMemoryNetwork::deliver_one(
+  self : InMemoryNetwork[M],
   rng? : Rng,
-) -> Message[C]? {
+) -> Message[M]? {
   let candidates = self.deliverable_indices()
   if candidates.length() == 0 {
     return None
@@ -74,8 +74,8 @@ pub fn[C] InMemoryNetwork::deliver_one(
 
 ///|
 /// Re-enqueue a copy of a random queued message (duplicate delivery).
-pub fn[C] InMemoryNetwork::duplicate_one(
-  self : InMemoryNetwork[C],
+pub fn[M] InMemoryNetwork::duplicate_one(
+  self : InMemoryNetwork[M],
   rng : Rng,
 ) -> Bool {
   if self.queue.length() == 0 {
@@ -88,8 +88,8 @@ pub fn[C] InMemoryNetwork::duplicate_one(
 }
 
 ///|
-pub fn[C] InMemoryNetwork::partition(
-  self : InMemoryNetwork[C],
+pub fn[M] InMemoryNetwork::partition(
+  self : InMemoryNetwork[M],
   groups : Array[Array[String]],
 ) -> Unit {
   let map : Map[String, Int] = Map([])
@@ -102,11 +102,11 @@ pub fn[C] InMemoryNetwork::partition(
 }
 
 ///|
-pub fn[C] InMemoryNetwork::heal(self : InMemoryNetwork[C]) -> Unit {
+pub fn[M] InMemoryNetwork::heal(self : InMemoryNetwork[M]) -> Unit {
   self.groups = None
 }
 
 ///|
-pub fn[C] InMemoryNetwork::partitioned(self : InMemoryNetwork[C]) -> Bool {
+pub fn[M] InMemoryNetwork::partitioned(self : InMemoryNetwork[M]) -> Bool {
   self.groups is Some(_)
 }

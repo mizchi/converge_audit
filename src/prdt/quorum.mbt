@@ -175,3 +175,34 @@ pub fn assemble_quorum_certificate(
     }
   }
 }
+
+///|
+/// A vote counts only if its signer is a roster member and the signature
+/// covers the vote's closure payload.
+pub fn QuorumFinalizer::verify_vote(
+  self : QuorumFinalizer,
+  vote : ClosureVote,
+) -> Bool {
+  if !self.roster.members.contains(vote.voter) {
+    return false
+  }
+  if hash_command_ids(self.hasher, vote.ordered_command_ids) !=
+    vote.ordered_commands_hash {
+    return false
+  }
+  self.verifier.verify(
+    vote.voter,
+    vote.payload().digest(self.hasher),
+    vote.signature,
+  )
+}
+
+///|
+pub fn QuorumFinalizer::roster(self : QuorumFinalizer) -> QuorumRoster {
+  self.roster
+}
+
+///|
+pub fn[C] Voter::public_key(self : Voter[C]) -> @bft.PublicKey {
+  self.signer.public_key()
+}

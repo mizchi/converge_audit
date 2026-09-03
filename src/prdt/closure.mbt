@@ -33,6 +33,31 @@ pub(all) enum ClosureDecision {
 } derive(Eq, Debug)
 
 ///|
+/// Certificate identity is its payload: tick, parent hash, and the ordered
+/// command ids. Attestations are proof, not state; two verified certificates
+/// for the same payload are the same decision even if different quorum
+/// members signed them.
+pub fn ClosureCertificate::same_decision(
+  self : ClosureCertificate,
+  other : ClosureCertificate,
+) -> Bool {
+  self.tick == other.tick &&
+  self.parent_decision_hash == other.parent_decision_hash &&
+  self.ordered_commands_hash == other.ordered_commands_hash &&
+  self.ordered_command_ids == other.ordered_command_ids
+}
+
+///|
+pub fn ClosureCertificate::payload_json(self : ClosureCertificate) -> Json {
+  {
+    "tick": self.tick.to_json(),
+    "parent_decision_hash": self.parent_decision_hash.to_json(),
+    "ordered_command_ids": self.ordered_command_ids.to_json(),
+    "ordered_commands_hash": self.ordered_commands_hash.to_json(),
+  }
+}
+
+///|
 pub fn merge_closure_decisions(
   left : ClosureDecision,
   right : ClosureDecision,
@@ -40,11 +65,23 @@ pub fn merge_closure_decisions(
   match (left, right) {
     (ClosurePending, other) | (other, ClosurePending) => other
     (Closed(a), Closed(b)) =>
-      if a == b {
+      if a.same_decision(b) {
         left
       } else {
         raise ConflictingClosure(a.tick)
       }
+  }
+}
+
+///|
+pub fn closure_decisions_equivalent(
+  left : ClosureDecision,
+  right : ClosureDecision,
+) -> Bool {
+  match (left, right) {
+    (ClosurePending, ClosurePending) => true
+    (Closed(a), Closed(b)) => a.same_decision(b)
+    _ => false
   }
 }
 
@@ -55,7 +92,7 @@ pub impl JoinSemilattice for ClosureDecision with fn join(a, b) {
 
 ///|
 pub impl JoinSemilattice for ClosureDecision with fn equivalent(a, b) {
-  a == b
+  closure_decisions_equivalent(a, b)
 }
 
 ///|
@@ -128,7 +165,15 @@ pub fn ClosureMap::list(self : ClosureMap) -> Array[ClosureCertificate] {
 pub fn ClosureMap::equals(self : ClosureMap, other : ClosureMap) -> Bool {
   let mine = self.list()
   let theirs = other.list()
-  mine == theirs
+  if mine.length() != theirs.length() {
+    return false
+  }
+  for index in 0..<mine.length() {
+    if !mine[index].same_decision(theirs[index]) {
+      return false
+    }
+  }
+  true
 }
 
 ///|
@@ -200,4 +245,25 @@ pub impl @json.FromJson for ClosureCertificate with fn from_json(json, path) {
       path=path.add_key("attestations"),
     ),
   }
+}
+
+///|
+/// Drop every tick below `tick` (compaction / GC of finalized history).
+pub fn ClosureMap::prune_below(self : ClosureMap, tick : Int) -> ClosureMap {
+  let by_tick : Map[Int, ClosureDecision] = Map([])
+  for known_tick, decision in self.by_tick {
+    if known_tick >= tick {
+      by_tick[known_tick] = decision
+    }
+  }
+  { by_tick, }
+}
+
+///|
+/// Closed ticks at or above `tick`, sorted.
+pub fn ClosureMap::closed_ticks_from(
+  self : ClosureMap,
+  tick : Int,
+) -> Array[Int] {
+  self.list().filter(fn(c) { c.tick >= tick }).map(fn(c) { c.tick })
 }

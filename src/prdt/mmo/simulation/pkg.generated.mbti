@@ -18,7 +18,9 @@ pub fn random_scenario_command(@runtime.Rng) -> @mmo.GameCommand
 
 pub fn random_world(@runtime.Rng) -> @mmo.World
 
-pub fn run_mmo_simulation(seed~ : Int, steps? : Int, replica_count? : Int) -> @runtime.SimulationReport raise @prdt.ProtocolError
+pub fn run_mmo_quorum_simulation(seed~ : Int, steps? : Int, replica_count? : Int, equivocators? : Array[Int], compaction_retain? : Int) -> @runtime.SimulationReport raise
+
+pub fn run_mmo_simulation(seed~ : Int, steps? : Int, replica_count? : Int, compaction_retain? : Int) -> @runtime.SimulationReport raise @prdt.ProtocolError
 
 pub let scenario_players : Array[String]
 

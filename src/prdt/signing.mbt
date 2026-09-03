@@ -49,3 +49,37 @@ pub impl @bft.Verifier for SharedSecretAuthenticator with fn verify(
 ) {
   key == self.public_key && signature.0 == self.tag(digest)
 }
+
+///|
+/// Dispatches verification to the verifier registered for each public key.
+/// Lets a quorum roster mix key types behind one `Verifier`.
+pub struct KeyedVerifier {
+  verifiers : Map[String, &@bft.Verifier]
+}
+
+///|
+pub fn KeyedVerifier::new() -> KeyedVerifier {
+  { verifiers: Map([]) }
+}
+
+///|
+pub fn KeyedVerifier::register(
+  self : KeyedVerifier,
+  key : @bft.PublicKey,
+  verifier : &@bft.Verifier,
+) -> Unit {
+  self.verifiers[key.0] = verifier
+}
+
+///|
+pub impl @bft.Verifier for KeyedVerifier with fn verify(
+  self,
+  key,
+  digest,
+  signature,
+) {
+  match self.verifiers.get(key.0) {
+    Some(verifier) => verifier.verify(key, digest, signature)
+    None => false
+  }
+}
