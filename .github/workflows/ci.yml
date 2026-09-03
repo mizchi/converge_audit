@@ -30,6 +30,10 @@ jobs:
         with:
           version: 0.10.5+5e7afb0c0
           core-version: 0.10.5+5e7afb0c0
+      - name: Resolve MoonBit dependencies
+        run: |
+          moon update
+          moon install
       - name: Record toolchain
         run: moon version --all
       - name: Check generated interfaces and formatting
@@ -57,6 +61,10 @@ jobs:
         with:
           version: 0.10.5+5e7afb0c0
           core-version: 0.10.5+5e7afb0c0
+      - name: Resolve MoonBit dependencies
+        run: |
+          moon update
+          moon install
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
@@ -111,6 +119,10 @@ jobs:
         with:
           version: 0.10.5+5e7afb0c0
           core-version: 0.10.5+5e7afb0c0
+      - name: Resolve MoonBit dependencies
+        run: |
+          moon update
+          moon install
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
@@ -146,6 +158,10 @@ jobs:
         with:
           version: 0.10.5+5e7afb0c0
           core-version: 0.10.5+5e7afb0c0
+      - name: Resolve MoonBit dependencies
+        run: |
+          moon update
+          moon install
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
@@ -179,6 +195,10 @@ jobs:
         with:
           version: 0.10.5+5e7afb0c0
           core-version: 0.10.5+5e7afb0c0
+      - name: Resolve MoonBit dependencies
+        run: |
+          moon update
+          moon install
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
