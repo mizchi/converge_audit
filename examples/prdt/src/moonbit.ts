@@ -67,4 +67,14 @@ export const replica = {
     call(handle, (bridge, snapshot) => bridge.prdt_mmo_delta(snapshot, handle.secret, handle.replicaId)),
   world: (handle: ReplicaHandle) =>
     call(handle, (bridge, snapshot) => bridge.prdt_mmo_world(snapshot, handle.secret, handle.replicaId)),
+  digest: (handle: ReplicaHandle) =>
+    call(handle, (bridge, snapshot) => bridge.prdt_mmo_digest(snapshot, handle.secret, handle.replicaId)),
+  catchup: (handle: ReplicaHandle, digest: JsonValue) =>
+    call(handle, (bridge, snapshot) => bridge.prdt_mmo_catchup(snapshot, handle.secret, handle.replicaId, JSON.stringify(digest))),
+  applyCatchup: (handle: ReplicaHandle, catchup: JsonValue) =>
+    call(handle, (bridge, snapshot) =>
+      bridge.prdt_mmo_apply_catchup(snapshot, handle.secret, handle.replicaId, JSON.stringify(catchup)),
+    ),
+  compact: (handle: ReplicaHandle, retainTicks: number) =>
+    call(handle, (bridge, snapshot) => bridge.prdt_mmo_compact(snapshot, handle.secret, handle.replicaId, retainTicks)),
 };

@@ -36,6 +36,24 @@ moon version --all
 moon update
 moon install
 
+# Proof toolchain for `moon prove` (Why3 + Z3). Best effort: the MoonBit
+# contracts still check and test without it.
+if ! command -v why3 >/dev/null 2>&1 || ! command -v z3 >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "session-start: installing why3 and z3"
+    (apt-get install -y why3 z3 >/dev/null 2>&1 || (apt-get update >/dev/null 2>&1 && apt-get install -y why3 z3 >/dev/null 2>&1)) || \
+      echo "session-start: could not install why3/z3; moon prove will be unavailable" >&2
+  fi
+fi
+if command -v why3 >/dev/null 2>&1 && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  why3_lib="$(dirname "$(find / -type d -name why3 -path '*lib*' -not -path '*share*' 2>/dev/null | head -1)")/why3"
+  {
+    echo 'export WHY3DATA="/usr/share/why3"'
+    echo "export WHY3LIB=\"$why3_lib\""
+    echo 'export Z3PATH="/usr/bin/z3"'
+  } >> "$CLAUDE_ENV_FILE"
+fi
+
 # TypeScript example workspaces with lockfiles.
 for dir in examples/node-audit-runtime examples/cf-game-audit examples/prdt; do
   if [ -f "$dir/pnpm-lock.yaml" ]; then

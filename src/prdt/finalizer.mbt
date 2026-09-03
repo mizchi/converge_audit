@@ -5,6 +5,8 @@
 /// be swapped without touching the domain or finalization layers.
 pub(open) trait Finalizer {
   fn verify_closure(Self, ClosureCertificate) -> Bool
+  /// Whether a compacted base may be adopted on the strength of this certificate.
+  fn verify_base(Self, BaseCertificate) -> Bool
 }
 
 ///|

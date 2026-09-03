@@ -34,6 +34,11 @@ pub(all) struct Base[S] {
 ///|
 pub struct State[S, C, E, R] {
   base : Base[S]
+  /// Certificate for `base`; `None` only for the genesis base.
+  base_certificate : BaseCertificate?
+  /// Certified bases at or above `base.next_tick`, keyed by `next_tick`.
+  /// A replica may compact only to a certified boundary.
+  certified_bases : Map[Int, BaseCertificate]
   proposals : ProposalState[C]
   closures : ClosureMap
   committed : CommittedLog[ResolvedBatch[S, C, E, R]]
@@ -51,6 +56,8 @@ pub(all) struct KnowledgeDigest {
   known_ids : Array[String]
   /// Closed ticks at or above `next_tick`.
   closed_ticks : Array[Int]
+  /// Certified base ticks at or above `base_next_tick`.
+  certified_ticks : Array[Int]
 } derive(Eq, Debug)
 
 ///|
@@ -60,6 +67,7 @@ pub impl ToJson for KnowledgeDigest with fn to_json(self) {
     "next_tick": self.next_tick.to_json(),
     "known_ids": self.known_ids.to_json(),
     "closed_ticks": self.closed_ticks.to_json(),
+    "certified_ticks": self.certified_ticks.to_json(),
   }
 }
 
@@ -85,6 +93,10 @@ pub impl @json.FromJson for KnowledgeDigest with fn from_json(json, path) {
       json_field(fields, "closed_ticks", path),
       path=path.add_key("closed_ticks"),
     ),
+    certified_ticks: @json.from_json(
+      json_field(fields, "certified_ticks", path),
+      path=path.add_key("certified_ticks"),
+    ),
   }
 }
 
@@ -93,11 +105,12 @@ pub impl @json.FromJson for KnowledgeDigest with fn from_json(json, path) {
 pub(all) struct Delta[C] {
   proposals : Array[Envelope[C]]
   closures : Array[ClosureCertificate]
+  base_certificates : Array[BaseCertificate]
 } derive(Eq, Debug)
 
 ///|
 pub fn[C] Delta::empty() -> Delta[C] {
-  { proposals: [], closures: [] }
+  { proposals: [], closures: [], base_certificates: [] }
 }
 
 ///|
@@ -206,6 +219,8 @@ pub fn[S, C, E, R] Protocol::initial(
       decision_hash: self.genesis_hash,
       state: (self.domain.initial_state)(),
     },
+    base_certificate: None,
+    certified_bases: Map([]),
     proposals: ProposalState::empty(),
     closures: ClosureMap::empty(),
     committed: CommittedLog::empty(),
@@ -215,6 +230,23 @@ pub fn[S, C, E, R] Protocol::initial(
 ///|
 pub fn[S, C, E, R] State::base(self : State[S, C, E, R]) -> Base[S] {
   self.base
+}
+
+///|
+pub fn[S, C, E, R] State::base_certificate(
+  self : State[S, C, E, R],
+) -> BaseCertificate? {
+  self.base_certificate
+}
+
+///|
+/// Certified bases in `next_tick` order.
+pub fn[S, C, E, R] State::certified_bases(
+  self : State[S, C, E, R],
+) -> Array[BaseCertificate] {
+  let ticks = self.certified_bases.keys().to_array()
+  ticks.sort()
+  ticks.map(fn(tick) { self.certified_bases.get(tick).unwrap() })
 }
 
 ///|
@@ -354,12 +386,7 @@ fn[S : ToJson, C, E : ToJson, R : ToJson] Protocol::advance(
       result: batch,
     })
   }
-  {
-    base: state.base,
-    proposals: state.proposals,
-    closures: state.closures,
-    committed: log,
-  }
+  { ..state, committed: log }
 }
 
 ///|
@@ -394,12 +421,71 @@ pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Protocol::apply_delta(
     retained.push(certificate)
   }
   let closures = state.closures.merge(ClosureMap::from_certificates(retained))
-  self.advance({
-    base: state.base,
-    proposals,
-    closures,
-    committed: state.committed,
-  })
+  let with_knowledge = self.advance({ ..state, proposals, closures })
+  self.admit_base_certificates(with_knowledge, delta.base_certificates)
+}
+
+///|
+/// Verify base certificates, check them against local history, and record
+/// them. A certificate for the current base fills `base_certificate`.
+fn[S : ToJson, C, E, R] Protocol::admit_base_certificates(
+  self : Protocol[S, C, E, R],
+  state : State[S, C, E, R],
+  certificates : Array[BaseCertificate],
+) -> State[S, C, E, R] raise ProtocolError {
+  if certificates.length() == 0 {
+    return state
+  }
+  let certified : Map[Int, BaseCertificate] = Map([])
+  for tick, certificate in state.certified_bases {
+    certified[tick] = certificate
+  }
+  let mut base_certificate = state.base_certificate
+  for certificate in certificates {
+    if certificate.next_tick < state.base.next_tick {
+      continue
+    }
+    if !self.finalizer.verify_base(certificate) {
+      raise InvalidCertificate(certificate.next_tick)
+    }
+    self.check_base_consistency(state, certificate)
+    match certified.get(certificate.next_tick) {
+      Some(existing) =>
+        if !existing.same_base(certificate) {
+          raise ConflictingBase(certificate.next_tick)
+        }
+      None => certified[certificate.next_tick] = certificate
+    }
+    if certificate.next_tick == state.base.next_tick && base_certificate is None {
+      base_certificate = Some(certificate)
+    }
+  }
+  { ..state, base_certificate, certified_bases: certified }
+}
+
+///|
+/// A certificate that overlaps local finalized history must agree with it.
+fn[S : ToJson, C, E, R] Protocol::check_base_consistency(
+  self : Protocol[S, C, E, R],
+  state : State[S, C, E, R],
+  certificate : BaseCertificate,
+) -> Unit raise ProtocolError {
+  if certificate.next_tick == state.base.next_tick {
+    if certificate.decision_hash != state.base.decision_hash ||
+      certificate.state_hash != hash_value(self.hasher, state.base.state) {
+      raise ConflictingBase(certificate.next_tick)
+    }
+    return
+  }
+  let index = certificate.next_tick - 1 - state.base.next_tick
+  let batches = state.committed.batches()
+  if index >= 0 && index < batches.length() {
+    let batch = batches[index]
+    if batch.result_hash != certificate.decision_hash ||
+      batch.result.resulting_state_hash != certificate.state_hash {
+      raise ConflictingBase(certificate.next_tick)
+    }
+  }
 }
 
 ///|
@@ -426,7 +512,39 @@ pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Protocol::join(
   let closures = lead.closures
     .merge(other.closures)
     .prune_below(lead.base.next_tick)
-  self.advance({ base: lead.base, proposals, closures, committed })
+  let certified : Map[Int, BaseCertificate] = Map([])
+  for tick, certificate in lead.certified_bases {
+    certified[tick] = certificate
+  }
+  for tick, certificate in other.certified_bases {
+    if tick < lead.base.next_tick {
+      continue
+    }
+    match certified.get(tick) {
+      Some(existing) =>
+        if !existing.same_base(certificate) {
+          raise ConflictingBase(tick)
+        }
+      None => certified[tick] = certificate
+    }
+  }
+  let base_certificate = match lead.base_certificate {
+    Some(certificate) => Some(certificate)
+    None =>
+      if other.base.next_tick == lead.base.next_tick {
+        other.base_certificate
+      } else {
+        certified.get(lead.base.next_tick)
+      }
+  }
+  self.advance({
+    base: lead.base,
+    base_certificate,
+    certified_bases: certified,
+    proposals,
+    closures,
+    committed,
+  })
 }
 
 ///|
@@ -462,8 +580,11 @@ fn[S, C, E, R] Protocol::rebase_log(
 }
 
 ///|
-/// Fold the oldest committed batches into the base, keeping `retain_ticks`
-/// materialized batches, and forget proposals and closures below the new base.
+/// Fold committed batches into the base, keeping at least `retain_ticks`
+/// materialized batches, and forget proposals, closures, and certificates
+/// below the new base. Only a *certified* boundary can become the base, so
+/// compaction moves to the latest certified boundary that keeps the
+/// retention window; without one it is a no-op.
 ///
 /// Compaction is an administrative operation, not a lattice join: it forgets
 /// finalized history, so `decision` no longer reports commands of compacted
@@ -472,28 +593,45 @@ pub fn[S, C, E, R] Protocol::compact(
   self : Protocol[S, C, E, R],
   state : State[S, C, E, R],
   retain_ticks~ : Int,
-) -> State[S, C, E, R] {
+) -> State[S, C, E, R] raise ProtocolError {
   ignore(self)
   if retain_ticks < 0 {
     abort("retain_ticks must be non-negative")
   }
   let batches = state.committed.batches()
-  let drop = batches.length() - retain_ticks
-  if drop <= 0 {
-    return state
+  let mut drop = @contracts.compaction_drop(batches.length(), retain_ticks)
+  while drop > 0 {
+    let boundary = batches[drop - 1]
+    match state.certified_bases.get(boundary.tick + 1) {
+      Some(certificate) => {
+        if certificate.decision_hash != boundary.result_hash ||
+          certificate.state_hash != boundary.result.resulting_state_hash {
+          raise ConflictingBase(boundary.tick + 1)
+        }
+        let base : Base[S] = {
+          next_tick: boundary.tick + 1,
+          decision_hash: boundary.result_hash,
+          state: boundary.result.resulting_state,
+        }
+        let certified : Map[Int, BaseCertificate] = Map([])
+        for tick, known in state.certified_bases {
+          if tick >= base.next_tick {
+            certified[tick] = known
+          }
+        }
+        return {
+          base,
+          base_certificate: Some(certificate),
+          certified_bases: certified,
+          proposals: state.proposals.prune_below(base.next_tick),
+          closures: state.closures.prune_below(base.next_tick),
+          committed: { batches: batches[drop:].to_owned() },
+        }
+      }
+      None => drop -= 1
+    }
   }
-  let boundary = batches[drop - 1]
-  let base : Base[S] = {
-    next_tick: boundary.tick + 1,
-    decision_hash: boundary.result_hash,
-    state: boundary.result.resulting_state,
-  }
-  {
-    base,
-    proposals: state.proposals.prune_below(base.next_tick),
-    closures: state.closures.prune_below(base.next_tick),
-    committed: { batches: batches[drop:].to_owned() },
-  }
+  state
 }
 
 ///|
@@ -507,6 +645,7 @@ pub fn[S, C, E, R] Protocol::digest(
     next_tick,
     known_ids: state.proposals.ids_from(state.base.next_tick),
     closed_ticks: state.closures.closed_ticks_from(next_tick),
+    certified_ticks: state.certified_bases().map(fn(c) { c.next_tick }),
   }
 }
 
@@ -533,7 +672,16 @@ pub fn[S, C, E, R] Protocol::delta_since(
   let closures = state.closures
     .list()
     .filter(fn(c) { c.tick >= digest.next_tick && !closed.contains(c.tick) })
-  { proposals, closures }
+  let certified : Map[Int, Unit] = Map([])
+  for tick in digest.certified_ticks {
+    certified[tick] = ()
+  }
+  let base_certificates = state
+    .certified_bases()
+    .filter(fn(c) {
+      c.next_tick >= digest.base_next_tick && !certified.contains(c.next_tick)
+    })
+  { proposals, closures, base_certificates }
 }
 
 ///|
@@ -545,6 +693,8 @@ pub fn[S, C : Eq, E, R] Protocol::states_equal(
   ignore(self)
   left.base.next_tick == right.base.next_tick &&
   left.base.decision_hash == right.base.decision_hash &&
+  left.certified_bases().map(fn(c) { c.payload_json() }) ==
+  right.certified_bases().map(fn(c) { c.payload_json() }) &&
   left.proposals.equals(right.proposals) &&
   left.closures.equals(right.closures) &&
   left.committed.equals(right.committed)
@@ -557,7 +707,11 @@ pub fn[S, C, E, R] Protocol::delta_of(
   state : State[S, C, E, R],
 ) -> Delta[C] {
   ignore(self)
-  { proposals: state.proposals.list(), closures: state.closures.list() }
+  {
+    proposals: state.proposals.list(),
+    closures: state.closures.list(),
+    base_certificates: state.certified_bases(),
+  }
 }
 
 ///|
@@ -634,13 +788,20 @@ pub fn[S, C : ToJson, E, R] Protocol::state_hash(
     "closures": Json::array(
       state.closures.list().map(fn(c) { c.payload_json() }),
     ),
+    "certified_bases": Json::array(
+      state.certified_bases().map(fn(c) { c.payload_json() }),
+    ),
     "committed": state.committed.result_hashes().to_json(),
   })
 }
 
 ///|
 pub impl[C : ToJson] ToJson for Delta[C] with fn to_json(self) {
-  { "proposals": self.proposals.to_json(), "closures": self.closures.to_json() }
+  {
+    "proposals": self.proposals.to_json(),
+    "closures": self.closures.to_json(),
+    "base_certificates": self.base_certificates.to_json(),
+  }
 }
 
 ///|
@@ -660,6 +821,11 @@ pub impl[C : @json.FromJson] @json.FromJson for Delta[C] with fn from_json(
       json_field(fields, "closures", path),
       path=path.add_key("closures"),
     ),
+    base_certificates: match fields.get("base_certificates") {
+      Some(value) =>
+        @json.from_json(value, path=path.add_key("base_certificates"))
+      None => []
+    },
   }
 }
 
@@ -777,6 +943,11 @@ pub fn[S : ToJson, C : ToJson, E : ToJson, R : ToJson] Protocol::snapshot(
       "decision_hash": state.base.decision_hash.to_json(),
       "state": state.base.state.to_json(),
     },
+    "base_certificate": match state.base_certificate {
+      Some(certificate) => certificate.to_json()
+      None => Json::null()
+    },
+    "certified_bases": state.certified_bases().to_json(),
     "proposals": state.proposals.list().to_json(),
     "closures": state.closures.list().to_json(),
     "committed": state.committed.batches.to_json(),
@@ -854,6 +1025,30 @@ pub fn[
     base.decision_hash != self.genesis_hash {
     raise SnapshotMismatch("genesis base hash mismatch")
   }
+  let base_certificate : BaseCertificate? = match
+    snapshot_field(fields, "base_certificate") {
+    Null => None
+    value => Some(snapshot_decode(value, "base_certificate"))
+  }
+  match base_certificate {
+    Some(certificate) =>
+      if certificate.next_tick != base.next_tick ||
+        certificate.decision_hash != base.decision_hash {
+        raise SnapshotMismatch("base certificate does not match base")
+      }
+    None =>
+      if base.next_tick != self.genesis_tick {
+        raise SnapshotMismatch("compacted base without certificate")
+      }
+  }
+  let certified_list : Array[BaseCertificate] = snapshot_decode(
+    snapshot_field(fields, "certified_bases"),
+    "certified_bases",
+  )
+  let certified_bases : Map[Int, BaseCertificate] = Map([])
+  for certificate in certified_list {
+    certified_bases[certificate.next_tick] = certificate
+  }
   let proposals : Array[Envelope[C]] = snapshot_decode(
     snapshot_field(fields, "proposals"),
     "proposals",
@@ -873,6 +1068,8 @@ pub fn[
   let closure_map = ClosureMap::from_certificates(closures)
   let recomputed = self.advance({
     base,
+    base_certificate,
+    certified_bases,
     proposals: proposal_state.prune_below(base.next_tick),
     closures: closure_map.prune_below(base.next_tick),
     committed: CommittedLog::empty(),
@@ -959,7 +1156,11 @@ pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] ReplicatedDomain::propose(
     local_sequence,
     command,
   }
-  let delta : Delta[C] = { proposals: [envelope], closures: [] }
+  let delta : Delta[C] = {
+    proposals: [envelope],
+    closures: [],
+    base_certificates: [],
+  }
   self.state = self.protocol.apply_delta(self.state, delta)
   self.next_local_sequence = local_sequence + 1
   { envelope, delta }
@@ -978,7 +1179,7 @@ pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] ReplicatedDomain::close_tick(
   self : ReplicatedDomain[S, C, E, R],
   certificate : ClosureCertificate,
 ) -> Unit raise ProtocolError {
-  self.merge({ proposals: [], closures: [certificate] })
+  self.merge({ proposals: [], closures: [certificate], base_certificates: [] })
 }
 
 ///|
@@ -1100,12 +1301,21 @@ pub impl[S : @json.FromJson] @json.FromJson for Base[S] with fn from_json(
 /// a quorum, as in `audit/`) is future work.
 pub(all) struct Catchup[S, C] {
   base : Base[S]
+  /// Required unless `base` is the genesis base.
+  certificate : BaseCertificate?
   delta : Delta[C]
 }
 
 ///|
 pub impl[S : ToJson, C : ToJson] ToJson for Catchup[S, C] with fn to_json(self) {
-  { "base": self.base.to_json(), "delta": self.delta.to_json() }
+  {
+    "base": self.base.to_json(),
+    "certificate": match self.certificate {
+      Some(certificate) => certificate.to_json()
+      None => Json::null()
+    },
+    "delta": self.delta.to_json(),
+  }
 }
 
 ///|
@@ -1121,6 +1331,11 @@ pub impl[S : @json.FromJson, C : @json.FromJson] @json.FromJson for Catchup[
       json_field(fields, "base", path),
       path=path.add_key("base"),
     ),
+    certificate: match fields.get("certificate") {
+      Some(Null) | None => None
+      Some(value) =>
+        Some(@json.from_json(value, path=path.add_key("certificate")))
+    },
     delta: @json.from_json(
       json_field(fields, "delta", path),
       path=path.add_key("delta"),
@@ -1134,7 +1349,11 @@ pub fn[S, C, E, R] Protocol::catchup_since(
   state : State[S, C, E, R],
   digest : KnowledgeDigest,
 ) -> Catchup[S, C] {
-  { base: state.base, delta: self.delta_since(state, digest) }
+  {
+    base: state.base,
+    certificate: state.base_certificate,
+    delta: self.delta_since(state, digest),
+  }
 }
 
 ///|
@@ -1146,9 +1365,28 @@ pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Protocol::apply_catchup(
   catchup : Catchup[S, C],
 ) -> State[S, C, E, R] raise ProtocolError {
   let rebased = if catchup.base.next_tick > state.base.next_tick {
+    let certificate = match catchup.certificate {
+      Some(certificate) => certificate
+      None => raise UnauthenticatedBase(catchup.base.next_tick)
+    }
+    if certificate.next_tick != catchup.base.next_tick ||
+      certificate.decision_hash != catchup.base.decision_hash ||
+      certificate.state_hash != hash_value(self.hasher, catchup.base.state) ||
+      !self.finalizer.verify_base(certificate) {
+      raise UnauthenticatedBase(catchup.base.next_tick)
+    }
     let log = self.rebase_log(state, catchup.base)
+    let certified : Map[Int, BaseCertificate] = Map([])
+    for tick, known in state.certified_bases {
+      if tick >= catchup.base.next_tick {
+        certified[tick] = known
+      }
+    }
+    certified[certificate.next_tick] = certificate
     {
       base: catchup.base,
+      base_certificate: Some(certificate),
+      certified_bases: certified,
       proposals: state.proposals.prune_below(catchup.base.next_tick),
       closures: state.closures.prune_below(catchup.base.next_tick),
       committed: log,
@@ -1163,7 +1401,7 @@ pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Protocol::apply_catchup(
 pub fn[S, C, E, R] ReplicatedDomain::compact(
   self : ReplicatedDomain[S, C, E, R],
   retain_ticks~ : Int,
-) -> Unit {
+) -> Unit raise ProtocolError {
   self.state = self.protocol.compact(self.state, retain_ticks~)
 }
 

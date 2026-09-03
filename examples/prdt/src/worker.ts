@@ -8,7 +8,9 @@
  *   POST /propose   { tick, command }  -> { envelope, delta, decision, next_tick }
  *   POST /delta     Delta JSON         -> { decision, next_tick }
  *   GET  /delta                        -> { delta }  (full knowledge, for anti-entropy)
- *   POST /close                        -> { certificate, delta, decision }
+ *   POST /sync      KnowledgeDigest    -> { catchup }  (only what the caller is missing, plus a certified base)
+ *   POST /close                        -> { certificate, base_certificate, delta, decision }
+ *   POST /compact   { retain_ticks }   -> { base_next_tick }
  *   GET  /decision                     -> { decision }
  *   GET  /world                        -> { world, state_hash, next_tick }
  */
@@ -62,6 +64,15 @@ export class PrdtRoom extends DurableObject<Env> {
         return this.#respond(handle, await replica.merge(handle, (await request.json()) as JsonValue), true);
       case "GET /delta":
         return this.#respond(handle, await replica.delta(handle), false);
+      case "POST /sync":
+        return this.#respond(handle, await replica.catchup(handle, (await request.json()) as JsonValue), false);
+      case "POST /compact": {
+        const body = (await request.json()) as { retain_ticks?: unknown };
+        if (typeof body.retain_ticks !== "number") {
+          return json({ error: "bad request", message: "expected { retain_ticks }" }, 400);
+        }
+        return this.#respond(handle, await replica.compact(handle, body.retain_ticks), true);
+      }
       case "POST /close":
         return this.#respond(handle, await replica.close(handle), true);
       case "GET /decision":

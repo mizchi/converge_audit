@@ -47,14 +47,14 @@ fn env(
 fn proposals(
   envelopes : Array[@prdt.Envelope[GameCommand]],
 ) -> @prdt.Delta[GameCommand] {
-  { proposals: envelopes, closures: [] }
+  { proposals: envelopes, closures: [], base_certificates: [] }
 }
 
 ///|
 fn closures(
   certificates : Array[@prdt.ClosureCertificate],
 ) -> @prdt.Delta[GameCommand] {
-  { proposals: [], closures: certificates }
+  { proposals: [], closures: certificates, base_certificates: [] }
 }
 
 ///|

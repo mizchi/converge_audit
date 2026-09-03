@@ -23,7 +23,9 @@ All under `/rooms/:room`:
 | `POST /propose` | `{ tick, command }` | envelope, delta to gossip, decision |
 | `POST /delta` | `Delta` JSON | decision after merge (409 on a protocol conflict) |
 | `GET /delta` | | full knowledge, for anti-entropy |
-| `POST /close` | | closure certificate for the next tick |
+| `POST /sync` | `KnowledgeDigest` | only what the caller is missing, plus the room's certified base |
+| `POST /close` | | closure certificate for the next tick and a base certificate for the new head |
+| `POST /compact` | `{ retain_ticks }` | fold history into a certified base |
 | `GET /decision` | | `Pending / Accepted / Rejected / RejectedLate` per command |
 | `GET /world` | | domain state and replicated state hash |
 

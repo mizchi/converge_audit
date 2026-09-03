@@ -6,10 +6,8 @@ pub fn[E : Eq, R : Eq] command_decision_less_or_equal(
   before : CommandDecision[E, R],
   after : CommandDecision[E, R],
 ) -> Bool {
-  match before {
-    DecisionPending => true
-    _ => before == after
-  }
+  @contracts.decision_kind_less_or_equal(before.kind(), after.kind()) &&
+  (before is DecisionPending || before == after)
 }
 
 ///|
@@ -69,4 +67,17 @@ pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Protocol::lattice_law_violati
     violations.push("associative")
   }
   violations
+}
+
+///|
+/// Abstract shape of a decision, for the proved order in `prdt/contracts`.
+pub fn[E, R] CommandDecision::kind(
+  self : CommandDecision[E, R],
+) -> @contracts.DecisionKind {
+  match self {
+    DecisionPending => KindPending
+    DecisionAccepted(_, _) => KindAccepted
+    DecisionRejected(_, _) => KindRejected
+    DecisionLate(_) => KindLate
+  }
 }

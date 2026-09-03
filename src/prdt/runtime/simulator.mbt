@@ -21,6 +21,7 @@ pub(all) struct SimulationCounters {
   mut compactions : Int
   mut anti_entropy : Int
   mut late_commands : Int
+  mut reissues : Int
 } derive(Eq, Debug)
 
 ///|
@@ -53,6 +54,7 @@ pub impl ToJson for SimulationReport with fn to_json(self) {
       "compactions": self.counters.compactions.to_json(),
       "anti_entropy": self.counters.anti_entropy.to_json(),
       "late_commands": self.counters.late_commands.to_json(),
+      "reissues": self.counters.reissues.to_json(),
     },
     "replica_ids": self.replica_ids.to_json(),
     "state_hashes": self.state_hashes.to_json(),
@@ -83,6 +85,8 @@ pub(all) struct SimulationOptions {
   tick_horizon : Int
   /// Materialized batches to keep when compacting; `None` disables compaction.
   compaction_retain : Int?
+  /// What replicas do with their own late commands.
+  late_policy : LateCommandPolicy
 }
 
 ///|
@@ -92,8 +96,9 @@ pub fn SimulationOptions::new(
   replica_count? : Int = 3,
   tick_horizon? : Int = 2,
   compaction_retain? : Int,
+  late_policy? : LateCommandPolicy = RejectAsLate,
 ) -> SimulationOptions {
-  { seed, steps, replica_count, tick_horizon, compaction_retain }
+  { seed, steps, replica_count, tick_horizon, compaction_retain, late_policy }
 }
 
 ///|
@@ -166,12 +171,27 @@ pub fn[
     match mode {
       SingleAuthority(authority) =>
         if index == 0 {
-          replicas.push(Replica::new(protocol, id, store, authority~))
+          replicas.push(
+            Replica::new(
+              protocol,
+              id,
+              store,
+              authority~,
+              late_policy=options.late_policy,
+            ),
+          )
         } else {
-          replicas.push(Replica::new(protocol, id, store))
+          replicas.push(
+            Replica::new(protocol, id, store, late_policy=options.late_policy),
+          )
         }
       Quorum(finalizer, voters, equivocators) => {
-        let replica = Replica::new(protocol, id, store)
+        let replica = Replica::new(
+          protocol,
+          id,
+          store,
+          late_policy=options.late_policy,
+        )
         replicas.push(replica)
         agents[id] = QuorumAgent::new(
           replica,
@@ -199,6 +219,7 @@ pub fn[
     compactions: 0,
     anti_entropy: 0,
     late_commands: 0,
+    reissues: 0,
   }
   let protocol_errors : Array[String] = []
   let broadcast_gossip = fn(sender : String, gossip : Gossip[S, C]) {
@@ -228,6 +249,7 @@ pub fn[
       Some(message) => {
         counters.deliveries += 1
         let receiver = by_id.get(message.receiver).unwrap()
+        let moves_before = receiver.moves().length()
         try {
           match agents.get(message.receiver) {
             Some(agent) => {
@@ -243,7 +265,8 @@ pub fn[
               match message.payload {
                 DeltaGossip(delta) => receiver.receive(delta)
                 CatchupGossip(catchup) => receiver.receive_catchup(catchup)
-                ClosureProposalGossip(_) | VoteGossip(_) => ()
+                ClosureProposalGossip(_) | VoteGossip(_) | BaseVoteGossip(_) =>
+                  ()
               }
           }
         } catch {
@@ -251,6 +274,11 @@ pub fn[
             protocol_errors.push(
               message.receiver + " <- " + message.sender + ": " + error.kind(),
             )
+        }
+        let moves_after = receiver.moves().length()
+        if moves_after > moves_before {
+          counters.reissues += moves_after - moves_before
+          broadcast(receiver)
         }
       }
     }
@@ -312,6 +340,9 @@ pub fn[
             }
             if proposer.next_tick() > closed_before {
               counters.closures += 1
+            }
+            for item in agent.certify_head() {
+              broadcast_gossip(proposer.id(), item)
             }
           }
         }

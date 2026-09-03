@@ -40,6 +40,21 @@ pub impl Finalizer for SingleAuthorityFinalizer with fn verify_closure(
 }
 
 ///|
+pub impl Finalizer for SingleAuthorityFinalizer with fn verify_base(
+  self,
+  certificate,
+) {
+  let digest = BasePayload::of(certificate).digest(self.hasher)
+  for attestation in certificate.attestations {
+    if attestation.signer == self.authority &&
+      self.verifier.verify(attestation.signer, digest, attestation.signature) {
+      return true
+    }
+  }
+  false
+}
+
+///|
 /// Produces certificates. Held by the authority replica only.
 pub struct ClosureAuthority[C] {
   hasher : &@bft.Hasher
@@ -83,6 +98,29 @@ pub fn[C] ClosureAuthority::close(
     parent_decision_hash,
     ordered_command_ids,
     ordered_commands_hash,
+    attestations: [
+      {
+        signer: self.signer.public_key(),
+        signature: self.signer.sign(payload.digest(self.hasher)),
+      },
+    ],
+  }
+}
+
+///|
+/// Certify the head at `next_tick - 1` so replicas may compact to it and
+/// hand it to peers as a base.
+pub fn[C] ClosureAuthority::certify_base(
+  self : ClosureAuthority[C],
+  next_tick : Int,
+  decision_hash : String,
+  state_hash : String,
+) -> BaseCertificate {
+  let payload : BasePayload = { next_tick, decision_hash, state_hash }
+  {
+    next_tick,
+    decision_hash,
+    state_hash,
     attestations: [
       {
         signer: self.signer.public_key(),

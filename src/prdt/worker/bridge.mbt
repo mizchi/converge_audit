@@ -192,11 +192,29 @@ pub fn prdt_mmo_close(
       @prdt.DuplicateCommandId(id) => raise @prdt.ConflictingProposal(id)
     }
     room.object.close_tick(certificate)
+    // Certify the new head so peers may compact to it and adopt it as a base.
+    let base_certificate = room.authority.certify_base(
+      room.object.next_tick(),
+      room.object.decision().head_decision_hash(),
+      @prdt.hash_value(
+        room.object.protocol().hasher(),
+        room.object.domain_state(),
+      ),
+    )
+    room.object.merge({
+      proposals: [],
+      closures: [],
+      base_certificates: [base_certificate],
+    })
+    let delta : @prdt.Delta[@mmo.GameCommand] = {
+      proposals: [],
+      closures: [certificate],
+      base_certificates: [base_certificate],
+    }
     success(room, {
       "certificate": certificate.to_json(),
-      "delta": (
-        { proposals: [], closures: [certificate] } :
-        @prdt.Delta[@mmo.GameCommand]).to_json(),
+      "base_certificate": base_certificate.to_json(),
+      "delta": delta.to_json(),
       "decision": decision_json(room.object.decision()),
     })
   } catch {
@@ -244,6 +262,81 @@ pub fn prdt_mmo_world(
     success(room, {
       "world": room.object.domain_state().to_json(),
       "state_hash": room.object.state_hash().to_json(),
+    })
+  } catch {
+    error => protocol_failure(error)
+  }
+}
+
+///|
+/// Summary of what this replica knows, to request only the missing rest.
+pub fn prdt_mmo_digest(
+  snapshot : String,
+  secret : String,
+  replica_id : String,
+) -> String {
+  try {
+    let room = open_room(snapshot, secret, replica_id)
+    success(room, { "digest": room.object.digest().to_json() })
+  } catch {
+    error => protocol_failure(error)
+  }
+}
+
+///|
+/// Everything a peer with `digest_json` is missing, including our base and
+/// its certificate when the peer is behind a compacted history.
+pub fn prdt_mmo_catchup(
+  snapshot : String,
+  secret : String,
+  replica_id : String,
+  digest_json : String,
+) -> String {
+  try {
+    let room = open_room(snapshot, secret, replica_id)
+    let digest : @prdt.KnowledgeDigest = decode_input(
+      parse_input(digest_json, "digest"),
+      "digest",
+    )
+    success(room, { "catchup": room.object.catchup_since(digest).to_json() })
+  } catch {
+    error => protocol_failure(error)
+  }
+}
+
+///|
+pub fn prdt_mmo_apply_catchup(
+  snapshot : String,
+  secret : String,
+  replica_id : String,
+  catchup_json : String,
+) -> String {
+  try {
+    let room = open_room(snapshot, secret, replica_id)
+    let catchup : @prdt.Catchup[@mmo.World, @mmo.GameCommand] = decode_input(
+      parse_input(catchup_json, "catchup"),
+      "catchup",
+    )
+    room.object.apply_catchup(catchup)
+    success(room, { "decision": decision_json(room.object.decision()) })
+  } catch {
+    error => protocol_failure(error)
+  }
+}
+
+///|
+/// Fold finalized history into a certified base, keeping `retain_ticks` batches.
+pub fn prdt_mmo_compact(
+  snapshot : String,
+  secret : String,
+  replica_id : String,
+  retain_ticks : Int,
+) -> String {
+  try {
+    let room = open_room(snapshot, secret, replica_id)
+    room.object.compact(retain_ticks~)
+    success(room, {
+      "base_next_tick": room.object.state().base().next_tick.to_json(),
     })
   } catch {
     error => protocol_failure(error)

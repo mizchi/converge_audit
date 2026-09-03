@@ -64,6 +64,11 @@ prove:
   nix develop path:. --command moon prove src/audit/key_lifecycle
   nix develop path:. --command moon prove src/audit/quorum/vote
   nix develop path:. --command moon prove src/x/game_audit/audit
+  nix develop path:. --command moon prove src/prdt/contracts
+
+# Prove the PRDT lattice, decision-order, quorum, and compaction facts only
+prove-prdt:
+  nix develop path:. --command moon prove src/prdt/contracts
 
 # Prove the multiplayer audit policy only
 prove-game-audit:

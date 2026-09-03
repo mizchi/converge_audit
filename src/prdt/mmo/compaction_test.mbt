@@ -1,4 +1,20 @@
 ///|
+fn certify_head(
+  auth : GameObject,
+  s : Setup,
+) -> @prdt.BaseCertificate raise Error {
+  let certificate = s.authority.certify_base(
+    auth.next_tick(),
+    auth.decision().head_decision_hash(),
+    @prdt.hash_value(s.hasher, auth.domain_state()),
+  )
+  auth.merge({ proposals: [], closures: [], base_certificates: [certificate] })
+  certificate
+}
+
+///|
+/// Close `ticks` ticks; the authority certifies every head so any boundary
+/// may become a base.
 fn chain(s : Setup, ticks : Int) -> GameObject raise Error {
   let auth = @prdt.ReplicatedDomain::new(s.protocol, "A")
   for tick in 0..<ticks {
@@ -10,6 +26,7 @@ fn chain(s : Setup, ticks : Int) -> GameObject raise Error {
       )
     }
     let _ = close_next(auth, s.authority)
+    let _ = certify_head(auth, s)
   }
   auth
 }
@@ -23,6 +40,8 @@ test "compaction folds old batches into the base without changing the head or th
   auth.compact(retain_ticks=2)
   let base = auth.state().base()
   assert_eq(base.next_tick, 3)
+  assert_eq(auth.state().base_certificate().map(fn(c) { c.next_tick }), Some(3))
+  assert_eq(auth.state().certified_bases().map(fn(c) { c.next_tick }), [3, 4, 5])
   assert_eq(auth.next_tick(), 5)
   assert_eq(auth.decision().committed_ticks(), [3, 4])
   assert_eq(auth.decision().head_decision_hash(), before.head_decision_hash())
@@ -83,10 +102,10 @@ test "snapshot round trip preserves a compacted base and refuses a tampered base
   } catch {
     error => Some(error)
   }
-  // The retained closure chains from the base hash, so recomputation diverges.
+  // The persisted certificate no longer matches the tampered base.
   assert_eq(
     outcome,
-    Some(@prdt.SnapshotMismatch("recomputation failed: ChainMismatch")),
+    Some(@prdt.SnapshotMismatch("base certificate does not match base")),
   )
 }
 
@@ -156,5 +175,85 @@ test "digest-based delta carries only what the peer is missing, and catchup tran
     catchup.to_json(),
   )
   assert_eq(decoded.base, catchup.base)
+  assert_eq(decoded.certificate, catchup.certificate)
   assert_eq(decoded.delta, catchup.delta)
+}
+
+///|
+test "a base without a valid certificate is never adopted" {
+  let s = setup()
+  let auth = chain(s, 3)
+  auth.compact(retain_ticks=0)
+  let catchup = auth.catchup_since(
+    @prdt.ReplicatedDomain::new(s.protocol, "F").digest(),
+  )
+  let unsigned = { ..catchup, certificate: None }
+  let victim = @prdt.ReplicatedDomain::new(s.protocol, "V")
+  let outcome = try {
+    victim.apply_catchup(unsigned)
+    None
+  } catch {
+    error => Some(error)
+  }
+  assert_eq(outcome, Some(@prdt.UnauthenticatedBase(3)))
+  assert_eq(victim.next_tick(), 0)
+
+  // A forged authority cannot certify a base either.
+  let forged = setup(secret="attacker")
+  let forged_certificate = forged.authority.certify_base(
+    3,
+    catchup.base.decision_hash,
+    @prdt.hash_value(s.hasher, catchup.base.state),
+  )
+  let outcome2 = try {
+    victim.apply_catchup({ ..catchup, certificate: Some(forged_certificate) })
+    None
+  } catch {
+    error => Some(error)
+  }
+  assert_eq(outcome2, Some(@prdt.UnauthenticatedBase(3)))
+
+  // A certificate whose hashes disagree with the base is refused as well.
+  let mismatched = s.authority.certify_base(3, "not-the-head", "not-the-state")
+  let outcome3 = try {
+    victim.apply_catchup({ ..catchup, certificate: Some(mismatched) })
+    None
+  } catch {
+    error => Some(error)
+  }
+  assert_eq(outcome3, Some(@prdt.UnauthenticatedBase(3)))
+}
+
+///|
+test "compaction without a certified boundary is a no-op, and a conflicting certificate is refused" {
+  let s = setup()
+  let auth = @prdt.ReplicatedDomain::new(s.protocol, "A")
+  for _ in 0..<3 {
+    let _ = close_next(auth, s.authority)
+  }
+  auth.compact(retain_ticks=0)
+  assert_eq(auth.state().base().next_tick, 0)
+  let bogus = s.authority.certify_base(
+    2,
+    "wrong-hash",
+    @prdt.hash_value(s.hasher, auth.domain_state()),
+  )
+  let outcome = try {
+    auth.merge({ proposals: [], closures: [], base_certificates: [bogus] })
+    None
+  } catch {
+    error => Some(error)
+  }
+  assert_eq(outcome, Some(@prdt.ConflictingBase(2)))
+  // A future certificate that later turns out wrong blocks compaction loudly.
+  let future = s.authority.certify_base(4, "wrong-hash", "wrong-state")
+  auth.merge({ proposals: [], closures: [], base_certificates: [future] })
+  let _ = close_next(auth, s.authority)
+  let outcome2 = try {
+    auth.compact(retain_ticks=0)
+    None
+  } catch {
+    error => Some(error)
+  }
+  assert_eq(outcome2, Some(@prdt.ConflictingBase(4)))
 }

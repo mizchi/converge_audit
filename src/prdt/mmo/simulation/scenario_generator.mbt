@@ -100,7 +100,11 @@ pub fn generate_scenario(seed : Int) -> Scenario raise Error {
     )
     auth.close_tick(certificate)
     certificates.push(certificate)
-    deltas.push({ proposals: [], closures: [certificate] })
+    deltas.push({
+      proposals: [],
+      closures: [certificate],
+      base_certificates: [],
+    })
     for delta in late {
       auth.merge(delta)
     }

@@ -32,6 +32,7 @@ pub fn run_mmo_simulation(
   steps? : Int = 400,
   replica_count? : Int = 3,
   compaction_retain? : Int,
+  late_policy? : @runtime.LateCommandPolicy = RejectAsLate,
 ) -> @runtime.SimulationReport raise @prdt.ProtocolError {
   let hasher = @prdt.Sha256Hasher::new()
   let authenticator = @prdt.SharedSecretAuthenticator::new("authority", "sim")
@@ -59,6 +60,7 @@ pub fn run_mmo_simulation(
       steps~,
       replica_count~,
       compaction_retain?,
+      late_policy~,
     ),
   )
 }

@@ -9,6 +9,8 @@ pub(all) enum Gossip[S, C] {
   ClosureProposalGossip(ClosureProposal)
   /// A signed quorum vote.
   VoteGossip(@prdt.ClosureVote)
+  /// A signed statement of a committed head, toward a base certificate.
+  BaseVoteGossip(@prdt.BaseVote)
 }
 
 ///|

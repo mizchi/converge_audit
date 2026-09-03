@@ -32,7 +32,7 @@ pub fn QuorumRoster::new(
   if threshold > members.length() {
     raise ThresholdExceedsRoster(threshold, members.length())
   }
-  if 2 * threshold <= members.length() {
+  if !@contracts.quorum_threshold_valid(members.length(), threshold) {
     raise ThresholdNotMajority(threshold, members.length())
   }
   let seen : Map[String, Unit] = Map([])
@@ -205,4 +205,52 @@ pub fn QuorumFinalizer::roster(self : QuorumFinalizer) -> QuorumRoster {
 ///|
 pub fn[C] Voter::public_key(self : Voter[C]) -> @bft.PublicKey {
   self.signer.public_key()
+}
+
+///|
+pub impl Finalizer for QuorumFinalizer with fn verify_base(self, certificate) {
+  let digest = BasePayload::of(certificate).digest(self.hasher)
+  let accepted : Map[String, Unit] = Map([])
+  for attestation in certificate.attestations {
+    if accepted.contains(attestation.signer.0) {
+      continue
+    }
+    if !self.roster.members.contains(attestation.signer) {
+      continue
+    }
+    if self.verifier.verify(attestation.signer, digest, attestation.signature) {
+      accepted[attestation.signer.0] = ()
+    }
+  }
+  accepted.length() >= self.roster.threshold
+}
+
+///|
+pub fn QuorumFinalizer::verify_base_vote(
+  self : QuorumFinalizer,
+  vote : BaseVote,
+) -> Bool {
+  self.roster.members.contains(vote.voter) &&
+  self.verifier.verify(
+    vote.voter,
+    vote.payload().digest(self.hasher),
+    vote.signature,
+  )
+}
+
+///|
+pub fn[C] Voter::vote_base(
+  self : Voter[C],
+  next_tick : Int,
+  decision_hash : String,
+  state_hash : String,
+) -> BaseVote {
+  let payload : BasePayload = { next_tick, decision_hash, state_hash }
+  {
+    voter: self.signer.public_key(),
+    next_tick,
+    decision_hash,
+    state_hash,
+    signature: self.signer.sign(payload.digest(self.hasher)),
+  }
 }

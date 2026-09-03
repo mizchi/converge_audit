@@ -83,6 +83,7 @@ jobs:
           nix develop path:. --command moon prove src/audit
           nix develop path:. --command moon prove src/audit/quorum/vote
           nix develop path:. --command moon prove src/x/game_audit/audit
+          nix develop path:. --command moon prove src/prdt/contracts
       - name: Check Quint configuration contracts
         run: nix develop path:. --command sh formal/quint/check-config-contracts.sh
       - name: Run Quint scenarios

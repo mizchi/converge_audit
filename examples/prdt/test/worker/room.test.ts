@@ -57,6 +57,32 @@ describe("PrdtRoom Durable Object over the MoonBit bridge", () => {
     expect(xWorld.state_hash).toBe(world.body.state_hash);
   });
 
+  it("syncs a fresh client by digest after the room compacted to a certified base", async () => {
+    const base = "https://example.com/rooms/compacted";
+    const postTo = (path: string, body: JsonValue) =>
+      SELF.fetch(`${base}${path}`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+    expect((await postTo("/propose", { tick: 0, command: LETHAL_HIT })).status).toBe(200);
+    for (let i = 0; i < 3; i += 1) expect((await postTo("/close", {})).status).toBe(200);
+    const compacted = (await (await postTo("/compact", { retain_ticks: 0 })).json()) as { base_next_tick: number };
+    expect(compacted).toMatchObject({ base_next_tick: 3 });
+
+    const client: ReplicaHandle = { replicaId: "C", secret: SECRET, snapshot: "" };
+    const digest = expectOk(await replica.digest(client)).digest as JsonValue;
+    const synced = (await (await postTo("/sync", digest)).json()) as { catchup: JsonValue };
+    expectOk(await replica.applyCatchup(client, synced.catchup as JsonValue));
+    const world = expectOk(await replica.world(client));
+    expect(world.next_tick).toBe(3);
+    const roomWorld = (await (await SELF.fetch(`${base}/world`)).json()) as { state_hash: string };
+    expect(world.state_hash).toBe(roomWorld.state_hash);
+
+    // Without the certificate the base is refused.
+    const stripped = { ...(synced.catchup as { [key: string]: JsonValue }), certificate: null };
+    const fresh: ReplicaHandle = { replicaId: "D", secret: SECRET, snapshot: "" };
+    const refused = await replica.applyCatchup(fresh, stripped);
+    expect(refused.ok).toBe(false);
+    expect((refused as { error: string }).error).toBe("UnauthenticatedBase");
+  });
+
   it("refuses a conflicting payload for a known command id", async () => {
     const y: ReplicaHandle = { replicaId: "Y", secret: SECRET, snapshot: "" };
     const proposed = expectOk(await replica.propose(y, 5, FIREBALL));

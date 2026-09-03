@@ -90,9 +90,25 @@ Runtime -> PRDT Protocol -> Finalization -> Domain
    一致しなければ `SnapshotMismatch` にする
 7. `Protocol::compact(retain_ticks~)` は古い batch を base に畳み込み、base 未満の proposal / closure を忘れる。
    verdict は変えないが、compaction 済み tick の command は `decision` に現れなくなる
-8. `join` は新しい方の base を採用し、相手の確定 prefix が base と矛盾すれば `PrefixConflict` にする。
-   `apply_catchup` は自分の prefix が否定できない場合にのみ相手の base を採用する（base の認証は未実装。
-   `audit/` の checkpoint 証明書を差し込む位置）
+8. `join` は新しい方の base を採用し、相手の確定 prefix が base と矛盾すれば `PrefixConflict` にする
+9. base は `BaseCertificate` 付きでしか採用しない。single authority は closure のたびに head を署名し
+   （`certify_base`）、quorum は各 replica が `BaseVote` を署名して過半数で証明書を組み立てる。
+   `compact` は証明済み境界にしか進まず、`apply_catchup` は証明書が無い・検証できない・base と一致しない
+   場合に `UnauthenticatedBase` で拒否する
+
+### Late command policy（runtime）
+
+`Replica` の `LateCommandPolicy` が `MoveToNextTick(max_moves~)` のとき、自分の command が `DecisionLate` に
+なったら、閉じていると知らない最も早い tick に新しい envelope id で再提案する（系譜ごとに最大 `max_moves` 回）。
+移動台帳は checkpoint に含まれ、restart しても二重に再提案しない。元の command は永久に `DecisionLate` のまま。
+
+### 証明（`prdt/contracts`）
+
+依存ゼロの `prdt/contracts` に純粋関数と `.mbtp` 契約を置き、`moon prove src/prdt/contracts` が Why3/Z3 で
+19 ゴールを discharge する。quorum の交差性と一意性、compaction の算術（retention window の保持・確定 frontier
+の不変）、decision order（反射・反対称・推移・Pending が底・確定は不変）、vote slot join（冪等・可換・
+equivocation 吸収）。実行コードはこれらの関数を呼ぶ（`QuorumRoster::new`、`Protocol::compact`、
+`decision_less_or_equal`）。generic な lattice 全体の法則は seed 付き property test で確認する
 
 ### Quorum runtime
 
@@ -108,12 +124,14 @@ Runtime -> PRDT Protocol -> Finalization -> Domain
 | --- | --- | --- |
 | Unit | canonical JSON / SHA-256 / MAC、lattice 各種、closure 重複、prefix、resolve_batch、MMO ドメイン規則、致死 race の両到着順、late command、証明書偽造・不正形・親不一致・非 canonical 順、snapshot 復元と改竄検出、quorum と equivocation | `src/prdt/*_test.mbt`、`src/prdt/mmo/*_test.mbt` |
 | Property（seed 生成） | lattice laws、配送順・重複・merge-tree 不変、snapshot 往復、decision monotonicity、closure uniqueness、prefix safety、late の最終性、domain validity | `src/prdt/mmo/simulation/property_test.mbt` |
-| Simulation | reorder / duplicate / partition / heal / restart / compaction + 状態転送 / digest 同期、single authority と quorum（3・5 replica、equivocating voter あり）、seed ごとの収束と再現性 | `src/prdt/mmo/simulation/simulation_test.mbt` |
+| Simulation | reorder / duplicate / partition / heal / restart / 証明付き compaction + 状態転送 / digest 同期、single authority と quorum（3・5 replica、equivocating voter あり）、`MoveToNextTick`、seed ごとの収束と再現性 | `src/prdt/mmo/simulation/simulation_test.mbt`、`late_policy_test.mbt` |
+| Proof | quorum 閾値、compaction 算術、decision order、vote slot join | `src/prdt/contracts`（`just prove-prdt`） |
 | Negative | unstable alive guard、premature acceptance | `src/prdt/mmo/simulation/negative_test.mbt` |
-| Bridge / Worker | JSON 文字列ブリッジ、workerd 上の Durable Object 経由で client replica が収束 | `src/prdt/worker/bridge_test.mbt`、`examples/prdt/test` |
+| Bridge / Worker | JSON 文字列ブリッジ、digest 同期と証明付き base 転送、workerd 上の Durable Object 経由で client replica が収束 | `src/prdt/worker/bridge_test.mbt`、`examples/prdt/test` |
 
 ```sh
 just test-prdt
+just prove-prdt
 just check-prdt-boundary
 just test-prdt-worker
 ```
@@ -122,7 +140,6 @@ just test-prdt-worker
 
 - Byzantine 耐性（quorum の equivocation 除外以外）
 - quorum の liveness（leader election、view change、再投票）
-- `MoveToNextTick` policy、base（checkpoint）の認証付き転送、JS bridge の差分配信
+- generic な lattice 全体の証明（抽象化した kind のみ証明済み）
 - entity/zone sharding、cross-scope transaction
 - 本物の署名（同梱の `SharedSecretAuthenticator` は HMAC。root の `Signer` / `Verifier` trait で差し替える）
-- lattice laws の Why3 証明（`.mbtp`）。現状は seed 付き property test のみ

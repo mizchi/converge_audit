@@ -16,6 +16,9 @@ pub struct QuorumAgent[S, C, E, R] {
   voter : @prdt.Voter[C]
   finalizer : @prdt.QuorumFinalizer
   mut votes : @prdt.VoteState
+  mut base_votes : @prdt.BaseVoteState
+  /// Highest `next_tick` this agent has signed a base vote for.
+  mut base_voted_through : Int
   pending : Array[ClosureProposal]
   equivocate : Bool
 }
@@ -32,6 +35,8 @@ pub fn[S, C, E, R] QuorumAgent::new(
     voter,
     finalizer,
     votes: @prdt.VoteState::empty(),
+    base_votes: @prdt.BaseVoteState::empty(),
+    base_voted_through: -1,
     pending: [],
     equivocate,
   }
@@ -181,7 +186,68 @@ pub fn[S : ToJson, C : Eq + ToJson, E : ToJson, R : ToJson] QuorumAgent::try_clo
     Some(certificate) => {
       self.replica.object().close_tick(certificate)
       let _ = self.replica.checkpoint()
-      [DeltaGossip({ proposals: [], closures: [certificate] })]
+      [
+        DeltaGossip({
+          proposals: [],
+          closures: [certificate],
+          base_certificates: [],
+        }),
+      ]
+    }
+  }
+}
+
+///|
+/// Sign a base vote for the current committed head once per head.
+fn[S : ToJson, C, E, R] QuorumAgent::vote_bases(
+  self : QuorumAgent[S, C, E, R],
+) -> Array[Gossip[S, C]] {
+  let next_tick = self.replica.next_tick()
+  if next_tick <= self.base_voted_through {
+    return []
+  }
+  self.base_voted_through = next_tick
+  let vote = self.voter.vote_base(
+    next_tick,
+    self.replica.decision().head_decision_hash(),
+    @prdt.hash_value(
+      self.replica.protocol().hasher(),
+      self.replica.domain_state(),
+    ),
+  )
+  self.base_votes = self.base_votes.add(vote)
+  [BaseVoteGossip(vote)]
+}
+
+///|
+/// Install and gossip a base certificate once a majority signed this head.
+fn[S : ToJson, C : Eq + ToJson, E : ToJson, R : ToJson] QuorumAgent::try_certify_base(
+  self : QuorumAgent[S, C, E, R],
+  next_tick : Int,
+) -> Array[Gossip[S, C]] raise @prdt.ProtocolError {
+  let state = self.replica.object().state()
+  if next_tick < state.base().next_tick || next_tick > self.replica.next_tick() {
+    return []
+  }
+  if state.certified_bases().iter().any(fn(c) { c.next_tick == next_tick }) {
+    return []
+  }
+  match
+    @prdt.assemble_base_certificate(
+      self.base_votes,
+      next_tick,
+      self.finalizer.roster(),
+    ) {
+    None => []
+    Some(certificate) => {
+      let delta : @prdt.Delta[C] = {
+        proposals: [],
+        closures: [],
+        base_certificates: [certificate],
+      }
+      self.replica.receive(delta)
+      self.base_votes = self.base_votes.prune_below(state.base().next_tick)
+      [DeltaGossip(delta)]
     }
   }
 }
@@ -208,11 +274,37 @@ pub fn[S : ToJson, C : Eq + ToJson, E : ToJson, R : ToJson] QuorumAgent::receive
       if self.finalizer.verify_vote(vote) {
         self.votes = self.votes.add(vote)
       }
+    BaseVoteGossip(vote) =>
+      if self.finalizer.verify_base_vote(vote) {
+        self.base_votes = self.base_votes.add(vote)
+        for item in self.try_certify_base(vote.next_tick) {
+          out.push(item)
+        }
+      }
   }
   for gossip in self.retry_pending() {
     out.push(gossip)
   }
   for gossip in self.try_close() {
+    out.push(gossip)
+  }
+  for gossip in self.vote_bases() {
+    out.push(gossip)
+  }
+  for gossip in self.try_certify_base(self.replica.next_tick()) {
+    out.push(gossip)
+  }
+  out
+}
+
+///|
+/// Base votes and certificates this agent can emit right now (used after a
+/// local closure so the new head gets certified).
+pub fn[S : ToJson, C : Eq + ToJson, E : ToJson, R : ToJson] QuorumAgent::certify_head(
+  self : QuorumAgent[S, C, E, R],
+) -> Array[Gossip[S, C]] raise @prdt.ProtocolError {
+  let out = self.vote_bases()
+  for gossip in self.try_certify_base(self.replica.next_tick()) {
     out.push(gossip)
   }
   out

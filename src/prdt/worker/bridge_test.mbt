@@ -122,3 +122,54 @@ test "bridge reports protocol errors and bad input as failures" {
   )
   assert_eq(field(victim, "error"), "InvalidCertificate")
 }
+
+///|
+test "bridge syncs by digest, transfers a certified base, and refuses an unsigned one" {
+  let secret = "dev-only-secret"
+  // Authority closes three ticks (one with a hit), certifying every head.
+  let mut authority = ""
+  for tick in 0..<3 {
+    if tick == 0 {
+      authority = snapshot_of(
+        prdt_mmo_propose(
+          authority,
+          secret,
+          "authority",
+          0,
+          @mmo.lethal_hit().to_json().stringify(),
+        ),
+      )
+    }
+    authority = snapshot_of(prdt_mmo_close(authority, secret, "authority"))
+  }
+  let compacted = prdt_mmo_compact(authority, secret, "authority", 0)
+  assert_eq(field(compacted, "base_next_tick"), 3)
+  authority = snapshot_of(compacted)
+
+  // A fresh client asks for what it is missing and receives the base.
+  let client_digest = field(prdt_mmo_digest("", secret, "X"), "digest").stringify()
+  let catchup = field(
+    prdt_mmo_catchup(authority, secret, "authority", client_digest),
+    "catchup",
+  )
+  let applied = prdt_mmo_apply_catchup("", secret, "X", catchup.stringify())
+  assert_eq(field(applied, "ok"), true)
+  assert_eq(field(applied, "next_tick"), 3)
+  let client_world = prdt_mmo_world(snapshot_of(applied), secret, "X")
+  assert_eq(
+    field(client_world, "state_hash"),
+    field(prdt_mmo_world(authority, secret, "authority"), "state_hash"),
+  )
+
+  // Stripping the certificate makes the base unacceptable.
+  guard catchup is Object(fields) else { fail("catchup object") }
+  fields["certificate"] = Json::null()
+  let refused = prdt_mmo_apply_catchup(
+    "",
+    secret,
+    "X",
+    Json::object(fields).stringify(),
+  )
+  assert_eq(field(refused, "ok"), false)
+  assert_eq(field(refused, "error"), "UnauthenticatedBase")
+}

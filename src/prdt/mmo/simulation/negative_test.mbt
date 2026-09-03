@@ -116,12 +116,16 @@ test "negative: the framework evaluates alive only inside the finalized batch, s
   let skill = env("X", 0, 0, @mmo.fireball())
   let damage = env("Y", 0, 0, @mmo.lethal_hit())
   let a = @prdt.ReplicatedDomain::new(s.protocol, "A")
-  a.merge({ proposals: [skill], closures: [] })
+  a.merge({ proposals: [skill], closures: [], base_certificates: [] })
   assert_eq(a.decision().of("X:0"), @prdt.DecisionPending) // not Accepted "because alive"
-  a.merge({ proposals: [damage], closures: [] })
+  a.merge({ proposals: [damage], closures: [], base_certificates: [] })
   let certificate = close_next(a, s.authority)
   let b = @prdt.ReplicatedDomain::new(s.protocol, "B")
-  b.merge({ proposals: [skill, damage], closures: [certificate] })
+  b.merge({
+    proposals: [skill, damage],
+    closures: [certificate],
+    base_certificates: [],
+  })
   assert_eq(
     a.decision().of("X:0"),
     @prdt.DecisionRejected(0, @mmo.GameRejection::ActorDead),
@@ -169,10 +173,10 @@ test "negative: premature acceptance moves Accepted -> Rejected when late damage
   let skill = env("X", 0, 0, @mmo.fireball())
   let damage = env("Y", 0, 0, @mmo.lethal_hit())
   let x = @prdt.ReplicatedDomain::new(s.protocol, "X")
-  x.merge({ proposals: [skill], closures: [] })
+  x.merge({ proposals: [skill], closures: [], base_certificates: [] })
   let before = eager_decision(s.protocol, x.state().proposals())
   assert_true(before.get("X:0").unwrap() is @prdt.DecisionAccepted(_, _))
-  x.merge({ proposals: [damage], closures: [] })
+  x.merge({ proposals: [damage], closures: [], base_certificates: [] })
   let after = eager_decision(s.protocol, x.state().proposals())
   assert_true(after.get("X:0").unwrap() is @prdt.DecisionRejected(_, _))
   assert_false(
@@ -189,10 +193,10 @@ test "negative contrast: the framework keeps the skill Pending until closure, so
   let skill = env("X", 0, 0, @mmo.fireball())
   let damage = env("Y", 0, 0, @mmo.lethal_hit())
   let x = @prdt.ReplicatedDomain::new(s.protocol, "X")
-  x.merge({ proposals: [skill], closures: [] })
+  x.merge({ proposals: [skill], closures: [], base_certificates: [] })
   let d0 = x.decision()
   assert_eq(d0.of("X:0"), @prdt.DecisionPending)
-  x.merge({ proposals: [damage], closures: [] })
+  x.merge({ proposals: [damage], closures: [], base_certificates: [] })
   let d1 = x.decision()
   assert_true(@prdt.decision_less_or_equal(d0, d1))
   let _ = close_next(x, s.authority)

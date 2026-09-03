@@ -20,6 +20,10 @@ pub(all) suberror ProtocolError {
   InvalidTick(String)
   /// A persisted snapshot cannot be decoded or does not match recomputation.
   SnapshotMismatch(String)
+  /// A base certificate for this tick disagrees with the local committed history.
+  ConflictingBase(Int)
+  /// A catchup tried to install a base without a verifiable certificate.
+  UnauthenticatedBase(Int)
 } derive(Eq, Debug)
 
 ///|
@@ -34,5 +38,7 @@ pub fn ProtocolError::kind(self : ProtocolError) -> String {
     OrderMismatch(_) => "OrderMismatch"
     InvalidTick(_) => "InvalidTick"
     SnapshotMismatch(_) => "SnapshotMismatch"
+    ConflictingBase(_) => "ConflictingBase"
+    UnauthenticatedBase(_) => "UnauthenticatedBase"
   }
 }
