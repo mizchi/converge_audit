@@ -166,11 +166,18 @@ jobs:
         run: pnpm --dir examples/cf-game-audit deploy:dry
 
   prdt:
-    name: PRDT replicated domain
+    name: PRDT Cloudflare host
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up MoonBit
+        uses: hustcer/setup-moonbit@1522f9aef02a8ca0187dfc00a41f5dd6b16750f7 # v1.23
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: 0.10.5+5e7afb0c0
+          core-version: 0.10.5+5e7afb0c0
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
@@ -184,9 +191,15 @@ jobs:
           cache-dependency-path: examples/prdt/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm --dir examples/prdt install --frozen-lockfile
+      - name: Check PRDT package boundary
+        run: |
+          if grep -rn '"mizchi/converge_audit/\(audit\|x/game_audit\)' src/prdt --include=moon.pkg; then
+            echo 'src/prdt must not depend on src/audit or src/x/game_audit' >&2
+            exit 1
+          fi
       - name: Type-check
         run: pnpm --dir examples/prdt typecheck
-      - name: Test domain, PRDT, simulation, and Durable Object
+      - name: Test the Durable Object room
         run: pnpm --dir examples/prdt test
       - name: Validate deploy bundle
         run: pnpm --dir examples/prdt deploy:dry

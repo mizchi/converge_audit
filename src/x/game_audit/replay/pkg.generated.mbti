@@ -534,3 +534,4 @@ pub trait AssetReplayKernel {
   fn manifest_digest(Self) -> @converge_audit.Digest
   fn replay(Self, @converge_audit.AuthenticatedEvent, AssetEffect) -> Bool
 }
+

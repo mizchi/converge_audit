@@ -1,0 +1,111 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/converge_audit/prdt/runtime"
+
+import {
+  "mizchi/converge_audit/prdt",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn[S : ToJson + @json.FromJson, C : Eq + ToJson + @json.FromJson, E : ToJson + @json.FromJson, R : ToJson + @json.FromJson] run_simulation(@prdt.Protocol[S, C, E, R], @prdt.ClosureAuthority[C], (Rng, Int) -> C, seed~ : Int, steps~ : Int, replica_count? : Int, tick_horizon? : Int) -> SimulationReport raise @prdt.ProtocolError
+
+// Errors
+
+// Types and methods
+pub struct InMemoryCheckpointStore {
+  mut snapshot : String?
+}
+pub fn InMemoryCheckpointStore::new() -> Self
+pub impl CheckpointStore for InMemoryCheckpointStore
+
+pub struct InMemoryNetwork[C] {
+  queue : Array[Message[C]]
+  mut sequence : Int
+  mut groups : Map[String, Int]?
+}
+pub fn[C] InMemoryNetwork::deliver_one(Self[C], rng? : Rng) -> Message[C]?
+pub fn[C] InMemoryNetwork::duplicate_one(Self[C], Rng) -> Bool
+pub fn[C] InMemoryNetwork::heal(Self[C]) -> Unit
+pub fn[C] InMemoryNetwork::new() -> Self[C]
+pub fn[C] InMemoryNetwork::partition(Self[C], Array[Array[String]]) -> Unit
+pub fn[C] InMemoryNetwork::partitioned(Self[C]) -> Bool
+pub fn[C] InMemoryNetwork::pending(Self[C]) -> Int
+pub fn[C] InMemoryNetwork::send(Self[C], String, String, @prdt.Delta[C]) -> Unit
+
+pub(all) struct Message[C] {
+  sequence : Int
+  sender : String
+  receiver : String
+  delta : @prdt.Delta[C]
+}
+
+pub struct Replica[S, C, E, R] {
+  id : String
+  protocol : @prdt.Protocol[S, C, E, R]
+  store : &CheckpointStore
+  authority : @prdt.ClosureAuthority[C]?
+  mut object : @prdt.ReplicatedDomain[S, C, E, R]
+  mut outbox : Array[@prdt.Delta[C]]
+}
+pub fn[S : ToJson, C : ToJson, E : ToJson, R : ToJson] Replica::checkpoint(Self[S, C, E, R]) -> Json
+pub fn[S : ToJson, C : Eq + ToJson, E : ToJson, R : ToJson] Replica::close_next_tick(Self[S, C, E, R]) -> @prdt.ClosureCertificate? raise @prdt.ProtocolError
+pub fn[S, C, E, R] Replica::decision(Self[S, C, E, R]) -> @prdt.Decision[E, R]
+pub fn[S, C, E, R] Replica::domain_state(Self[S, C, E, R]) -> S
+pub fn[S, C, E, R] Replica::drain_outbox(Self[S, C, E, R]) -> Array[@prdt.Delta[C]]
+pub fn[S, C, E, R] Replica::full_delta(Self[S, C, E, R]) -> @prdt.Delta[C]
+pub fn[S, C, E, R] Replica::id(Self[S, C, E, R]) -> String
+pub fn[S, C, E, R] Replica::is_authority(Self[S, C, E, R]) -> Bool
+pub fn[S : ToJson + @json.FromJson, C : Eq + @json.FromJson, E : ToJson + @json.FromJson, R : ToJson + @json.FromJson] Replica::new(@prdt.Protocol[S, C, E, R], String, &CheckpointStore, authority? : @prdt.ClosureAuthority[C]) -> Self[S, C, E, R] raise @prdt.ProtocolError
+pub fn[S, C, E, R] Replica::next_tick(Self[S, C, E, R]) -> Int
+pub fn[S, C, E, R] Replica::object(Self[S, C, E, R]) -> @prdt.ReplicatedDomain[S, C, E, R]
+pub fn[S : ToJson, C : Eq + ToJson, E : ToJson, R : ToJson] Replica::propose(Self[S, C, E, R], Int, C) -> @prdt.Envelope[C] raise @prdt.ProtocolError
+pub fn[S : ToJson, C : Eq, E : ToJson, R : ToJson] Replica::receive(Self[S, C, E, R], @prdt.Delta[C]) -> Unit raise @prdt.ProtocolError
+pub fn[S : ToJson + @json.FromJson, C : Eq + @json.FromJson, E : ToJson + @json.FromJson, R : ToJson + @json.FromJson] Replica::restart(Self[S, C, E, R]) -> Unit raise @prdt.ProtocolError
+pub fn[S, C : ToJson, E, R] Replica::state_hash(Self[S, C, E, R]) -> String
+
+pub struct Rng {
+  mut state : UInt
+}
+pub fn Rng::chance(Self, Double) -> Bool
+pub fn Rng::int(Self, Int) -> Int
+pub fn Rng::new(Int) -> Self
+pub fn Rng::next_double(Self) -> Double
+pub fn Rng::next_uint(Self) -> UInt
+pub fn[T] Rng::pick(Self, Array[T]) -> T
+pub fn[T] Rng::shuffle(Self, Array[T]) -> Array[T]
+pub fn[T] Rng::subset(Self, Array[T]) -> Array[T]
+
+pub(all) struct SimulationCounters {
+  mut proposals : Int
+  mut deliveries : Int
+  mut duplicates : Int
+  mut partitions : Int
+  mut heals : Int
+  mut closures : Int
+  mut restarts : Int
+  mut checkpoints : Int
+  mut anti_entropy : Int
+  mut late_commands : Int
+} derive(Eq, @debug.Debug)
+
+pub(all) struct SimulationReport {
+  seed : Int
+  counters : SimulationCounters
+  replica_ids : Array[String]
+  state_hashes : Array[String]
+  committed_ticks : Array[Array[Int]]
+  head_decision_hashes : Array[String]
+  converged : Bool
+  protocol_errors : Array[String]
+} derive(Eq, @debug.Debug)
+pub impl ToJson for SimulationReport
+
+// Type aliases
+
+// Traits
+pub(open) trait CheckpointStore {
+  fn load(Self) -> Json?
+  fn save(Self, Json) -> Unit
+}
+

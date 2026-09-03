@@ -116,3 +116,4 @@ pub(open) trait Signer {
 pub(open) trait Verifier {
   fn verify(Self, PublicKey, Digest, Signature) -> Bool
 }
+

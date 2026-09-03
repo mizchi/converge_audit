@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "converge-prdt-room",
-  "main": "src/runtime/cloudflare/worker.ts",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-08-04",
   "durable_objects": {
     "bindings": [

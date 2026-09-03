@@ -66,3 +66,4 @@ pub(all) struct AssetSnapshot {
 // Type aliases
 
 // Traits
+

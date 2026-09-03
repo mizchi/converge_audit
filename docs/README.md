@@ -68,9 +68,10 @@ shortest project overview.
   - Shared DTOs, validators, MoonBit write-set wrappers, and conformance tests
     for Node/mobile SQLite and IndexedDB.
 - [PRDT replicated domain objects](./prdt-replicated-domain-ja.md)
-  - Pure domain reducer + replicated finalization protocol: proposal/closure/
-    committed-prefix lattices, single-authority and quorum finalizers, the
-    3-replica simulator, and the Durable Object adapter in `examples/prdt`.
+  - MoonBit `src/prdt`: pure domain reducer + replicated finalization
+    protocol, proposal/closure/committed-prefix lattices, single-authority and
+    quorum finalizers, the 3-replica simulator, seeded property tests, and the
+    Durable Object host in `examples/prdt`.
 
 ## Sources of truth
 
@@ -108,8 +109,9 @@ just test-cf-game-audit
 just check-cf-game-audit
 just test-node-audit-runtime
 just check-node-audit-runtime
-just check-prdt
 just test-prdt
+just check-prdt-boundary
+just test-prdt-worker
 ```
 
 Configured proof obligations cover the generic checkpoint policy, heads,

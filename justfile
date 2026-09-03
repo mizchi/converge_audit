@@ -181,25 +181,38 @@ build-cf-evidence-source-relay:
 build-cf-key-signer:
   pnpm --dir examples/cf-game-audit deploy:key-signer:dry
 
-# Install the PRDT replicated-domain reference implementation
-install-prdt:
+# Run every PRDT package: core, MMO sample, runtime, simulation, JS bridge
+test-prdt:
+  moon test src/prdt src/prdt/mmo src/prdt/runtime src/prdt/mmo/simulation src/prdt/worker
+
+# Type-check the PRDT packages
+check-prdt:
+  moon check src/prdt src/prdt/mmo src/prdt/runtime src/prdt/mmo/simulation src/prdt/worker
+
+# Keep the PRDT packages independent of the audit and game-audit stacks
+check-prdt-boundary:
+  #!/usr/bin/env sh
+  set -eu
+  if rg -n '"mizchi/converge_audit/(audit|x/game_audit)' src/prdt --glob 'moon.pkg'; then
+    echo 'src/prdt must not depend on src/audit or src/x/game_audit' >&2
+    exit 1
+  fi
+
+# Install the Cloudflare host for the PRDT MMO room
+install-prdt-worker:
   pnpm --dir examples/prdt install --frozen-lockfile
 
-# Type-check the PRDT replicated-domain reference implementation
-check-prdt:
+# Type-check the Cloudflare host (builds the MoonBit JS bridge first)
+check-prdt-worker:
   pnpm --dir examples/prdt typecheck
 
-# Run PRDT unit, property, simulation, negative, and Durable Object tests
-test-prdt:
+# Run the workerd Durable Object test for the PRDT MMO room
+test-prdt-worker:
   pnpm --dir examples/prdt test
 
-# Run one seeded PRDT three-replica simulation and print the report
-simulate-prdt seed="1" steps="500":
-  pnpm --dir examples/prdt simulate {{seed}} {{steps}}
-
 # Validate the PRDT Worker deploy bundle without mutating Cloudflare
-build-prdt:
+build-prdt-worker:
   pnpm --dir examples/prdt deploy:dry
 
 # Pre-release checks
-pre-release: fmt info check check-audit-boundary test build prove formal-check check-node-audit-runtime test-node-audit-runtime check-cf-game-audit test-cf-game-audit build-cf-game-audit build-cf-evidence-source-relay build-cf-key-signer check-prdt test-prdt build-prdt
+pre-release: fmt info check check-audit-boundary test build prove formal-check check-node-audit-runtime test-node-audit-runtime check-cf-game-audit test-cf-game-audit build-cf-game-audit build-cf-evidence-source-relay build-cf-key-signer check-prdt-boundary check-prdt-worker test-prdt-worker build-prdt-worker

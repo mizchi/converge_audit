@@ -507,3 +507,4 @@ pub(open) trait OpenWorldObserverSigningStore {
   fn snapshot(Self) -> OpenWorldObserverSigningStoreSnapshot
   fn proof(Self, String) -> @authmap.AuthMapProof?
 }
+
