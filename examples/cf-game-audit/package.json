@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.20.1",
-    "@cloudflare/workers-types": "5.20260804.1",
+    "@cloudflare/workers-types": "5.20260831.1",
     "@mizchi/vlmkit": "0.9.1",
     "@mizchi/vlmkit-generate": "0.9.1",
     "@mizchi/vlmkit-plan": "0.9.1",
