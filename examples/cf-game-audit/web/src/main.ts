@@ -838,7 +838,35 @@ function updateInterface(): void {
   }));
 }
 
+// The simulation loop repaints the interface on every tick. Rebuilding the
+// inventory cards (and their buttons) each frame detaches nodes that a user or
+// an end-to-end test is about to click, so the panel is only rebuilt when the
+// inputs that determine its content change.
+let renderedInventoryKey: string | undefined;
+
+function inventoryRenderKey(items: InventoryItem[]): string {
+  return JSON.stringify(items.map((item) => [
+    item.assetId,
+    item.itemType,
+    item.power,
+    item.rarity,
+    item.audit.status,
+    lineageStatuses.get(item.assetId)?.settlementStatus ?? null,
+    listingEligibility(item),
+    failedItemVerifications.has(item.assetId),
+    failedMarketListings.has(item.assetId),
+    pendingMarketListings.has(item.assetId),
+    listedItems.has(item.assetId),
+    pendingMarketCancellations.has(item.assetId),
+    failedMarketCancellations.has(item.assetId),
+    pendingLineageStatusRequests.has(item.assetId),
+  ]));
+}
+
 function renderInventory(items: InventoryItem[]): void {
+  const key = inventoryRenderKey(items);
+  if (key === renderedInventoryKey) return;
+  renderedInventoryKey = key;
   if (items.length === 0) {
     inventoryElement.className = "inventory empty-state";
     inventoryElement.textContent = "戦利品はまだない";
