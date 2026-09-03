@@ -1,0 +1,32 @@
+{
+  "name": "converge-prdt",
+  "private": true,
+  "type": "module",
+  "description": "Replicated domain objects: pure domain state machine + PRDT finalization protocol",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:core": "vitest run --project core",
+    "test:worker": "vitest run --project worker",
+    "test:watch": "vitest",
+    "simulate": "tsx scripts/simulate.ts",
+    "dev": "wrangler dev",
+    "deploy:dry": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@cloudflare/workers-types": "5.20260903.1",
+    "@types/node": "24.13.3",
+    "fast-check": "4.9.0",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.128.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  }
+}

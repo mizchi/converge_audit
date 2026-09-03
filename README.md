@@ -145,6 +145,17 @@ It is not a finished MMO server. It is an infrastructure prototype for testing
 whether a small authority can accept compact checkpoints without receiving every
 frame, then durably and idempotently escalate suspicious results to replay.
 
+### `examples/prdt`
+
+This is a TypeScript reference implementation of a *replicated domain object*
+in the PRDT style: a pure domain state machine plus a replicated finalization
+protocol. Proposals, tick closures, and the committed prefix are join-semilattices;
+`alive` is evaluated only inside the finalized batch, never as a proposal-time
+precondition. It ships a single-authority finalizer, a quorum finalizer with an
+equivocation-aware voting PRDT, a 3-replica adversarial simulator, and a
+Cloudflare Durable Object host. See
+[docs/prdt-replicated-domain-ja.md](docs/prdt-replicated-domain-ja.md).
+
 ## Formal verification strategy
 
 Each claim uses the smallest appropriate verifier.

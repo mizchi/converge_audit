@@ -181,5 +181,25 @@ build-cf-evidence-source-relay:
 build-cf-key-signer:
   pnpm --dir examples/cf-game-audit deploy:key-signer:dry
 
+# Install the PRDT replicated-domain reference implementation
+install-prdt:
+  pnpm --dir examples/prdt install --frozen-lockfile
+
+# Type-check the PRDT replicated-domain reference implementation
+check-prdt:
+  pnpm --dir examples/prdt typecheck
+
+# Run PRDT unit, property, simulation, negative, and Durable Object tests
+test-prdt:
+  pnpm --dir examples/prdt test
+
+# Run one seeded PRDT three-replica simulation and print the report
+simulate-prdt seed="1" steps="500":
+  pnpm --dir examples/prdt simulate {{seed}} {{steps}}
+
+# Validate the PRDT Worker deploy bundle without mutating Cloudflare
+build-prdt:
+  pnpm --dir examples/prdt deploy:dry
+
 # Pre-release checks
-pre-release: fmt info check check-audit-boundary test build prove formal-check check-node-audit-runtime test-node-audit-runtime check-cf-game-audit test-cf-game-audit build-cf-game-audit build-cf-evidence-source-relay build-cf-key-signer
+pre-release: fmt info check check-audit-boundary test build prove formal-check check-node-audit-runtime test-node-audit-runtime check-cf-game-audit test-cf-game-audit build-cf-game-audit build-cf-evidence-source-relay build-cf-key-signer check-prdt test-prdt build-prdt

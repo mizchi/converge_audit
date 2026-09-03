@@ -124,6 +124,15 @@ sample、challenge、fork、high-value、marketplaceへ限定します。
 checkpointを安価に受理し、疑わしい結果だけをdurableかつidempotentにreplayへ昇格できるか」を
 実装・故障注入・実測するためのinfrastructure prototypeです。
 
+### `examples/prdt`
+
+PRDT 流の *replicated domain object* の TypeScript 参照実装。純粋なドメイン状態機械と
+複製 finalization protocol を分離し、proposal・tick closure・確定 prefix を join-semilattice として
+扱う。`alive` 判定は確定 batch 内のドメイン validation でのみ行い、proposal 時の precondition にはしない。
+single authority finalizer、equivocation を除外する投票 PRDT 付き quorum finalizer、
+3 replica の敵対的 simulator、Cloudflare Durable Object host を含む。
+詳細は [docs/prdt-replicated-domain-ja.md](docs/prdt-replicated-domain-ja.md)。
+
 ## 形式手法で確認していること
 
 アルゴリズムの主張ごとに、最小の検証手段を使い分けます。
