@@ -248,3 +248,4 @@ pub fn VerifiedAssetLineageSlice::transitions(Self) -> Array[AssetLineageTransit
 // Type aliases
 
 // Traits
+

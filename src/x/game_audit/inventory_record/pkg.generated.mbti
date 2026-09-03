@@ -30,3 +30,4 @@ pub(all) struct InventoryRecord {
 // Type aliases
 
 // Traits
+

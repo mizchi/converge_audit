@@ -44,3 +44,4 @@ pub fn MerkleTree::root(Self) -> @converge_audit.Digest
 // Type aliases
 
 // Traits
+

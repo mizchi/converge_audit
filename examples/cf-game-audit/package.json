@@ -8,6 +8,7 @@
     "web:dev": "vite --config vite.config.ts",
     "build:all": "pnpm run build:moon && pnpm run web:build",
     "pretest": "pnpm run build:all",
+    "pretypecheck": "pnpm run build:moon",
     "pretest:quint-witness-mbt": "pnpm run build:moon",
     "predeploy": "pnpm run build:all",
     "predeploy:dry": "pnpm run build:all",

@@ -86,6 +86,7 @@ deterministic kernelで解決します。
 | `mizchi/converge_audit/audit/delivery_auth` | producer署名とdistinct witness quorumによる配送認証 |
 | `mizchi/converge_audit/audit/runtime` | atomic seal/outbox/ACK、local store、peer retry契約 |
 | `mizchi/converge_audit/x/game_audit/*` | PvE/PvP/open-world/inventory/marketplaceの実験policyとkernel |
+| `mizchi/converge_audit/prdt/*` | PRDT 流の replicated domain object。純粋 domain reducer、proposal/closure/確定 prefix の lattice、single authority と quorum の finalizer、simulator、JS bridge |
 
 `src/audit`はgame payloadをopaque digestとして扱う汎用層です。誰をwitnessにするか、何票を
 finalityとするか、攻撃・回避・lootが合法かは`src/x/game_audit`または実際のゲーム側が決めます。
@@ -123,6 +124,16 @@ sample、challenge、fork、high-value、marketplaceへ限定します。
 このexampleは巨大なMMO serverの完成品ではありません。「中央が全frameを受け取らず、compactな
 checkpointを安価に受理し、疑わしい結果だけをdurableかつidempotentにreplayへ昇格できるか」を
 実装・故障注入・実測するためのinfrastructure prototypeです。
+
+### `examples/prdt`
+
+MoonBit パッケージ `mizchi/converge_audit/prdt` の Cloudflare Durable Object host。
+`prdt` は PRDT 流の *replicated domain object* で、純粋なドメイン状態機械と
+複製 finalization protocol を分離し、proposal・tick closure・確定 prefix を join-semilattice として
+扱う。`alive` 判定は確定 batch 内のドメイン validation でのみ行い、proposal 時の precondition にはしない。
+single authority finalizer、equivocation を除外する投票 PRDT 付き quorum finalizer、
+3 replica の敵対的 simulator、seed 付き property test、Worker が呼ぶ JSON bridge を含む。
+詳細は [docs/prdt-replicated-domain-ja.md](docs/prdt-replicated-domain-ja.md)。
 
 ## 形式手法で確認していること
 

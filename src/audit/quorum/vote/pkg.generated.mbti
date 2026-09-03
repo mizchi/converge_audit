@@ -33,3 +33,4 @@ pub fn ParticipantVote::is_challenge(Self) -> Bool
 // Type aliases
 
 // Traits
+
