@@ -95,7 +95,6 @@ results.
 | `mizchi/converge_audit/audit/delivery_auth` | Producer signatures and distinct-witness delivery authentication |
 | `mizchi/converge_audit/audit/runtime` | Atomic seal/outbox/ACK, local store, and peer retry contracts |
 | `mizchi/converge_audit/x/game_audit/*` | Experimental PvE, PvP, open-world, inventory, and marketplace policies and kernels |
-| `mizchi/converge_audit/prdt/*` | PRDT-style replicated domain objects: pure domain reducer, proposal/closure/committed-prefix lattices, single-authority and quorum finalizers, simulator, JS bridge |
 
 `src/audit` treats application payloads as opaque digests. Witness selection,
 quorum thresholds, and the legality of attacks, dodges, and loot belong to
@@ -146,17 +145,14 @@ It is not a finished MMO server. It is an infrastructure prototype for testing
 whether a small authority can accept compact checkpoints without receiving every
 frame, then durably and idempotently escalate suspicious results to replay.
 
-### `examples/prdt`
+### PRDT replicated domain objects
 
-This is the Cloudflare Durable Object host for the MoonBit package
-`mizchi/converge_audit/prdt`, a *replicated domain object* in the PRDT style:
-a pure domain state machine plus a replicated finalization protocol.
-Proposals, tick closures, and the committed prefix are join-semilattices;
-`alive` is evaluated only inside the finalized batch, never as a proposal-time
-precondition. The package ships a single-authority finalizer, a quorum
-finalizer with an equivocation-aware voting PRDT, a 3-replica adversarial
-simulator, seeded property tests, and a JSON bridge that the Worker calls. See
-[docs/prdt-replicated-domain-ja.md](docs/prdt-replicated-domain-ja.md).
+The PRDT-style *replicated domain object* framework (pure domain state machine
+plus a replicated finalization protocol, with certified compaction, quorum
+closure, and Why3/Z3 contracts) was developed in this repository and now lives
+in its own module, [`mizchi/prdt`](https://github.com/mizchi/prdt). Its
+`Hasher` / `Signer` / `Verifier` traits mirror the ones here, so the two can be
+composed with one-line adapters.
 
 ## Formal verification strategy
 
