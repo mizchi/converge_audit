@@ -1,5 +1,5 @@
 ///|
-fn inventory_listing_wire_bundle() -> InventoryListingProofBundle raise Error {
+fn inventory_listing_wire_bundle() -> @wire.InventoryListingProofBundle raise Error {
   let hasher = @bft.FnvHasher::new()
   let record = @inventory.AssetRecord::{
     asset_id: "asset-1",
@@ -37,7 +37,7 @@ fn inventory_listing_wire_bundle() -> InventoryListingProofBundle raise Error {
       authority_key: @bft.PublicKey("authority-key"),
     },
     game_manifest_digest: @bft.Digest("canonical-asset-kernel-v1"),
-    witnesses: [{ id: "witness-0", key: @bft.PublicKey("witness-key") }],
+    witnesses: [{ id: "witness-0", key: @bft.PublicKey("witness-key"), }],
     max_faults: 0,
     attestations: [
       {
@@ -52,82 +52,91 @@ fn inventory_listing_wire_bundle() -> InventoryListingProofBundle raise Error {
         signer_key: @bft.PublicKey("witness-key"),
       },
     ],
-    proof: { record, map_proof },
+    proof: { record, map_proof, },
   }
 }
 
 ///|
 test "inventory listing proof bundle has a canonical versioned round trip" {
   let bundle = inventory_listing_wire_bundle()
-  let encoded = encode_inventory_listing_proof_bundle(bundle)
+  let encoded = @wire.encode_inventory_listing_proof_bundle(bundle)
   let decoded = match
-    decode_inventory_listing_proof_bundle(
+    @wire.decode_inventory_listing_proof_bundle(
       encoded,
-      limits=InventoryListingWireLimits::default(),
+      limits=@wire.InventoryListingWireLimits::default(),
     ) {
     Ok(value) => value
     Err(_) => fail("expected inventory listing proof bundle decode")
   }
-  assert_eq(encode_inventory_listing_proof_bundle(decoded), encoded)
+  assert_eq(@wire.encode_inventory_listing_proof_bundle(decoded), encoded)
   assert_eq(decoded, bundle)
 }
 
 ///|
 test "inventory listing wire rejects versions and resource excess" {
   let bundle = inventory_listing_wire_bundle()
-  let encoded = encode_inventory_listing_proof_bundle(bundle)
-  let defaults = InventoryListingWireLimits::default()
+  let encoded = @wire.encode_inventory_listing_proof_bundle(bundle)
+  let defaults = @wire.InventoryListingWireLimits::default()
   match
-    decode_inventory_listing_proof_bundle(
+    @wire.decode_inventory_listing_proof_bundle(
       replace_canonical_version(encoded, b'\x03'),
       limits=defaults,
     ) {
-    Err(InventoryListingWireError::InventoryWireUnsupportedVersion(3)) => ()
+    Err(@wire.InventoryListingWireError::InventoryWireUnsupportedVersion(3)) =>
+      ()
     _ => fail("expected inventory listing version refusal")
   }
   match
-    decode_inventory_listing_proof_bundle(
+    @wire.decode_inventory_listing_proof_bundle(
       make_noncanonical_version(encoded),
       limits=defaults,
     ) {
-    Err(InventoryListingWireError::InventoryWireNonCanonicalEncoding) => ()
+    Err(@wire.InventoryListingWireError::InventoryWireNonCanonicalEncoding) =>
+      ()
     _ => fail("expected noncanonical inventory listing refusal")
   }
   match
-    decode_inventory_listing_proof_bundle(encoded, limits={
+    @wire.decode_inventory_listing_proof_bundle(encoded, limits={
       ..defaults,
       max_bundle_bytes: encoded.length() - 1,
     }) {
-    Err(InventoryListingWireError::InventoryWireInputTooLarge(actual, maximum)) => {
+    Err(
+      @wire.InventoryListingWireError::InventoryWireInputTooLarge(
+        actual,
+        maximum
+      )
+    ) => {
       assert_eq(actual, encoded.length())
       assert_eq(maximum, encoded.length() - 1)
     }
     _ => fail("expected inventory listing byte-budget refusal")
   }
   match
-    decode_inventory_listing_proof_bundle(encoded, limits={
+    @wire.decode_inventory_listing_proof_bundle(encoded, limits={
       ..defaults,
       max_witnesses: 0,
     }) {
-    Err(InventoryListingWireError::InventoryWireWitnessesTooMany(1, 0)) => ()
+    Err(@wire.InventoryListingWireError::InventoryWireWitnessesTooMany(1, 0)) =>
+      ()
     _ => fail("expected inventory listing witness-budget refusal")
   }
   match
-    decode_inventory_listing_proof_bundle(encoded, limits={
+    @wire.decode_inventory_listing_proof_bundle(encoded, limits={
       ..defaults,
       max_attestations: 0,
     }) {
-    Err(InventoryListingWireError::InventoryWireAttestationsTooMany(1, 0)) => ()
+    Err(@wire.InventoryListingWireError::InventoryWireAttestationsTooMany(1, 0)) =>
+      ()
     _ => fail("expected inventory listing attestation-budget refusal")
   }
   match
-    decode_inventory_listing_proof_bundle(encoded, limits={
+    @wire.decode_inventory_listing_proof_bundle(encoded, limits={
       ..defaults,
       max_proof_steps: -1,
     }) {
     Err(
-      InventoryListingWireError::InventoryWireCodecRefused(
-        OpenWorldAuditWireError::WireProofTooLong(0, -1)
+      @wire.InventoryListingWireError::InventoryWireCodecRefused(
+        @wire.OpenWorldAuditWireError::WireProofTooLong(0, -1)
       )
     ) => ()
     _ => fail("expected inventory listing proof-budget refusal")
@@ -135,7 +144,7 @@ test "inventory listing wire rejects versions and resource excess" {
 }
 
 ///|
-fn inventory_lineage_wire_bundle() -> InventoryLineageProofBundle raise Error {
+fn inventory_lineage_wire_bundle() -> @wire.InventoryLineageProofBundle raise Error {
   let transition : @inventory.AssetLineageTransition = {
     asset_id: "asset-1",
     origin_receipt_digest: @bft.Digest("origin-receipt"),
@@ -201,26 +210,26 @@ fn inventory_lineage_wire_bundle() -> InventoryLineageProofBundle raise Error {
 ///|
 test "inventory lineage bundle has a canonical bounded round trip" {
   let bundle = inventory_lineage_wire_bundle()
-  let encoded = encode_inventory_lineage_proof_bundle(bundle)
+  let encoded = @wire.encode_inventory_lineage_proof_bundle(bundle)
   let decoded = match
-    decode_inventory_lineage_proof_bundle(
+    @wire.decode_inventory_lineage_proof_bundle(
       encoded,
-      limits=InventoryLineageWireLimits::default(),
+      limits=@wire.InventoryLineageWireLimits::default(),
     ) {
     Ok(value) => value
     Err(_) => fail("expected inventory lineage proof bundle decode")
   }
   assert_eq(decoded, bundle)
-  assert_eq(encode_inventory_lineage_proof_bundle(decoded), encoded)
+  assert_eq(@wire.encode_inventory_lineage_proof_bundle(decoded), encoded)
 }
 
 ///|
 test "inventory lineage wire rejects unsupported versions and transfer excess" {
   let bundle = inventory_lineage_wire_bundle()
-  let encoded = encode_inventory_lineage_proof_bundle(bundle)
-  let defaults = InventoryLineageWireLimits::default()
+  let encoded = @wire.encode_inventory_lineage_proof_bundle(bundle)
+  let defaults = @wire.InventoryLineageWireLimits::default()
   match
-    decode_inventory_lineage_proof_bundle(
+    @wire.decode_inventory_lineage_proof_bundle(
       replace_canonical_version(encoded, b'\x03'),
       limits=defaults,
     ) {
@@ -228,7 +237,7 @@ test "inventory lineage wire rejects unsupported versions and transfer excess" {
     _ => fail("expected inventory lineage version refusal")
   }
   match
-    decode_inventory_lineage_proof_bundle(encoded, limits={
+    @wire.decode_inventory_lineage_proof_bundle(encoded, limits={
       ..defaults,
       max_transfers: 0,
     }) {
@@ -238,7 +247,7 @@ test "inventory lineage wire rejects unsupported versions and transfer excess" {
 }
 
 ///|
-fn inventory_checkpoint_wire_bundle() -> InventoryCheckpointProofBundle raise Error {
+fn inventory_checkpoint_wire_bundle() -> @wire.InventoryCheckpointProofBundle raise Error {
   let listing = inventory_listing_wire_bundle()
   {
     signed_checkpoint: listing.signed_checkpoint,
@@ -253,39 +262,43 @@ fn inventory_checkpoint_wire_bundle() -> InventoryCheckpointProofBundle raise Er
 ///|
 test "multi-asset inventory checkpoint bundle has a canonical bounded round trip" {
   let bundle = inventory_checkpoint_wire_bundle()
-  let encoded = encode_inventory_checkpoint_proof_bundle(bundle)
+  let encoded = @wire.encode_inventory_checkpoint_proof_bundle(bundle)
   let decoded = match
-    decode_inventory_checkpoint_proof_bundle(
+    @wire.decode_inventory_checkpoint_proof_bundle(
       encoded,
-      limits=InventoryCheckpointWireLimits::default(),
+      limits=@wire.InventoryCheckpointWireLimits::default(),
     ) {
     Ok(value) => value
     Err(_) => fail("expected inventory checkpoint proof bundle decode")
   }
   assert_eq(decoded, bundle)
-  assert_eq(encode_inventory_checkpoint_proof_bundle(decoded), encoded)
+  assert_eq(@wire.encode_inventory_checkpoint_proof_bundle(decoded), encoded)
 }
 
 ///|
 test "multi-asset inventory checkpoint wire rejects empty duplicate and excess proofs" {
   let bundle = inventory_checkpoint_wire_bundle()
-  let defaults = InventoryCheckpointWireLimits::default()
-  let empty = encode_inventory_checkpoint_proof_bundle({ ..bundle, proofs: [] })
-  match decode_inventory_checkpoint_proof_bundle(empty, limits=defaults) {
+  let defaults = @wire.InventoryCheckpointWireLimits::default()
+  let empty = @wire.encode_inventory_checkpoint_proof_bundle({
+    ..bundle,
+    proofs: [],
+  })
+  match @wire.decode_inventory_checkpoint_proof_bundle(empty, limits=defaults) {
     Err(InventoryCheckpointWireMissingProofs) => ()
     _ => fail("expected empty inventory checkpoint refusal")
   }
-  let duplicate = encode_inventory_checkpoint_proof_bundle({
+  let duplicate = @wire.encode_inventory_checkpoint_proof_bundle({
     ..bundle,
     proofs: [bundle.proofs[0], bundle.proofs[0]],
   })
-  match decode_inventory_checkpoint_proof_bundle(duplicate, limits=defaults) {
+  match
+    @wire.decode_inventory_checkpoint_proof_bundle(duplicate, limits=defaults) {
     Err(InventoryCheckpointWireNonCanonicalAssets(1)) => ()
     _ => fail("expected duplicate inventory checkpoint asset refusal")
   }
-  let encoded = encode_inventory_checkpoint_proof_bundle(bundle)
+  let encoded = @wire.encode_inventory_checkpoint_proof_bundle(bundle)
   match
-    decode_inventory_checkpoint_proof_bundle(encoded, limits={
+    @wire.decode_inventory_checkpoint_proof_bundle(encoded, limits={
       ..defaults,
       max_proofs: 0,
     }) {

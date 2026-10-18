@@ -49,11 +49,14 @@ pub struct AtomicCheckpointSealPlan {
 } derive(Eq, @debug.Debug)
 pub fn AtomicCheckpointSealPlan::checkpoint(Self) -> CheckpointSealDraft
 pub fn AtomicCheckpointSealPlan::consumed_closure_epoch(Self) -> Int
+pub fn AtomicCheckpointSealPlan::equal(Self, Self) -> Bool
 pub fn AtomicCheckpointSealPlan::expected_snapshot(Self) -> CheckpointSealStorageSnapshot
 pub fn AtomicCheckpointSealPlan::next_created_order(Self) -> Int
 pub fn AtomicCheckpointSealPlan::next_head(Self) -> CheckpointSealHead
 pub fn AtomicCheckpointSealPlan::next_outbox_entry_count(Self) -> Int
+pub fn AtomicCheckpointSealPlan::not_equal(Self, Self) -> Bool
 pub fn AtomicCheckpointSealPlan::outbox_entries(Self) -> Array[CheckpointOutboxEntry]
+pub fn AtomicCheckpointSealPlan::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AtomicCheckpointSealResult {
   AtomicCheckpointSealPrepared(AtomicCheckpointSealPlan)
@@ -61,6 +64,9 @@ pub(all) enum AtomicCheckpointSealResult {
   CheckpointSealConflict(CheckpointSealConflictReason)
   CheckpointSealRefused(CheckpointSealRefusal)
 } derive(Eq, @debug.Debug)
+pub fn AtomicCheckpointSealResult::equal(Self, Self) -> Bool
+pub fn AtomicCheckpointSealResult::not_equal(Self, Self) -> Bool
+pub fn AtomicCheckpointSealResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AuditBoundary {
   protocol_version : Int
@@ -69,11 +75,17 @@ pub(all) struct AuditBoundary {
   scope_id : String
   unit_id : String
 } derive(Eq, @debug.Debug)
+pub fn AuditBoundary::equal(Self, Self) -> Bool
+pub fn AuditBoundary::not_equal(Self, Self) -> Bool
+pub fn AuditBoundary::to_repr(Self) -> @debug.Repr
 
 pub struct AuthenticatedCheckpointAck {
   evidence_value : CheckpointAckEvidence
 } derive(Eq, @debug.Debug)
+pub fn AuthenticatedCheckpointAck::equal(Self, Self) -> Bool
 pub fn AuthenticatedCheckpointAck::evidence(Self) -> CheckpointAckEvidence
+pub fn AuthenticatedCheckpointAck::not_equal(Self, Self) -> Bool
+pub fn AuthenticatedCheckpointAck::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointAckDecision {
   CheckpointAccepted
@@ -85,6 +97,9 @@ pub(all) enum CheckpointAckDecision {
   CheckpointBoundaryMismatch
   CheckpointRefused
 } derive(Eq, @debug.Debug)
+pub fn CheckpointAckDecision::equal(Self, Self) -> Bool
+pub fn CheckpointAckDecision::not_equal(Self, Self) -> Bool
+pub fn CheckpointAckDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CheckpointAckEvidence {
   boundary : AuditBoundary
@@ -93,11 +108,17 @@ pub(all) struct CheckpointAckEvidence {
   checkpoint_digest : @commitment.AuditDigest
   decision : CheckpointAckDecision
 } derive(Eq, @debug.Debug)
+pub fn CheckpointAckEvidence::equal(Self, Self) -> Bool
+pub fn CheckpointAckEvidence::not_equal(Self, Self) -> Bool
+pub fn CheckpointAckEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointAckOpenResult {
   CheckpointAckReady(AuthenticatedCheckpointAck)
   CheckpointAckRefused(CheckpointAckRefusal)
 } derive(Eq, @debug.Debug)
+pub fn CheckpointAckOpenResult::equal(Self, Self) -> Bool
+pub fn CheckpointAckOpenResult::not_equal(Self, Self) -> Bool
+pub fn CheckpointAckOpenResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointAckRefusal {
   InvalidAckBoundary
@@ -106,18 +127,27 @@ pub(all) enum CheckpointAckRefusal {
   EmptyAckDigest
   AckAuthenticationFailed
 } derive(Eq, @debug.Debug)
+pub fn CheckpointAckRefusal::equal(Self, Self) -> Bool
+pub fn CheckpointAckRefusal::not_equal(Self, Self) -> Bool
+pub fn CheckpointAckRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointOutboxAckResult {
   OutboxAcknowledged(CheckpointOutboxEntry)
   OutboxAlreadyAcknowledged
   OutboxAckRefused(OutboxAckRefusal)
 } derive(Eq, @debug.Debug)
+pub fn CheckpointOutboxAckResult::equal(Self, Self) -> Bool
+pub fn CheckpointOutboxAckResult::not_equal(Self, Self) -> Bool
+pub fn CheckpointOutboxAckResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointOutboxClaimResult {
   OutboxClaimed(CheckpointOutboxEntry)
   OutboxNotRetryable
   OutboxClaimRefused(OutboxClaimRefusal)
 } derive(Eq, @debug.Debug)
+pub fn CheckpointOutboxClaimResult::equal(Self, Self) -> Bool
+pub fn CheckpointOutboxClaimResult::not_equal(Self, Self) -> Bool
+pub fn CheckpointOutboxClaimResult::to_repr(Self) -> @debug.Repr
 
 pub struct CheckpointOutboxEntry {
   boundary_value : AuditBoundary
@@ -134,29 +164,44 @@ pub fn CheckpointOutboxEntry::checkpoint_digest(Self) -> @commitment.AuditDigest
 pub fn CheckpointOutboxEntry::created_order(Self) -> Int
 pub fn CheckpointOutboxEntry::destination_id(Self) -> String
 pub fn CheckpointOutboxEntry::epoch(Self) -> Int
+pub fn CheckpointOutboxEntry::equal(Self, Self) -> Bool
+pub fn CheckpointOutboxEntry::not_equal(Self, Self) -> Bool
 pub fn CheckpointOutboxEntry::state(Self) -> CheckpointOutboxState
+pub fn CheckpointOutboxEntry::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointOutboxOpenResult {
   OutboxEntryReady(CheckpointOutboxEntry)
   OutboxEntryRefused(OutboxEntryRefusal)
 } derive(Eq, @debug.Debug)
+pub fn CheckpointOutboxOpenResult::equal(Self, Self) -> Bool
+pub fn CheckpointOutboxOpenResult::not_equal(Self, Self) -> Bool
+pub fn CheckpointOutboxOpenResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointOutboxReleaseResult {
   OutboxReleased(CheckpointOutboxEntry)
   OutboxReleaseNoop
 } derive(Eq, @debug.Debug)
+pub fn CheckpointOutboxReleaseResult::equal(Self, Self) -> Bool
+pub fn CheckpointOutboxReleaseResult::not_equal(Self, Self) -> Bool
+pub fn CheckpointOutboxReleaseResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointOutboxState {
   OutboxPending
   OutboxInFlight(Int)
   OutboxAcknowledgedState
 } derive(Eq, @debug.Debug)
+pub fn CheckpointOutboxState::equal(Self, Self) -> Bool
+pub fn CheckpointOutboxState::not_equal(Self, Self) -> Bool
+pub fn CheckpointOutboxState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointSealConflictReason {
   SealSameEpochFork
   SealParentFork
   SealIncompleteKnownCommit
 } derive(Eq, @debug.Debug)
+pub fn CheckpointSealConflictReason::equal(Self, Self) -> Bool
+pub fn CheckpointSealConflictReason::not_equal(Self, Self) -> Bool
+pub fn CheckpointSealConflictReason::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CheckpointSealDraft {
   boundary : AuditBoundary
@@ -165,12 +210,18 @@ pub(all) struct CheckpointSealDraft {
   checkpoint_digest : @commitment.AuditDigest
   canonical_envelope : String
 } derive(Eq, @debug.Debug)
+pub fn CheckpointSealDraft::equal(Self, Self) -> Bool
+pub fn CheckpointSealDraft::not_equal(Self, Self) -> Bool
+pub fn CheckpointSealDraft::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CheckpointSealHead {
   boundary : AuditBoundary
   epoch : Int
   checkpoint_digest : @commitment.AuditDigest
 } derive(Eq, @debug.Debug)
+pub fn CheckpointSealHead::equal(Self, Self) -> Bool
+pub fn CheckpointSealHead::not_equal(Self, Self) -> Bool
+pub fn CheckpointSealHead::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointSealRefusal {
   SealInvalidStorageSnapshot
@@ -186,6 +237,9 @@ pub(all) enum CheckpointSealRefusal {
   SealOutboxCapacityExceeded
   SealCreatedOrderOverflow
 } derive(Eq, @debug.Debug)
+pub fn CheckpointSealRefusal::equal(Self, Self) -> Bool
+pub fn CheckpointSealRefusal::not_equal(Self, Self) -> Bool
+pub fn CheckpointSealRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CheckpointSealStorageSnapshot {
   boundary : AuditBoundary
@@ -199,10 +253,16 @@ pub(all) struct CheckpointSealStorageSnapshot {
   outbox_capacity : Int
   next_created_order : Int
 } derive(Eq, @debug.Debug)
+pub fn CheckpointSealStorageSnapshot::equal(Self, Self) -> Bool
+pub fn CheckpointSealStorageSnapshot::not_equal(Self, Self) -> Bool
+pub fn CheckpointSealStorageSnapshot::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EpochClosureConflictReason {
   EquivocationDetected
 } derive(Eq, @debug.Debug)
+pub fn EpochClosureConflictReason::equal(Self, Self) -> Bool
+pub fn EpochClosureConflictReason::not_equal(Self, Self) -> Bool
+pub fn EpochClosureConflictReason::to_repr(Self) -> @debug.Repr
 
 pub(all) struct EpochClosureEvidence {
   boundary : AuditBoundary
@@ -211,6 +271,9 @@ pub(all) struct EpochClosureEvidence {
   frontier_digest : @commitment.AuditDigest
   certificate_digest : @commitment.AuditDigest
 } derive(Eq, @debug.Debug)
+pub fn EpochClosureEvidence::equal(Self, Self) -> Bool
+pub fn EpochClosureEvidence::not_equal(Self, Self) -> Bool
+pub fn EpochClosureEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EpochClosureOpenResult {
   EpochClosureReady(TrustedEpochClosure)
@@ -218,11 +281,17 @@ pub(all) enum EpochClosureOpenResult {
   EpochClosureConflict(EpochClosureConflictReason)
   EpochClosureRefused(EpochClosureRefusal)
 } derive(Eq, @debug.Debug)
+pub fn EpochClosureOpenResult::equal(Self, Self) -> Bool
+pub fn EpochClosureOpenResult::not_equal(Self, Self) -> Bool
+pub fn EpochClosureOpenResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EpochClosurePendingReason {
   MissingFrontierEvents
   UnderQuorum
 } derive(Eq, @debug.Debug)
+pub fn EpochClosurePendingReason::equal(Self, Self) -> Bool
+pub fn EpochClosurePendingReason::not_equal(Self, Self) -> Bool
+pub fn EpochClosurePendingReason::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EpochClosureRefusal {
   NonPositiveProtocolVersion
@@ -235,6 +304,9 @@ pub(all) enum EpochClosureRefusal {
   EmptyFrontierDigest
   EmptyCertificateDigest
 } derive(Eq, @debug.Debug)
+pub fn EpochClosureRefusal::equal(Self, Self) -> Bool
+pub fn EpochClosureRefusal::not_equal(Self, Self) -> Bool
+pub fn EpochClosureRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OutboxAckRefusal {
   AckAuthorityMismatch
@@ -243,12 +315,18 @@ pub(all) enum OutboxAckRefusal {
   AckDigestMismatch
   AckDecisionNotSuccessful
 } derive(Eq, @debug.Debug)
+pub fn OutboxAckRefusal::equal(Self, Self) -> Bool
+pub fn OutboxAckRefusal::not_equal(Self, Self) -> Bool
+pub fn OutboxAckRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OutboxClaimRefusal {
   NegativeClaimTime
   NonPositiveLeaseDuration
   LeaseDeadlineOverflow
 } derive(Eq, @debug.Debug)
+pub fn OutboxClaimRefusal::equal(Self, Self) -> Bool
+pub fn OutboxClaimRefusal::not_equal(Self, Self) -> Bool
+pub fn OutboxClaimRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OutboxEntryRefusal {
   InvalidOutboxBoundary
@@ -258,6 +336,9 @@ pub(all) enum OutboxEntryRefusal {
   EmptyCanonicalEnvelope
   NegativeCreatedOrder
 } derive(Eq, @debug.Debug)
+pub fn OutboxEntryRefusal::equal(Self, Self) -> Bool
+pub fn OutboxEntryRefusal::not_equal(Self, Self) -> Bool
+pub fn OutboxEntryRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PeerCheckpointResponse {
   peer_id : String
@@ -265,6 +346,9 @@ pub(all) struct PeerCheckpointResponse {
   authenticated : Bool
   received_at_ms : Int
 } derive(Eq, @debug.Debug)
+pub fn PeerCheckpointResponse::equal(Self, Self) -> Bool
+pub fn PeerCheckpointResponse::not_equal(Self, Self) -> Bool
+pub fn PeerCheckpointResponse::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PeerCheckpointResponseSelection {
   PeerCheckpointResponseAccepted(Int)
@@ -272,12 +356,18 @@ pub(all) enum PeerCheckpointResponseSelection {
   PeerCheckpointForkDetected(Int)
   PeerCheckpointResponseRefused
 } derive(Eq, @debug.Debug)
+pub fn PeerCheckpointResponseSelection::equal(Self, Self) -> Bool
+pub fn PeerCheckpointResponseSelection::not_equal(Self, Self) -> Bool
+pub fn PeerCheckpointResponseSelection::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PeerDeliveryRefusal {
   InvalidPeerDeliveryWindow
   InvalidPeerRoute(Int)
   DuplicatePeerRoute
 } derive(Eq, @debug.Debug)
+pub fn PeerDeliveryRefusal::equal(Self, Self) -> Bool
+pub fn PeerDeliveryRefusal::not_equal(Self, Self) -> Bool
+pub fn PeerDeliveryRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PeerDeliverySelectionResult {
   PeerDeliverySelected(Array[Int])
@@ -285,6 +375,9 @@ pub(all) enum PeerDeliverySelectionResult {
   PeerDeliveryBackpressured
   PeerDeliveryRefused(PeerDeliveryRefusal)
 } derive(Eq, @debug.Debug)
+pub fn PeerDeliverySelectionResult::equal(Self, Self) -> Bool
+pub fn PeerDeliverySelectionResult::not_equal(Self, Self) -> Bool
+pub fn PeerDeliverySelectionResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PeerRouteState {
   peer_id : String
@@ -294,11 +387,17 @@ pub(all) struct PeerRouteState {
   next_retry_at_ms : Int
   last_attempt_order : Int
 } derive(Eq, @debug.Debug)
+pub fn PeerRouteState::equal(Self, Self) -> Bool
+pub fn PeerRouteState::not_equal(Self, Self) -> Bool
+pub fn PeerRouteState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PeerRouteUpdateResult {
   PeerRouteUpdated(PeerRouteState)
   PeerRouteUpdateRefused
 } derive(Eq, @debug.Debug)
+pub fn PeerRouteUpdateResult::equal(Self, Self) -> Bool
+pub fn PeerRouteUpdateResult::not_equal(Self, Self) -> Bool
+pub fn PeerRouteUpdateResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalAuditEvent {
   boundary : AuditBoundary
@@ -308,6 +407,9 @@ pub(all) struct PlayerLocalAuditEvent {
   event_digest : @commitment.AuditDigest
   canonical_event : String
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalAuditEvent::equal(Self, Self) -> Bool
+pub fn PlayerLocalAuditEvent::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalAuditEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalAuditImage {
   boundary : AuditBoundary
@@ -327,6 +429,9 @@ pub(all) struct PlayerLocalAuditImage {
   next_created_order : Int
   storage_revision : Int
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalAuditImage::equal(Self, Self) -> Bool
+pub fn PlayerLocalAuditImage::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalAuditImage::to_repr(Self) -> @debug.Repr
 
 pub struct PlayerLocalAuditStore {
   boundary_value : AuditBoundary
@@ -372,6 +477,9 @@ pub(all) enum PlayerLocalAuditStoreRefusal {
   LocalStoreInvalidOutboxCapacity
   LocalStoreInvalidImage
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalAuditStoreRefusal::equal(Self, Self) -> Bool
+pub fn PlayerLocalAuditStoreRefusal::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalAuditStoreRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalCheckpointOutboxRecord {
   boundary : AuditBoundary
@@ -382,6 +490,9 @@ pub(all) struct PlayerLocalCheckpointOutboxRecord {
   created_order : Int
   state : CheckpointOutboxState
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalCheckpointOutboxRecord::equal(Self, Self) -> Bool
+pub fn PlayerLocalCheckpointOutboxRecord::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalCheckpointOutboxRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PlayerLocalEventAdmission {
   LocalEventStored
@@ -389,11 +500,17 @@ pub(all) enum PlayerLocalEventAdmission {
   LocalEventEquivocation
   LocalEventRefused(PlayerLocalEventRefusal)
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEventAdmission::equal(Self, Self) -> Bool
+pub fn PlayerLocalEventAdmission::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEventAdmission::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalEventEquivocation {
   accepted : PlayerLocalAuditEvent
   conflicting : PlayerLocalAuditEvent
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEventEquivocation::equal(Self, Self) -> Bool
+pub fn PlayerLocalEventEquivocation::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEventEquivocation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PlayerLocalEventRefusal {
   LocalEventInvalidBoundary
@@ -406,6 +523,9 @@ pub(all) enum PlayerLocalEventRefusal {
   LocalEventDigestCollision
   LocalEventPrunedEpoch
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEventRefusal::equal(Self, Self) -> Bool
+pub fn PlayerLocalEventRefusal::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEventRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalEvidenceHold {
   boundary : AuditBoundary
@@ -416,22 +536,34 @@ pub(all) struct PlayerLocalEvidenceHold {
   reference_digest : @commitment.AuditDigest
   state : PlayerLocalEvidenceHoldState
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEvidenceHold::equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceHold::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceHold::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PlayerLocalEvidenceHoldKind {
   EvidenceHoldFork
   EvidenceHoldChallenge
   EvidenceHoldAppeal
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEvidenceHoldKind::equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceHoldKind::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceHoldKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PlayerLocalEvidenceHoldResolutionDecision {
   EvidenceHoldUpheld
   EvidenceHoldDismissed
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEvidenceHoldResolutionDecision::equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceHoldResolutionDecision::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceHoldResolutionDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PlayerLocalEvidenceHoldState {
   EvidenceHoldActive
   EvidenceHoldResolved(PlayerLocalEvidenceHoldResolutionDecision, @commitment.AuditDigest)
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEvidenceHoldState::equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceHoldState::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceHoldState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalEvidenceInboxCursor {
   boundary : AuditBoundary
@@ -439,6 +571,9 @@ pub(all) struct PlayerLocalEvidenceInboxCursor {
   sequence : Int
   message_digest : @commitment.AuditDigest
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEvidenceInboxCursor::equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceInboxCursor::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidenceInboxCursor::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalEvidencePollJob {
   boundary : AuditBoundary
@@ -451,6 +586,9 @@ pub(all) struct PlayerLocalEvidencePollJob {
   attempt_count : Int
   state : PlayerLocalEvidencePollJobState
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEvidencePollJob::equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidencePollJob::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidencePollJob::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PlayerLocalEvidencePollJobState {
   EvidencePollScheduled
@@ -458,23 +596,35 @@ pub(all) enum PlayerLocalEvidencePollJobState {
   EvidencePollExpired(Int)
   EvidencePollEscalated(Int, @commitment.AuditDigest)
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalEvidencePollJobState::equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidencePollJobState::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalEvidencePollJobState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PlayerLocalOutboxUpdateResult {
   PlayerLocalOutboxUpdated(CheckpointOutboxEntry)
   PlayerLocalOutboxNoChange
   PlayerLocalOutboxRefused
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalOutboxUpdateResult::equal(Self, Self) -> Bool
+pub fn PlayerLocalOutboxUpdateResult::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalOutboxUpdateResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalRetentionAnchor {
   boundary : AuditBoundary
   epoch : Int
   checkpoint_digest : @commitment.AuditDigest
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalRetentionAnchor::equal(Self, Self) -> Bool
+pub fn PlayerLocalRetentionAnchor::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalRetentionAnchor::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PlayerLocalSealCommitResult {
   PlayerLocalSealCommitted
   PlayerLocalSealConcurrentWrite
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalSealCommitResult::equal(Self, Self) -> Bool
+pub fn PlayerLocalSealCommitResult::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalSealCommitResult::to_repr(Self) -> @debug.Repr
 
 pub struct PlayerLocalSealPlan {
   runtime_plan : AtomicCheckpointSealPlan
@@ -482,6 +632,9 @@ pub struct PlayerLocalSealPlan {
   required_destinations : Array[String]
   consumed_closure : EpochClosureEvidence
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalSealPlan::equal(Self, Self) -> Bool
+pub fn PlayerLocalSealPlan::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalSealPlan::to_repr(Self) -> @debug.Repr
 pub fn PlayerLocalSealPlan::write_set(Self) -> PlayerLocalSealWriteSet
 
 pub(all) enum PlayerLocalSealPrepareResult {
@@ -490,6 +643,9 @@ pub(all) enum PlayerLocalSealPrepareResult {
   PlayerLocalSealConflict(CheckpointSealConflictReason)
   PlayerLocalSealRefused(CheckpointSealRefusal)
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalSealPrepareResult::equal(Self, Self) -> Bool
+pub fn PlayerLocalSealPrepareResult::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalSealPrepareResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PlayerLocalSealWriteSet {
   expected_revision : Int
@@ -501,26 +657,37 @@ pub(all) struct PlayerLocalSealWriteSet {
   next_outbox_entry_count : Int
   next_created_order : Int
 } derive(Eq, @debug.Debug)
+pub fn PlayerLocalSealWriteSet::equal(Self, Self) -> Bool
+pub fn PlayerLocalSealWriteSet::not_equal(Self, Self) -> Bool
+pub fn PlayerLocalSealWriteSet::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RetrySelectionRefusal {
   NegativeSelectionTime
   InvalidSelectionBoundary
   EmptySelectionDestination
 } derive(Eq, @debug.Debug)
+pub fn RetrySelectionRefusal::equal(Self, Self) -> Bool
+pub fn RetrySelectionRefusal::not_equal(Self, Self) -> Bool
+pub fn RetrySelectionRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RetrySelectionResult {
   RetrySelected(Int)
   NoRetryableCheckpoint
   RetrySelectionRefused(RetrySelectionRefusal)
 } derive(Eq, @debug.Debug)
+pub fn RetrySelectionResult::equal(Self, Self) -> Bool
+pub fn RetrySelectionResult::not_equal(Self, Self) -> Bool
+pub fn RetrySelectionResult::to_repr(Self) -> @debug.Repr
 
 pub struct TrustedEpochClosure {
   evidence_value : EpochClosureEvidence
 } derive(Eq, @debug.Debug)
 pub fn TrustedEpochClosure::epoch(Self) -> Int
+pub fn TrustedEpochClosure::equal(Self, Self) -> Bool
 pub fn TrustedEpochClosure::evidence(Self) -> EpochClosureEvidence
+pub fn TrustedEpochClosure::not_equal(Self, Self) -> Bool
+pub fn TrustedEpochClosure::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

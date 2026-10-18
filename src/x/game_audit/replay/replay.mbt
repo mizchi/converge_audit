@@ -7,7 +7,7 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 
 ///|
 pub fn serialize_asset_effect(effect : AssetEffect) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "asset-effect-v1")
   match effect {
     Create(asset_id~, recipient_id~, item_type~, quantity~, output_index~) => {
@@ -86,7 +86,7 @@ pub fn make_asset_effect_event(
   effect~ : AssetEffect,
 ) -> @types.Event {
   {
-    id: { peer, counter },
+    id: { peer, counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(
@@ -102,7 +102,7 @@ pub fn CanonicalAssetKernel::new(
   hasher : &@bft.Hasher,
   effect_author~ : @bft.PublicKey,
 ) -> CanonicalAssetKernel {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "canonical-asset-kernel-v1")
   append_field(buffer, effect_author.0)
   CanonicalAssetKernel::{
@@ -146,7 +146,7 @@ pub fn ReplayEngine::new(
   kernel : &AssetReplayKernel,
   session_id~ : String,
 ) -> ReplayEngine {
-  ReplayEngine::{ session: session_id, kernel }
+  ReplayEngine::{ session: session_id, kernel, }
 }
 
 ///|
@@ -172,7 +172,7 @@ pub fn ReplayEngine::replay(
     kernel_accepted~,
   )
   if allowed {
-    return Replayed(ReplayedAssetEffect::{ source, manifest, effect })
+    return Replayed(ReplayedAssetEffect::{ source, manifest, effect, })
   }
   if !session_matches {
     return Refused(SessionMismatch)

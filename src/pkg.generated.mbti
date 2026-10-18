@@ -3,6 +3,7 @@ package "mizchi/converge_audit"
 
 import {
   "mizchi/converge/types",
+  "moonbitlang/core/builtin",
   "moonbitlang/core/debug",
 }
 
@@ -38,6 +39,9 @@ pub(all) struct AuditAlert {
   digest : Digest
   detail : String
 } derive(Eq, @debug.Debug)
+pub fn AuditAlert::equal(Self, Self) -> Bool
+pub fn AuditAlert::not_equal(Self, Self) -> Bool
+pub fn AuditAlert::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AuditAlertKind {
   SessionMismatch
@@ -49,6 +53,9 @@ pub(all) enum AuditAlertKind {
   InvalidSignature
   MissingDependency
 } derive(Eq, @debug.Debug)
+pub fn AuditAlertKind::equal(Self, Self) -> Bool
+pub fn AuditAlertKind::not_equal(Self, Self) -> Bool
+pub fn AuditAlertKind::to_repr(Self) -> @debug.Repr
 
 pub struct AuthenticatedEvent {
   session_id : String
@@ -58,19 +65,36 @@ pub struct AuthenticatedEvent {
 } derive(Eq, @debug.Debug)
 pub fn AuthenticatedEvent::author_key(Self) -> PublicKey
 pub fn AuthenticatedEvent::digest(Self) -> Digest
+pub fn AuthenticatedEvent::equal(Self, Self) -> Bool
 pub fn AuthenticatedEvent::event(Self) -> @types.Event
+pub fn AuthenticatedEvent::not_equal(Self, Self) -> Bool
 pub fn AuthenticatedEvent::session_id(Self) -> String
+pub fn AuthenticatedEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DeliveryResult {
   Accepted(AuthenticatedEvent)
   Buffered
   Rejected(AuditAlert)
 } derive(Eq, @debug.Debug)
+pub fn DeliveryResult::equal(Self, Self) -> Bool
+pub fn DeliveryResult::not_equal(Self, Self) -> Bool
+pub fn DeliveryResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Digest(String) derive(Compare, Eq, Hash, @debug.Debug)
+pub fn Digest::compare(Self, Self) -> Int
+pub fn Digest::equal(Self, Self) -> Bool
+pub fn Digest::hash(Self) -> Int
+pub fn Digest::hash_combine(Self, @builtin.Hasher) -> Unit
+pub fn Digest::not_equal(Self, Self) -> Bool
+pub fn Digest::op_ge(Self, Self) -> Bool
+pub fn Digest::op_gt(Self, Self) -> Bool
+pub fn Digest::op_le(Self, Self) -> Bool
+pub fn Digest::op_lt(Self, Self) -> Bool
+pub fn Digest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct FnvHasher {
 }
+pub fn FnvHasher::hash_string(Self, String) -> Digest
 pub fn FnvHasher::new() -> Self
 pub impl Hasher for FnvHasher
 
@@ -79,6 +103,8 @@ pub(all) struct MockSigner {
   key : PublicKey
 }
 pub fn MockSigner::new(String) -> Self
+pub fn MockSigner::public_key(Self) -> PublicKey
+pub fn MockSigner::sign(Self, Digest) -> Signature
 pub impl Signer for MockSigner
 
 pub(all) struct MockVerifier {
@@ -86,11 +112,20 @@ pub(all) struct MockVerifier {
 }
 pub fn MockVerifier::new() -> Self
 pub fn MockVerifier::register(Self, PublicKey) -> Unit
+pub fn MockVerifier::verify(Self, PublicKey, Digest, Signature) -> Bool
 pub impl Verifier for MockVerifier
 
 pub(all) struct PublicKey(String) derive(Eq, Hash, @debug.Debug)
+pub fn PublicKey::equal(Self, Self) -> Bool
+pub fn PublicKey::hash(Self) -> Int
+pub fn PublicKey::hash_combine(Self, @builtin.Hasher) -> Unit
+pub fn PublicKey::not_equal(Self, Self) -> Bool
+pub fn PublicKey::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Signature(String) derive(Eq, @debug.Debug)
+pub fn Signature::equal(Self, Self) -> Bool
+pub fn Signature::not_equal(Self, Self) -> Bool
+pub fn Signature::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignedEvent {
   session_id : String
@@ -116,4 +151,3 @@ pub(open) trait Signer {
 pub(open) trait Verifier {
   fn verify(Self, PublicKey, Digest, Signature) -> Bool
 }
-

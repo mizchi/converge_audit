@@ -1,0 +1,204 @@
+///|
+predicate encounter_termination_allowed_post(
+  settled : Bool,
+  already_terminated : Bool,
+  expire_requested : Bool,
+  has_commitment : Bool,
+  now : Int,
+  commit_deadline : Int,
+  result : Bool,
+) {
+  if now >= 0 && commit_deadline >= 0 && !settled {
+    if already_terminated {
+      result == true
+    } else {
+      if expire_requested {
+        if !has_commitment && commit_deadline <= now {
+          result == true
+        } else {
+          result == false
+        }
+      } else {
+        result == true
+      }
+    }
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma admitted_encounter_termination_requires_unsettled_valid_clocks(
+  settled : Bool,
+  already_terminated : Bool,
+  expire_requested : Bool,
+  has_commitment : Bool,
+  now : Int,
+  commit_deadline : Int,
+) where {
+  proof_require: encounter_termination_allowed_post(
+    settled, already_terminated, expire_requested, has_commitment, now,
+    commit_deadline, true,
+  ),
+  proof_ensure: settled == false,
+  proof_ensure: now >= 0,
+  proof_ensure: commit_deadline >= 0,
+} {
+}
+
+///|
+pub lemma fresh_encounter_expiration_requires_no_commitment_and_elapsed_deadline(
+  settled : Bool,
+  has_commitment : Bool,
+  now : Int,
+  commit_deadline : Int,
+) where {
+  proof_require: encounter_termination_allowed_post(
+    settled, false, true, has_commitment, now, commit_deadline, true,
+  ),
+  proof_ensure: has_commitment == false,
+  proof_ensure: commit_deadline <= now,
+} {
+}
+
+///|
+pub lemma settled_encounter_termination_is_rejected(
+  already_terminated : Bool,
+  expire_requested : Bool,
+  has_commitment : Bool,
+  now : Int,
+  commit_deadline : Int,
+) where {
+  proof_ensure: encounter_termination_allowed_post(
+    true, already_terminated, expire_requested, has_commitment, now,
+    commit_deadline, false,
+  ),
+} {
+}
+
+///|
+pub lemma committed_encounter_fresh_expiration_is_rejected(
+  settled : Bool,
+  now : Int,
+  commit_deadline : Int,
+) where {
+  proof_ensure: encounter_termination_allowed_post(
+    settled, false, true, true, now, commit_deadline, false,
+  ),
+} {
+}
+
+///|
+pub lemma early_encounter_fresh_expiration_is_rejected(
+  settled : Bool,
+  has_commitment : Bool,
+  now : Int,
+  commit_deadline : Int,
+) where {
+  proof_require: now < commit_deadline,
+  proof_ensure: encounter_termination_allowed_post(
+    settled, false, true, has_commitment, now, commit_deadline, false,
+  ),
+} {
+}
+
+///|
+pub lemma terminated_unsettled_encounter_allows_reading_its_existing_result(
+  expire_requested : Bool,
+  has_commitment : Bool,
+  now : Int,
+  commit_deadline : Int,
+) where {
+  proof_require: now >= 0,
+  proof_require: commit_deadline >= 0,
+  proof_ensure: encounter_termination_allowed_post(
+    false, true, expire_requested, has_commitment, now, commit_deadline, true,
+  ),
+} {
+}
+
+///|
+pub lemma unsettled_encounter_abort_with_valid_clocks_is_allowed(
+  has_commitment : Bool,
+  now : Int,
+  commit_deadline : Int,
+) where {
+  proof_require: now >= 0,
+  proof_require: commit_deadline >= 0,
+  proof_ensure: encounter_termination_allowed_post(
+    false, false, false, has_commitment, now, commit_deadline, true,
+  ),
+} {
+}
+
+///|
+predicate encounter_terminal_cleanup_allowed_post(
+  terminated : Bool,
+  now : Int,
+  retention_until : Int,
+  unresolved_reference : Bool,
+  result : Bool,
+) {
+  if now >= 0 && retention_until >= 0 && terminated &&
+    retention_until <= now && !unresolved_reference {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma cleaned_terminal_encounter_has_elapsed_retention_and_no_hold(
+  terminated : Bool,
+  now : Int,
+  retention_until : Int,
+  unresolved_reference : Bool,
+) where {
+  proof_require: encounter_terminal_cleanup_allowed_post(
+    terminated, now, retention_until, unresolved_reference, true,
+  ),
+  proof_ensure: terminated == true,
+  proof_ensure: now >= 0,
+  proof_ensure: retention_until >= 0,
+  proof_ensure: retention_until <= now,
+  proof_ensure: unresolved_reference == false,
+} {
+}
+
+///|
+pub lemma held_terminal_encounter_cannot_be_cleaned(
+  terminated : Bool,
+  now : Int,
+  retention_until : Int,
+) where {
+  proof_ensure: encounter_terminal_cleanup_allowed_post(
+    terminated, now, retention_until, true, false,
+  ),
+} {
+}
+
+///|
+pub lemma unterminated_encounter_cannot_be_cleaned(
+  now : Int,
+  retention_until : Int,
+  unresolved_reference : Bool,
+) where {
+  proof_ensure: encounter_terminal_cleanup_allowed_post(
+    false, now, retention_until, unresolved_reference, false,
+  ),
+} {
+}
+
+///|
+pub lemma terminal_encounter_cannot_be_cleaned_before_retention_deadline(
+  terminated : Bool,
+  now : Int,
+  retention_until : Int,
+  unresolved_reference : Bool,
+) where {
+  proof_require: now < retention_until,
+  proof_ensure: encounter_terminal_cleanup_allowed_post(
+    terminated, now, retention_until, unresolved_reference, false,
+  ),
+} {
+}

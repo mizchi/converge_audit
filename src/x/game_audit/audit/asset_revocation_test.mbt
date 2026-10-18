@@ -1,28 +1,28 @@
 ///|
 test "listing requires a clean authenticated asset lineage" {
   assert_true(
-    asset_lineage_use_allowed(
+    @audit.asset_lineage_use_allowed(
       creation_verified=true,
       current_head_verified=true,
       open_revocations=0,
     ),
   )
   assert_false(
-    asset_lineage_use_allowed(
+    @audit.asset_lineage_use_allowed(
       creation_verified=true,
       current_head_verified=true,
       open_revocations=1,
     ),
   )
   assert_false(
-    asset_lineage_use_allowed(
+    @audit.asset_lineage_use_allowed(
       creation_verified=false,
       current_head_verified=true,
       open_revocations=0,
     ),
   )
   assert_false(
-    asset_lineage_use_allowed(
+    @audit.asset_lineage_use_allowed(
       creation_verified=true,
       current_head_verified=false,
       open_revocations=0,
@@ -33,7 +33,7 @@ test "listing requires a clean authenticated asset lineage" {
 ///|
 test "lineage decisions require an exact monotonic ancestor head" {
   assert_true(
-    asset_lineage_decision_allowed(
+    @audit.asset_lineage_decision_allowed(
       asset_exists=true,
       ancestor_in_lineage=true,
       expected_decision_matches=true,
@@ -42,7 +42,7 @@ test "lineage decisions require an exact monotonic ancestor head" {
     ),
   )
   assert_false(
-    asset_lineage_decision_allowed(
+    @audit.asset_lineage_decision_allowed(
       asset_exists=true,
       ancestor_in_lineage=false,
       expected_decision_matches=true,
@@ -51,7 +51,7 @@ test "lineage decisions require an exact monotonic ancestor head" {
     ),
   )
   assert_false(
-    asset_lineage_decision_allowed(
+    @audit.asset_lineage_decision_allowed(
       asset_exists=true,
       ancestor_in_lineage=true,
       expected_decision_matches=false,
@@ -60,7 +60,7 @@ test "lineage decisions require an exact monotonic ancestor head" {
     ),
   )
   assert_false(
-    asset_lineage_decision_allowed(
+    @audit.asset_lineage_decision_allowed(
       asset_exists=true,
       ancestor_in_lineage=true,
       expected_decision_matches=true,
@@ -69,7 +69,7 @@ test "lineage decisions require an exact monotonic ancestor head" {
     ),
   )
   assert_false(
-    asset_lineage_decision_allowed(
+    @audit.asset_lineage_decision_allowed(
       asset_exists=true,
       ancestor_in_lineage=true,
       expected_decision_matches=true,
@@ -82,7 +82,7 @@ test "lineage decisions require an exact monotonic ancestor head" {
 ///|
 test "external lineage certificates require authentication time and appeal binding" {
   assert_true(
-    asset_lineage_certificate_allowed(
+    @audit.asset_lineage_certificate_allowed(
       certificate_authenticated=true,
       arbiter_known=true,
       lineage_bound=true,
@@ -94,7 +94,7 @@ test "external lineage certificates require authentication time and appeal bindi
     ),
   )
   assert_false(
-    asset_lineage_certificate_allowed(
+    @audit.asset_lineage_certificate_allowed(
       certificate_authenticated=false,
       arbiter_known=true,
       lineage_bound=true,
@@ -106,7 +106,7 @@ test "external lineage certificates require authentication time and appeal bindi
     ),
   )
   assert_false(
-    asset_lineage_certificate_allowed(
+    @audit.asset_lineage_certificate_allowed(
       certificate_authenticated=true,
       arbiter_known=true,
       lineage_bound=true,
@@ -118,7 +118,7 @@ test "external lineage certificates require authentication time and appeal bindi
     ),
   )
   assert_true(
-    asset_lineage_certificate_allowed(
+    @audit.asset_lineage_certificate_allowed(
       certificate_authenticated=true,
       arbiter_known=true,
       lineage_bound=true,
@@ -130,7 +130,7 @@ test "external lineage certificates require authentication time and appeal bindi
     ),
   )
   assert_false(
-    asset_lineage_certificate_allowed(
+    @audit.asset_lineage_certificate_allowed(
       certificate_authenticated=true,
       arbiter_known=true,
       lineage_bound=true,
@@ -142,7 +142,7 @@ test "external lineage certificates require authentication time and appeal bindi
     ),
   )
   assert_false(
-    asset_lineage_certificate_allowed(
+    @audit.asset_lineage_certificate_allowed(
       certificate_authenticated=true,
       arbiter_known=true,
       lineage_bound=true,
@@ -166,7 +166,7 @@ test "bounded lineage admission requires every retention and authentication boun
     let every_transfer_authenticated = (mask & 32) != 0
     let current_record_matches = (mask & 64) != 0
     assert_eq(
-      asset_lineage_slice_allowed(
+      @audit.asset_lineage_slice_allowed(
         has_transfers~,
         within_limit~,
         origin_matches~,

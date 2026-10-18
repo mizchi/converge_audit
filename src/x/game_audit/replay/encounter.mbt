@@ -59,7 +59,7 @@ pub fn telegraph_dungeon_encounter_manifest(
   players : Array[DungeonPlayer],
   attacks : Array[DungeonEncounterAttack],
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "telegraph-dungeon-encounter-kernel-v1")
   append_field(buffer, config.encounter_id)
   append_int_field(buffer, config.player_max_hp)
@@ -115,7 +115,7 @@ fn encounter_public_state_root(
   accepted_dodges : Int,
   equivocators : Array[String],
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "telegraph-dungeon-public-state-v1")
   append_field(buffer, session_id)
   append_field(buffer, encounter_id)
@@ -442,7 +442,7 @@ pub fn dungeon_encounter_loot_asset_id(
   encounter_id : String,
   recipient_id : String,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "dungeon-encounter-loot-v1")
   append_field(buffer, session_id)
   append_field(buffer, encounter_id)

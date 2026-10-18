@@ -1,5 +1,5 @@
 ///|
-fn candidate() -> Checkpoint {
+fn candidate() -> @checkpoint.Checkpoint {
   {
     session_id: "dungeon-42",
     epoch: 7,
@@ -17,10 +17,15 @@ test "authority signs and verifies a complete checkpoint" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("authority")
-  let signed = sign_checkpoint(hasher, authority, candidate())
+  let signed = @checkpoint.sign_checkpoint(hasher, authority, candidate())
   assert_eq(
-    verify_checkpoint(hasher, verifier, authority.public_key(), signed),
-    CheckpointVerification::Verified,
+    @checkpoint.verify_checkpoint(
+      hasher,
+      verifier,
+      authority.public_key(),
+      signed,
+    ),
+    @checkpoint.CheckpointVerification::Verified,
   )
 }
 
@@ -29,16 +34,21 @@ test "tampering with an event root invalidates the checkpoint digest" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("authority")
-  let signed = sign_checkpoint(hasher, authority, candidate())
-  let tampered : SignedCheckpoint = {
-    checkpoint: { ..signed.checkpoint, event_root: @bft.Digest("tampered") },
+  let signed = @checkpoint.sign_checkpoint(hasher, authority, candidate())
+  let tampered : @checkpoint.SignedCheckpoint = {
+    checkpoint: { ..signed.checkpoint, event_root: @bft.Digest("tampered"), },
     digest: signed.digest,
     signature: signed.signature,
     authority_key: signed.authority_key,
   }
   assert_eq(
-    verify_checkpoint(hasher, verifier, authority.public_key(), tampered),
-    CheckpointVerification::HashMismatch,
+    @checkpoint.verify_checkpoint(
+      hasher,
+      verifier,
+      authority.public_key(),
+      tampered,
+    ),
+    @checkpoint.CheckpointVerification::HashMismatch,
   )
 }
 
@@ -47,15 +57,15 @@ test "a different authority key cannot finalize a checkpoint" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("authority")
-  let signed = sign_checkpoint(hasher, authority, candidate())
+  let signed = @checkpoint.sign_checkpoint(hasher, authority, candidate())
   assert_eq(
-    verify_checkpoint(
+    @checkpoint.verify_checkpoint(
       hasher,
       verifier,
       @bft.PublicKey("other-authority"),
       signed,
     ),
-    CheckpointVerification::WrongAuthority,
+    @checkpoint.CheckpointVerification::WrongAuthority,
   )
 }
 
@@ -64,16 +74,21 @@ test "an invalid authority signature is rejected" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("authority")
-  let signed = sign_checkpoint(hasher, authority, candidate())
-  let tampered : SignedCheckpoint = {
+  let signed = @checkpoint.sign_checkpoint(hasher, authority, candidate())
+  let tampered : @checkpoint.SignedCheckpoint = {
     checkpoint: signed.checkpoint,
     digest: signed.digest,
     signature: @bft.Signature("not-a-valid-signature"),
     authority_key: signed.authority_key,
   }
   assert_eq(
-    verify_checkpoint(hasher, verifier, authority.public_key(), tampered),
-    CheckpointVerification::InvalidSignature,
+    @checkpoint.verify_checkpoint(
+      hasher,
+      verifier,
+      authority.public_key(),
+      tampered,
+    ),
+    @checkpoint.CheckpointVerification::InvalidSignature,
   )
 }
 
@@ -82,12 +97,12 @@ test "hidden state commitment is authenticated when present" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("authority")
-  let with_hidden : Checkpoint = {
+  let with_hidden : @checkpoint.Checkpoint = {
     ..candidate(),
     hidden_state_commitment: Some(@bft.Digest("fog-of-war")),
   }
-  let signed = sign_checkpoint(hasher, authority, with_hidden)
-  let tampered : SignedCheckpoint = {
+  let signed = @checkpoint.sign_checkpoint(hasher, authority, with_hidden)
+  let tampered : @checkpoint.SignedCheckpoint = {
     checkpoint: {
       ..signed.checkpoint,
       hidden_state_commitment: Some(@bft.Digest("revealed-too-late")),
@@ -97,16 +112,24 @@ test "hidden state commitment is authenticated when present" {
     authority_key: signed.authority_key,
   }
   assert_eq(
-    verify_checkpoint(hasher, verifier, authority.public_key(), tampered),
-    CheckpointVerification::HashMismatch,
+    @checkpoint.verify_checkpoint(
+      hasher,
+      verifier,
+      authority.public_key(),
+      tampered,
+    ),
+    @checkpoint.CheckpointVerification::HashMismatch,
   )
 }
 
 ///|
 test "canonical checkpoint serialization separates string boundaries" {
-  let left = { ..candidate(), session_id: "a:b" }
-  let right = { ..candidate(), session_id: "a", epoch: 0 }
-  assert_not_eq(serialize_checkpoint(left), serialize_checkpoint(right))
+  let left = { ..candidate(), session_id: "a:b", }
+  let right = { ..candidate(), session_id: "a", epoch: 0, }
+  assert_not_eq(
+    @checkpoint.serialize_checkpoint(left),
+    @checkpoint.serialize_checkpoint(right),
+  )
 }
 
 ///|
@@ -114,8 +137,14 @@ test "successful verification opens an unforgeable checkpoint capability" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("authority")
-  let signed = sign_checkpoint(hasher, authority, candidate())
-  match open_checkpoint(hasher, verifier, authority.public_key(), signed) {
+  let signed = @checkpoint.sign_checkpoint(hasher, authority, candidate())
+  match
+    @checkpoint.open_checkpoint(
+      hasher,
+      verifier,
+      authority.public_key(),
+      signed,
+    ) {
     Opened(verified) => {
       assert_eq(verified.digest(), signed.digest)
       assert_eq(verified.checkpoint(), candidate())
@@ -128,11 +157,11 @@ test "successful verification opens an unforgeable checkpoint capability" {
 test "participants and authority share one prepared checkpoint digest" {
   let hasher = @bft.FnvHasher::new()
   let authority = @bft.MockSigner::new("authority")
-  let prepared = prepare_checkpoint(hasher, candidate())
-  let signed = sign_prepared_checkpoint(authority, prepared)
+  let prepared = @checkpoint.prepare_checkpoint(hasher, candidate())
+  let signed = @checkpoint.sign_prepared_checkpoint(authority, prepared)
   assert_eq(prepared.checkpoint(), candidate())
   assert_eq(prepared.digest(), signed.digest)
-  assert_eq(signed, sign_checkpoint(hasher, authority, candidate()))
+  assert_eq(signed, @checkpoint.sign_checkpoint(hasher, authority, candidate()))
 }
 
 ///|
@@ -140,11 +169,17 @@ test "failed verification cannot open a checkpoint capability" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("authority")
-  let signed = sign_checkpoint(hasher, authority, candidate())
+  let signed = @checkpoint.sign_checkpoint(hasher, authority, candidate())
   match
-    open_checkpoint(hasher, verifier, @bft.PublicKey("other-authority"), signed) {
+    @checkpoint.open_checkpoint(
+      hasher,
+      verifier,
+      @bft.PublicKey("other-authority"),
+      signed,
+    ) {
     Opened(_) => fail("wrong authority unexpectedly opened the checkpoint")
-    Refused(reason) => assert_eq(reason, CheckpointVerification::WrongAuthority)
+    Refused(reason) =>
+      assert_eq(reason, @checkpoint.CheckpointVerification::WrongAuthority)
   }
 }
 
@@ -198,7 +233,7 @@ test "game checkpoint binds the exact layered macro event history" {
     @layered.AdvanceWatermarkResult::WatermarkRefused(_) =>
       abort("valid watermark")
   }
-  let checkpoint = checkpoint_from_layered_macro(
+  let checkpoint = @checkpoint.checkpoint_from_layered_macro(
     sealed_macro,
     manifest_digest=@bft.Digest("manifest"),
     public_state_root=@bft.Digest("state"),
@@ -212,7 +247,7 @@ test "game checkpoint binds the exact layered macro event history" {
   assert_eq(checkpoint.event_root, macro_checkpoint.micro_root)
   assert_true(checkpoint.matches_layered_macro(macro_checkpoint))
   assert_false(
-    { ..checkpoint, event_root: @bft.Digest("other") }.matches_layered_macro(
+    { ..checkpoint, event_root: @bft.Digest("other"), }.matches_layered_macro(
       macro_checkpoint,
     ),
   )

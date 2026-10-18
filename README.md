@@ -133,6 +133,17 @@ history and prevents a canceled listing nonce from being replayed, while a fresh
 nonce permits intentional relisting or transfer to a new owner head.
 Vite assets and the Worker API are served from
 one Cloudflare deployment. Run it locally with `just dev-cf-game`.
+The default screen now uses [bounded encounters](docs/encounter-ui-ja.md):
+authorized starts, hidden loot, interrupted recovery, and retention cleanup.
+Signed [inventory compaction](docs/encounter-inventory-checkpoint-ja.md) keeps
+local receipt history bounded while older items remain available through paged lookup.
+Closed [central generations](docs/encounter-generations-ja.md) reclaim admission
+and archive slots while keeping original receipts in a separate indexed table.
+Owners may [release forfeited encounter recovery](docs/encounter-recovery-release-ja.md)
+so closed generations remove those rows without per-ticket tombstones.
+Settled [empty-receipt retirement](docs/encounter-empty-inventory-ja.md) compresses
+discarded inventory ordinals into ranges while preserving original item receipts.
+The checkpoint, listing and transfer demo described above remains at `/legacy.html`.
 
 | Pattern | Peer auditing target | Central settlement target |
 | --- | --- | --- |

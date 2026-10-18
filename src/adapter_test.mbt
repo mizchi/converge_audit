@@ -7,7 +7,7 @@ fn make_event(
   deps : Array[@types.EventId],
 ) -> @types.Event {
   {
-    id: { peer: @types.PeerId(peer), counter },
+    id: { peer: @types.PeerId(peer), counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(tbl="t", row_id="r" + counter.to_string(), values=[
@@ -19,27 +19,27 @@ fn make_event(
 ///|
 /// Helper: create and sign an event using the audit adapter.
 fn sign_event(
-  adapter : AuditAdapter,
-  signer : MockSigner,
+  adapter : @converge_audit.AuditAdapter,
+  signer : @converge_audit.MockSigner,
   event : @types.Event,
-  dep_hashes : Array[Digest],
-) -> SignedEvent {
+  dep_hashes : Array[@converge_audit.Digest],
+) -> @converge_audit.SignedEvent {
   adapter.sign(signer, event, dep_hashes)
 }
 
 ///|
 /// Helper: create a fresh adapter with default mock crypto.
-fn make_adapter() -> AuditAdapter {
-  let hasher = FnvHasher::new()
-  let verifier = MockVerifier::new()
-  AuditAdapter::new(hasher, verifier, session_id="test-session")
+fn make_adapter() -> @converge_audit.AuditAdapter {
+  let hasher = @converge_audit.FnvHasher::new()
+  let verifier = @converge_audit.MockVerifier::new()
+  @converge_audit.AuditAdapter::new(hasher, verifier, session_id="test-session")
 }
 
 ///|
 fn register_signer(
-  adapter : AuditAdapter,
+  adapter : @converge_audit.AuditAdapter,
   peer : String,
-  signer : MockSigner,
+  signer : @converge_audit.MockSigner,
 ) -> Unit raise Error {
   assert_true(adapter.register_peer(@types.PeerId(peer), signer.public_key()))
 }
@@ -47,7 +47,7 @@ fn register_signer(
 ///|
 test "happy path: sign and deliver" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
+  let signer_a = @converge_audit.MockSigner::new("alice")
   register_signer(adapter, "alice", signer_a)
   let event = make_event("alice", 0, 1, [])
   let signed = sign_event(adapter, signer_a, event, [])
@@ -65,7 +65,7 @@ test "happy path: sign and deliver" {
 ///|
 test "hash tamper: modified event content" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
+  let signer_a = @converge_audit.MockSigner::new("alice")
   register_signer(adapter, "alice", signer_a)
   let event = make_event("alice", 0, 1, [])
   let signed = sign_event(adapter, signer_a, event, [])
@@ -78,7 +78,7 @@ test "hash tamper: modified event content" {
       ("x", @types.Value::Int(999)),
     ]),
   }
-  let tampered : SignedEvent = {
+  let tampered : @converge_audit.SignedEvent = {
     session_id: signed.session_id,
     digest: signed.digest,
     signature: signed.signature,
@@ -96,11 +96,11 @@ test "hash tamper: modified event content" {
 ///|
 test "equivocation: same (peer, counter) different content" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
+  let signer_a = @converge_audit.MockSigner::new("alice")
   register_signer(adapter, "alice", signer_a)
   // First event
   let event1 : @types.Event = {
-    id: { peer: @types.PeerId("alice"), counter: 0 },
+    id: { peer: @types.PeerId("alice"), counter: 0, },
     deps: [],
     lamport: 1,
     op: @types.RowOp::Insert(tbl="t", row_id="r1", values=[
@@ -115,7 +115,7 @@ test "equivocation: same (peer, counter) different content" {
   }
   // Second event with same (peer, counter=0) but different content
   let event2 : @types.Event = {
-    id: { peer: @types.PeerId("alice"), counter: 0 },
+    id: { peer: @types.PeerId("alice"), counter: 0, },
     deps: [],
     lamport: 1,
     op: @types.RowOp::Insert(tbl="t", row_id="r2", values=[
@@ -133,15 +133,15 @@ test "equivocation: same (peer, counter) different content" {
 ///|
 test "causal delivery: buffer then flush" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
+  let signer_a = @converge_audit.MockSigner::new("alice")
   register_signer(adapter, "alice", signer_a)
   // event0: no deps
   let event0 = make_event("alice", 0, 1, [])
   let signed0 = sign_event(adapter, signer_a, event0, [])
   // event1: depends on event0
   let event1 : @types.Event = {
-    id: { peer: @types.PeerId("alice"), counter: 1 },
-    deps: [{ peer: @types.PeerId("alice"), counter: 0 }],
+    id: { peer: @types.PeerId("alice"), counter: 1, },
+    deps: [{ peer: @types.PeerId("alice"), counter: 0, }],
     lamport: 2,
     op: @types.RowOp::Insert(tbl="t", row_id="r1", values=[
       ("x", @types.Value::Int(1)),
@@ -170,12 +170,12 @@ test "causal delivery: buffer then flush" {
 ///|
 test "invalid signature: signature bytes do not verify" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
+  let signer_a = @converge_audit.MockSigner::new("alice")
   register_signer(adapter, "alice", signer_a)
   let event = make_event("alice", 0, 1, [])
   let signed = sign_event(adapter, signer_a, event, [])
   // Keep the roster-bound author key, but replace the signature bytes.
-  let forged : SignedEvent = {
+  let forged : @converge_audit.SignedEvent = {
     session_id: signed.session_id,
     digest: signed.digest,
     signature: Signature("invalid"),
@@ -193,7 +193,7 @@ test "invalid signature: signature bytes do not verify" {
 ///|
 test "identity binding: unregistered peer is rejected" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
+  let signer_a = @converge_audit.MockSigner::new("alice")
   let event = make_event("alice", 0, 1, [])
   let signed = sign_event(adapter, signer_a, event, [])
   match adapter.deliver(signed) {
@@ -205,8 +205,8 @@ test "identity binding: unregistered peer is rejected" {
 ///|
 test "identity binding: another key cannot claim a registered peer" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
-  let signer_mallory = MockSigner::new("mallory")
+  let signer_a = @converge_audit.MockSigner::new("alice")
+  let signer_mallory = @converge_audit.MockSigner::new("mallory")
   assert_true(
     adapter.register_peer(@types.PeerId("alice"), signer_a.public_key()),
   )
@@ -230,17 +230,17 @@ test "identity binding: a registered peer key cannot be rebound" {
 ///|
 test "hash tamper: event dependency ids are authenticated" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
+  let signer_a = @converge_audit.MockSigner::new("alice")
   register_signer(adapter, "alice", signer_a)
   let event = make_event("alice", 0, 1, [])
   let signed = sign_event(adapter, signer_a, event, [])
   let tampered_event : @types.Event = {
     id: event.id,
-    deps: [{ peer: @types.PeerId("mallory"), counter: 99 }],
+    deps: [{ peer: @types.PeerId("mallory"), counter: 99, }],
     lamport: event.lamport,
     op: event.op,
   }
-  let tampered : SignedEvent = {
+  let tampered : @converge_audit.SignedEvent = {
     session_id: signed.session_id,
     digest: signed.digest,
     signature: signed.signature,
@@ -257,45 +257,50 @@ test "hash tamper: event dependency ids are authenticated" {
 ///|
 test "canonical serialization separates string field boundaries" {
   let left : @types.Event = {
-    id: { peer: @types.PeerId("alice"), counter: 0 },
+    id: { peer: @types.PeerId("alice"), counter: 0, },
     deps: [],
     lamport: 1,
     op: @types.RowOp::Insert(tbl="a:b", row_id="c", values=[]),
   }
   let right : @types.Event = {
-    id: { peer: @types.PeerId("alice"), counter: 0 },
+    id: { peer: @types.PeerId("alice"), counter: 0, },
     deps: [],
     lamport: 1,
     op: @types.RowOp::Insert(tbl="a", row_id="b:c", values=[]),
   }
   assert_not_eq(
-    serialize_for_hash("test-session", left, []),
-    serialize_for_hash("test-session", right, []),
+    @converge_audit.serialize_for_hash("test-session", left, []),
+    @converge_audit.serialize_for_hash("test-session", right, []),
   )
 }
 
 ///|
 test "session binding: an event signed for another session is rejected" {
-  let source = AuditAdapter::new(
-    FnvHasher::new(),
-    MockVerifier::new(),
+  let source = @converge_audit.AuditAdapter::new(
+    @converge_audit.FnvHasher::new(),
+    @converge_audit.MockVerifier::new(),
     session_id="session-a",
   )
-  let target = AuditAdapter::new(
-    FnvHasher::new(),
-    MockVerifier::new(),
+  let target = @converge_audit.AuditAdapter::new(
+    @converge_audit.FnvHasher::new(),
+    @converge_audit.MockVerifier::new(),
     session_id="session-b",
   )
-  let signer = MockSigner::new("alice")
+  let signer = @converge_audit.MockSigner::new("alice")
   assert_true(target.register_peer(@types.PeerId("alice"), signer.public_key()))
   let signed = source.sign(signer, make_event("alice", 0, 1, []), [])
   match target.deliver(signed) {
-    Rejected(alert) => assert_eq(alert.kind, AuditAlertKind::SessionMismatch)
+    Rejected(alert) =>
+      assert_eq(alert.kind, @converge_audit.AuditAlertKind::SessionMismatch)
     _ => fail("cross-session event unexpectedly authenticated")
   }
-  let relabeled : SignedEvent = { ..signed, session_id: "session-b" }
+  let relabeled : @converge_audit.SignedEvent = {
+    ..signed,
+    session_id: "session-b",
+  }
   match target.deliver(relabeled) {
-    Rejected(alert) => assert_eq(alert.kind, AuditAlertKind::HashMismatch)
+    Rejected(alert) =>
+      assert_eq(alert.kind, @converge_audit.AuditAlertKind::HashMismatch)
     _ => fail("unsigned session relabeling unexpectedly authenticated")
   }
 }
@@ -303,8 +308,8 @@ test "session binding: an event signed for another session is rejected" {
 ///|
 test "equivocation is rejected while conflicting events are buffered" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
-  let signer_b = MockSigner::new("bob")
+  let signer_a = @converge_audit.MockSigner::new("alice")
+  let signer_b = @converge_audit.MockSigner::new("bob")
   assert_true(
     adapter.register_peer(@types.PeerId("alice"), signer_a.public_key()),
   )
@@ -316,8 +321,8 @@ test "equivocation is rejected while conflicting events are buffered" {
     adapter,
     signer_b,
     {
-      id: { peer: @types.PeerId("bob"), counter: 0 },
-      deps: [{ peer: @types.PeerId("alice"), counter: 0 }],
+      id: { peer: @types.PeerId("bob"), counter: 0, },
+      deps: [{ peer: @types.PeerId("alice"), counter: 0, }],
       lamport: 2,
       op: @types.RowOp::Insert(tbl="t", row_id="first", values=[]),
     },
@@ -327,8 +332,8 @@ test "equivocation is rejected while conflicting events are buffered" {
     adapter,
     signer_b,
     {
-      id: { peer: @types.PeerId("bob"), counter: 0 },
-      deps: [{ peer: @types.PeerId("alice"), counter: 0 }],
+      id: { peer: @types.PeerId("bob"), counter: 0, },
+      deps: [{ peer: @types.PeerId("alice"), counter: 0, }],
       lamport: 2,
       op: @types.RowOp::Insert(tbl="t", row_id="conflict", values=[]),
     },
@@ -346,9 +351,9 @@ test "equivocation is rejected while conflicting events are buffered" {
 ///|
 test "causal binding: dependency id must match its accepted digest" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
-  let signer_b = MockSigner::new("bob")
-  let signer_c = MockSigner::new("charlie")
+  let signer_a = @converge_audit.MockSigner::new("alice")
+  let signer_b = @converge_audit.MockSigner::new("bob")
+  let signer_c = @converge_audit.MockSigner::new("charlie")
   register_signer(adapter, "alice", signer_a)
   register_signer(adapter, "bob", signer_b)
   register_signer(adapter, "charlie", signer_c)
@@ -360,8 +365,8 @@ test "causal binding: dependency id must match its accepted digest" {
     adapter,
     signer_b,
     {
-      id: { peer: @types.PeerId("bob"), counter: 0 },
-      deps: [{ peer: @types.PeerId("alice"), counter: 0 }],
+      id: { peer: @types.PeerId("bob"), counter: 0, },
+      deps: [{ peer: @types.PeerId("alice"), counter: 0, }],
       lamport: 2,
       op: @types.RowOp::Insert(tbl="t", row_id="bad", values=[]),
     },
@@ -376,9 +381,9 @@ test "causal binding: dependency id must match its accepted digest" {
 ///|
 test "causal binding: buffered mismatch is rejected when dependency arrives" {
   let adapter = make_adapter()
-  let signer_a = MockSigner::new("alice")
-  let signer_b = MockSigner::new("bob")
-  let signer_c = MockSigner::new("charlie")
+  let signer_a = @converge_audit.MockSigner::new("alice")
+  let signer_b = @converge_audit.MockSigner::new("bob")
+  let signer_c = @converge_audit.MockSigner::new("charlie")
   register_signer(adapter, "alice", signer_a)
   register_signer(adapter, "bob", signer_b)
   register_signer(adapter, "charlie", signer_c)
@@ -387,8 +392,8 @@ test "causal binding: buffered mismatch is rejected when dependency arrives" {
     adapter,
     signer_b,
     {
-      id: { peer: @types.PeerId("bob"), counter: 0 },
-      deps: [{ peer: @types.PeerId("alice"), counter: 0 }],
+      id: { peer: @types.PeerId("bob"), counter: 0, },
+      deps: [{ peer: @types.PeerId("alice"), counter: 0, }],
       lamport: 2,
       op: @types.RowOp::Insert(tbl="t", row_id="bad", values=[]),
     },

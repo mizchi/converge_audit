@@ -1,5 +1,5 @@
 ///|
-fn encounter_config() -> DungeonEncounterConfig {
+fn encounter_config() -> @replay.DungeonEncounterConfig {
   {
     encounter_id: "boss-1",
     player_max_hp: 10,
@@ -15,10 +15,10 @@ fn encounter_config() -> DungeonEncounterConfig {
 }
 
 ///|
-fn encounter_players() -> Array[DungeonPlayer] {
+fn encounter_players() -> Array[@replay.DungeonPlayer] {
   [
-    { player_id: "alice", public_key: @bft.PublicKey("alice"), initial_x: 0 },
-    { player_id: "bob", public_key: @bft.PublicKey("bob"), initial_x: 0 },
+    { player_id: "alice", public_key: @bft.PublicKey("alice"), initial_x: 0, },
+    { player_id: "bob", public_key: @bft.PublicKey("bob"), initial_x: 0, },
   ]
 }
 
@@ -29,9 +29,9 @@ fn encounter_attack(
   resolve_tick : Int,
   center_x : Int,
   damage? : Int = 6,
-) -> DungeonEncounterAttack {
+) -> @replay.DungeonEncounterAttack {
   {
-    attack: { attack_id, visible_tick, resolve_tick, center_x, radius: 2 },
+    attack: { attack_id, visible_tick, resolve_tick, center_x, radius: 2, },
     damage,
   }
 }
@@ -51,11 +51,11 @@ fn accept_encounter_event(
 
 ///|
 fn encounter_transcript(
-  spec : DungeonEncounterAttack,
+  spec : @replay.DungeonEncounterAttack,
   counter_base : Int,
   dodge_player? : String = "",
   dodge_to_x? : Int = 0,
-) -> DungeonAttackTranscript raise Error {
+) -> @replay.DungeonAttackTranscript raise Error {
   let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
@@ -70,7 +70,7 @@ fn encounter_transcript(
   assert_true(adapter.register_peer(@types.PeerId("alice"), alice.public_key()))
   assert_true(adapter.register_peer(@types.PeerId("bob"), bob.public_key()))
   let attack = spec.attack
-  let telegraph_event = make_dungeon_telegraph_event(
+  let telegraph_event = @replay.make_dungeon_telegraph_event(
     peer=@types.PeerId("game-server"),
     counter=counter_base,
     lamport=counter_base + 1,
@@ -78,21 +78,21 @@ fn encounter_transcript(
     attack~,
   )
   let telegraph = accept_encounter_event(adapter, authority, telegraph_event, [])
-  let evidence : Array[DodgeEvidence] = []
+  let evidence : Array[@replay.DodgeEvidence] = []
   if dodge_player != "" {
     let signer : &@bft.Signer = if dodge_player == "alice" {
       alice
     } else {
       bob
     }
-    let intent = DodgeIntent::{
+    let intent = @replay.DodgeIntent::{
       attack_id: attack.attack_id,
       player_id: dodge_player,
       telegraph_digest: telegraph.digest(),
       client_tick: attack.visible_tick + 3,
       to_x: dodge_to_x,
     }
-    let input_event = make_dungeon_dodge_event(
+    let input_event = @replay.make_dungeon_dodge_event(
       peer=@types.PeerId(dodge_player),
       counter=counter_base + 1,
       lamport=counter_base + 2,
@@ -102,11 +102,11 @@ fn encounter_transcript(
     let input = accept_encounter_event(adapter, signer, input_event, [
       telegraph.digest(),
     ])
-    let observed = DodgeReceipt::{
+    let observed = @replay.DodgeReceipt::{
       input_digest: input.digest(),
       received_tick: intent.client_tick + 1,
     }
-    let receipt_event = make_dungeon_receipt_event(
+    let receipt_event = @replay.make_dungeon_receipt_event(
       peer=@types.PeerId("game-server"),
       counter=counter_base + 2,
       lamport=counter_base + 3,
@@ -116,17 +116,17 @@ fn encounter_transcript(
     let receipt = accept_encounter_event(adapter, authority, receipt_event, [
       input.digest(),
     ])
-    evidence.push({ input, receipt, intent, observed })
+    evidence.push({ input, receipt, intent, observed, })
   }
-  { attack_id: attack.attack_id, telegraph, dodge_evidence: evidence }
+  { attack_id: attack.attack_id, telegraph, dodge_evidence: evidence, }
 }
 
 ///|
 fn prepare_encounter(
-  attacks : Array[DungeonEncounterAttack],
-  transcripts : Array[DungeonAttackTranscript],
-) -> DungeonEncounterCandidateResult {
-  prepare_dungeon_encounter(
+  attacks : Array[@replay.DungeonEncounterAttack],
+  transcripts : Array[@replay.DungeonAttackTranscript],
+) -> @replay.DungeonEncounterCandidateResult {
+  @replay.prepare_dungeon_encounter(
     @bft.FnvHasher::new(),
     session_id="encounter-session",
     authority_key=@bft.PublicKey("game-server"),
@@ -139,7 +139,7 @@ fn prepare_encounter(
 
 ///|
 fn encounter_checkpoint(
-  candidate : DungeonEncounterCandidate,
+  candidate : @replay.DungeonEncounterCandidate,
   public_state_root? : @bft.Digest,
 ) -> @checkpoint.VerifiedCheckpoint raise Error {
   let hasher = @bft.FnvHasher::new()
@@ -170,7 +170,7 @@ fn encounter_checkpoint(
 
 ///|
 fn encounter_asset_source(
-  effect : AssetEffect,
+  effect : @replay.AssetEffect,
   counter? : Int = 100,
 ) -> @bft.AuthenticatedEvent raise Error {
   let adapter = @bft.AuditAdapter::new(
@@ -182,7 +182,7 @@ fn encounter_asset_source(
   assert_true(
     adapter.register_peer(@types.PeerId("game-server"), authority.public_key()),
   )
-  let event = make_asset_effect_event(
+  let event = @replay.make_asset_effect_event(
     peer=@types.PeerId("game-server"),
     counter~,
     lamport=counter + 1,
@@ -211,7 +211,7 @@ test "multi-attack replay carries position and hp and authorizes clear loot" {
   match prepare_encounter([second, first], [second_log, first_log]) {
     CandidateReady(candidate) => {
       let checkpoint = encounter_checkpoint(candidate)
-      match finalize_dungeon_encounter(candidate, checkpoint) {
+      match @replay.finalize_dungeon_encounter(candidate, checkpoint) {
         EncounterFinalized(resolution) => {
           assert_eq(
             resolution.replay_match().checkpoint_digest(),
@@ -225,8 +225,8 @@ test "multi-attack replay carries position and hp and authorizes clear loot" {
           assert_eq(resolution.survivor_ids(), ["alice"])
           assert_eq(resolution.defeated_ids(), ["bob"])
           assert_eq(resolution.player_states(), [
-            { player_id: "alice", position_x: 5, hp: 10 },
-            { player_id: "bob", position_x: 0, hp: 0 },
+            { player_id: "alice", position_x: 5, hp: 10, },
+            { player_id: "bob", position_x: 0, hp: 0, },
           ])
           assert_eq(resolution.accepted_dodge_count(), 2)
           assert_eq(resolution.loot_effect("bob"), None)
@@ -234,7 +234,7 @@ test "multi-attack replay carries position and hp and authorizes clear loot" {
             Some(effect) => {
               let source = encounter_asset_source(effect)
               match
-                ReplayEngine::new(
+                @replay.ReplayEngine::new(
                   resolution.loot_kernel(),
                   session_id="encounter-session",
                 ).replay(source, effect) {
@@ -244,8 +244,8 @@ test "multi-attack replay carries position and hp and authorizes clear loot" {
             }
             None => fail("surviving player did not receive encounter loot")
           }
-          let forged = AssetEffect::Create(
-            asset_id=dungeon_encounter_loot_asset_id(
+          let forged = @replay.AssetEffect::Create(
+            asset_id=@replay.dungeon_encounter_loot_asset_id(
               "encounter-session", "boss-1", "bob",
             ),
             recipient_id="bob",
@@ -254,11 +254,11 @@ test "multi-attack replay carries position and hp and authorizes clear loot" {
             output_index=0,
           )
           assert_eq(
-            ReplayEngine::new(
+            @replay.ReplayEngine::new(
               resolution.loot_kernel(),
               session_id="encounter-session",
             ).replay(encounter_asset_source(forged, counter=101), forged),
-            ReplayResult::Refused(ReplayRefusal::KernelRejected),
+            @replay.ReplayResult::Refused(@replay.ReplayRefusal::KernelRejected),
           )
         }
         _ => fail("valid encounter checkpoint did not finalize")
@@ -275,7 +275,7 @@ test "failed encounter cannot mint loot" {
   match prepare_encounter([lethal], [transcript]) {
     CandidateReady(candidate) => {
       let checkpoint = encounter_checkpoint(candidate)
-      match finalize_dungeon_encounter(candidate, checkpoint) {
+      match @replay.finalize_dungeon_encounter(candidate, checkpoint) {
         EncounterFinalized(resolution) => {
           assert_false(resolution.cleared())
           assert_eq(resolution.survivor_ids(), [])
@@ -298,21 +298,21 @@ test "encounter plan and transcript set reject ambiguous shapes" {
   let overlapping_log = encounter_transcript(overlapping, 10)
   assert_eq(
     prepare_encounter([first, overlapping], [first_log, overlapping_log]),
-    DungeonEncounterCandidateResult::Refused(
-      DungeonEncounterRefusal::InvalidAttackPlan,
+    @replay.DungeonEncounterCandidateResult::Refused(
+      @replay.DungeonEncounterRefusal::InvalidAttackPlan,
     ),
   )
   assert_eq(
     prepare_encounter([first], [first_log, first_log]),
-    DungeonEncounterCandidateResult::Refused(
-      DungeonEncounterRefusal::DuplicateAttackTranscript("cleave-1"),
+    @replay.DungeonEncounterCandidateResult::Refused(
+      @replay.DungeonEncounterRefusal::DuplicateAttackTranscript("cleave-1"),
     ),
   )
-  let unknown = { ..first_log, attack_id: "unknown" }
+  let unknown = { ..first_log, attack_id: "unknown", }
   assert_eq(
     prepare_encounter([first], [unknown]),
-    DungeonEncounterCandidateResult::Refused(
-      DungeonEncounterRefusal::UnknownAttackTranscript("unknown"),
+    @replay.DungeonEncounterCandidateResult::Refused(
+      @replay.DungeonEncounterRefusal::UnknownAttackTranscript("unknown"),
     ),
   )
 }
@@ -352,8 +352,8 @@ test "encounter rejects a missing planned attack and a forged public state" {
   let first_log = encounter_transcript(first, 0)
   assert_eq(
     prepare_encounter([first, second], [first_log]),
-    DungeonEncounterCandidateResult::Refused(
-      DungeonEncounterRefusal::MissingAttackTranscript("cleave-2"),
+    @replay.DungeonEncounterCandidateResult::Refused(
+      @replay.DungeonEncounterRefusal::MissingAttackTranscript("cleave-2"),
     ),
   )
   let second_log = encounter_transcript(second, 10)
@@ -364,9 +364,9 @@ test "encounter rejects a missing planned attack and a forged public state" {
         public_state_root=@bft.Digest("forged-state"),
       )
       assert_eq(
-        finalize_dungeon_encounter(candidate, checkpoint),
-        DungeonEncounterFinalizeResult::Refused(
-          DungeonEncounterRefusal::CheckpointPublicStateRootMismatch,
+        @replay.finalize_dungeon_encounter(candidate, checkpoint),
+        @replay.DungeonEncounterFinalizeResult::Refused(
+          @replay.DungeonEncounterRefusal::CheckpointPublicStateRootMismatch,
         ),
       )
     }
@@ -395,11 +395,11 @@ test "movement starts from the previous resolved position" {
   match prepare_encounter([first, second], [first_log, second_log]) {
     CandidateReady(candidate) => {
       let checkpoint = encounter_checkpoint(candidate)
-      match finalize_dungeon_encounter(candidate, checkpoint) {
+      match @replay.finalize_dungeon_encounter(candidate, checkpoint) {
         EncounterFinalized(resolution) => {
           assert_eq(resolution.player_states(), [
-            { player_id: "alice", position_x: 5, hp: 4 },
-            { player_id: "bob", position_x: 0, hp: 4 },
+            { player_id: "alice", position_x: 5, hp: 4, },
+            { player_id: "bob", position_x: 0, hp: 4, },
           ])
           assert_eq(resolution.accepted_dodge_count(), 1)
         }

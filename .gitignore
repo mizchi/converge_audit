@@ -11,5 +11,8 @@ examples/cf-game-audit/dist/
 examples/cf-game-audit/test-results/
 examples/cf-game-audit/playwright-report/
 .wrangler/
+.dev.vars
+.dev.vars.*
 *.sqlite
 *.sqlite3
+formal/lean/.lake/

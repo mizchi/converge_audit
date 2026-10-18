@@ -1,6 +1,6 @@
 ///|
 test "worker bridge creates and verifies a real-crypto anchor envelope" {
-  let fixture = audit_benchmark_make_anchor_envelope(
+  let fixture = @worker.audit_benchmark_make_anchor_envelope(
     "000102030405060708090a0b0c0d0e0f" + "101112131415161718191a1b1c1d1e1f",
     "cf:pve:room-1",
     "observer-1",
@@ -15,7 +15,7 @@ test "worker bridge creates and verifies a real-crypto anchor envelope" {
     fixture_fields["authority_key"] is String(authority_key) else {
     fail("expected fixture fields")
   }
-  let verified = audit_verify_anchor_envelope(
+  let verified = @worker.audit_verify_anchor_envelope(
     envelope_hex, authority_key, "cf:pve:room-1",
   )
   guard @json.parse(verified) is Object(fields) else {
@@ -30,7 +30,7 @@ test "worker bridge creates and verifies a real-crypto anchor envelope" {
 
 ///|
 test "worker bridge rejects a tampered anchor envelope" {
-  let fixture = audit_benchmark_make_anchor_envelope(
+  let fixture = @worker.audit_benchmark_make_anchor_envelope(
     "000102030405060708090a0b0c0d0e0f" + "101112131415161718191a1b1c1d1e1f",
     "cf:pvp:match-1",
     "observer-2",
@@ -45,7 +45,7 @@ test "worker bridge rejects a tampered anchor envelope" {
   let last = envelope_hex.length() - 1
   let replacement = if envelope_hex[last] == '0' { "1" } else { "0" }
   let tampered = envelope_hex[:last].to_owned() + replacement
-  let verified = audit_verify_anchor_envelope(
+  let verified = @worker.audit_verify_anchor_envelope(
     tampered, authority_key, "cf:pvp:match-1",
   )
   guard @json.parse(verified) is Object(verified_fields) else {
@@ -59,30 +59,33 @@ test "worker bridge rejects a tampered anchor envelope" {
 ///|
 test "worker bridge exposes the proved head classifier" {
   assert_eq(
-    audit_classify_anchor_head(true, false, false, 7, 8, true),
+    @worker.audit_classify_anchor_head(true, false, false, 7, 8, true),
     "advance",
   )
   assert_eq(
-    audit_classify_anchor_head(true, true, false, 8, 8, false),
+    @worker.audit_classify_anchor_head(true, true, false, 8, 8, false),
     "same_epoch_fork",
   )
   assert_eq(
-    audit_classify_anchor_head(true, false, false, 8, 9, false),
+    @worker.audit_classify_anchor_head(true, false, false, 8, 9, false),
     "wrong_parent_fork",
   )
-  assert_eq(audit_classify_anchor_head(true, false, false, 8, 11, false), "gap")
+  assert_eq(
+    @worker.audit_classify_anchor_head(true, false, false, 8, 11, false),
+    "gap",
+  )
 }
 
 ///|
 test "worker bridge exposes trusted closure and opaque atomic seal plan" {
   assert_eq(
-    audit_open_checkpoint_closure(
+    @worker.audit_open_checkpoint_closure(
       1, "checkpoint-v1", "manifest-1", "scope-1", "unit-1", 0, "roster-0", "frontier-0",
       "certificate-0", true, true, true,
     ),
     "ready",
   )
-  let prepared = audit_prepare_atomic_checkpoint_seal(
+  let prepared = @worker.audit_prepare_atomic_checkpoint_seal(
     1,
     "checkpoint-v1",
     "manifest-1",
@@ -116,7 +119,7 @@ test "worker bridge exposes trusted closure and opaque atomic seal plan" {
     fail("expected prepared atomic seal plan")
   }
   assert_eq(
-    audit_prepare_atomic_checkpoint_seal(
+    @worker.audit_prepare_atomic_checkpoint_seal(
       1,
       "checkpoint-v1",
       "manifest-1",
@@ -152,7 +155,7 @@ test "worker bridge acknowledges only exact authenticated successful checkpoint 
     ack_decision : String,
     authentication_succeeded : Bool,
   ) {
-    audit_acknowledge_checkpoint_outbox(
+    @worker.audit_acknowledge_checkpoint_outbox(
       1, "checkpoint-v1", "manifest-1", "scope-1", "unit-1", "authority-1", 0, "checkpoint-0",
       "canonical-envelope-0", 0, 1, "checkpoint-v1", "manifest-1", "scope-1", "unit-1",
       authority_id, 0, "checkpoint-0", ack_decision, authentication_succeeded,
@@ -177,15 +180,15 @@ test "worker bridge acknowledges only exact authenticated successful checkpoint 
 ///|
 test "worker bridge never treats anchor-only delivery as replay verification" {
   assert_eq(
-    audit_classify_central_replay(true, false, false, false, false),
+    @worker.audit_classify_central_replay(true, false, false, false, false),
     "awaiting_transcript",
   )
   assert_eq(
-    audit_classify_central_replay(true, true, true, true, true),
+    @worker.audit_classify_central_replay(true, true, true, true, true),
     "verified",
   )
   assert_eq(
-    audit_classify_central_replay(true, true, true, true, false),
+    @worker.audit_classify_central_replay(true, true, true, true, false),
     "replay_mismatch",
   )
 }
@@ -193,13 +196,19 @@ test "worker bridge never treats anchor-only delivery as replay verification" {
 ///|
 test "worker bridge persists marketplace creation only through every proved binding" {
   assert_true(
-    audit_marketplace_creation_persist_allowed(true, true, true, true, true),
+    @worker.audit_marketplace_creation_persist_allowed(
+      true, true, true, true, true,
+    ),
   )
   assert_false(
-    audit_marketplace_creation_persist_allowed(true, true, true, true, false),
+    @worker.audit_marketplace_creation_persist_allowed(
+      true, true, true, true, false,
+    ),
   )
   assert_false(
-    audit_marketplace_creation_persist_allowed(false, true, true, true, true),
+    @worker.audit_marketplace_creation_persist_allowed(
+      false, true, true, true, true,
+    ),
   )
 }
 
@@ -209,7 +218,7 @@ test "worker bridge executes a real-crypto PvE checkpoint replay" {
     "101112131415161718191a1b1c1d1e1f"
   let player_seed = "202122232425262728292a2b2c2d2e2f" +
     "303132333435363738393a3b3c3d3e3f"
-  let fixture = audit_benchmark_make_pve_replay_bundle(
+  let fixture = @worker.audit_benchmark_make_pve_replay_bundle(
     authority_seed, player_seed, "cf:pve:real-replay",
   )
   guard @json.parse(fixture) is Object(fields) &&
@@ -219,7 +228,7 @@ test "worker bridge executes a real-crypto PvE checkpoint replay" {
     fields["checkpoint_digest"] is String(checkpoint_digest) else {
     fail("expected real replay fixture")
   }
-  let verified = audit_verify_pve_replay_bundle(
+  let verified = @worker.audit_verify_pve_replay_bundle(
     bundle_hex, "cf:pve:real-replay", authority_key, checkpoint_digest,
   )
   guard @json.parse(verified) is Object(result) &&
@@ -230,7 +239,7 @@ test "worker bridge executes a real-crypto PvE checkpoint replay" {
     result["replayed_assets"] is Number(1.0, ..) else {
     fail("expected real deterministic replay verification")
   }
-  let refused = audit_verify_pve_replay_bundle(
+  let refused = @worker.audit_verify_pve_replay_bundle(
     bundle_hex,
     "cf:pve:real-replay",
     authority_key,
@@ -249,7 +258,7 @@ test "worker bridge executes real-crypto PvP replay and witness certification" {
     "101112131415161718191a1b1c1d1e1f"
   let participant_seed = "202122232425262728292a2b2c2d2e2f" +
     "303132333435363738393a3b3c3d3e3f"
-  let fixture = audit_benchmark_make_pvp_replay_bundle(
+  let fixture = @worker.audit_benchmark_make_pvp_replay_bundle(
     referee_seed, participant_seed, "cf:pvp:real-replay",
   )
   guard @json.parse(fixture) is Object(fields) &&
@@ -259,7 +268,7 @@ test "worker bridge executes real-crypto PvP replay and witness certification" {
     fields["checkpoint_digest"] is String(checkpoint_digest) else {
     fail("expected real PvP replay fixture")
   }
-  let verified = audit_verify_pvp_replay_bundle(
+  let verified = @worker.audit_verify_pvp_replay_bundle(
     bundle_hex, "cf:pvp:real-replay", referee_key, checkpoint_digest,
   )
   guard @json.parse(verified) is Object(result) &&
@@ -270,7 +279,7 @@ test "worker bridge executes real-crypto PvP replay and witness certification" {
     result["required_approvals"] is Number(3.0, ..) else {
     fail("expected real PvP replay witness verification")
   }
-  let refused = audit_verify_pvp_replay_bundle(
+  let refused = @worker.audit_verify_pvp_replay_bundle(
     bundle_hex,
     "cf:pvp:real-replay",
     referee_key,
@@ -291,7 +300,7 @@ test "worker bridge executes real-crypto open-world eligibility and observer rep
     "303132333435363738393a3b3c3d3e3f"
   let world_id = "cf:open:real-replay"
   let encounter_session_id = world_id + ":encounter-0"
-  let fixture = audit_benchmark_make_open_world_pve_replay_bundle(
+  let fixture = @worker.audit_benchmark_make_open_world_pve_replay_bundle(
     authority_seed, participant_seed, world_id, encounter_session_id,
   )
   guard @json.parse(fixture) is Object(fields) &&
@@ -306,7 +315,7 @@ test "worker bridge executes real-crypto open-world eligibility and observer rep
     fields["checkpoint_digest"] is String(encounter_digest) else {
     fail("expected real open-world replay fixture")
   }
-  let verified = audit_verify_open_world_pve_replay_bundle(
+  let verified = @worker.audit_verify_open_world_pve_replay_bundle(
     bundle_hex, world_id, encounter_session_id, authority_key, transparency_log_session_id,
     transparency_publisher_key, transparency_digest, audit_digest, seal_digest, encounter_digest,
   )
@@ -321,7 +330,7 @@ test "worker bridge executes real-crypto open-world eligibility and observer rep
     item["item_type"] is String("benchmark-open-world-token") else {
     fail("expected real open-world selective replay verification")
   }
-  let refused = audit_verify_open_world_pve_replay_bundle(
+  let refused = @worker.audit_verify_open_world_pve_replay_bundle(
     bundle_hex,
     world_id,
     encounter_session_id,
@@ -338,7 +347,7 @@ test "worker bridge executes real-crypto open-world eligibility and observer rep
     refusal["error"] is String("expected_audit_checkpoint_mismatch") else {
     fail("expected open-world trusted-plan refusal")
   }
-  let unpublished = audit_verify_open_world_pve_replay_bundle(
+  let unpublished = @worker.audit_verify_open_world_pve_replay_bundle(
     bundle_hex,
     world_id,
     encounter_session_id,
@@ -370,7 +379,7 @@ fn worker_test_json_string_array(value : Json) -> Array[String] raise Error {
 
 ///|
 test "worker bridge opens bounded open-world missing-slot proof plans" {
-  let fixture = audit_benchmark_make_open_world_missing_slot_proof(8, 3)
+  let fixture = @worker.audit_benchmark_make_open_world_missing_slot_proof(8, 3)
   guard @json.parse(fixture) is Object(fields) &&
     fields["ok"] is True &&
     fields["expected_root"] is String(expected_root) &&
@@ -383,7 +392,7 @@ test "worker bridge opens bounded open-world missing-slot proof plans" {
   let parent_keys = worker_test_json_string_array(fields["parent_keys"])
   let parent_values = worker_test_json_string_array(fields["parent_values"])
   let sibling_digests = worker_test_json_string_array(fields["sibling_digests"])
-  let verified = audit_verify_open_world_missing_slot_proof(
+  let verified = @worker.audit_verify_open_world_missing_slot_proof(
     expected_root,
     8,
     3,
@@ -402,14 +411,14 @@ test "worker bridge opens bounded open-world missing-slot proof plans" {
     result["root_check_index"] is Number(root_check_index, ..) else {
     fail("expected verified missing-slot plan")
   }
-  assert_eq(proof_key, audit_open_world_encounter_registration_key(3))
+  assert_eq(proof_key, @worker.audit_open_world_encounter_registration_key(3))
   assert_eq(hash_check_count.to_int(), path.length() + 2)
   assert_eq(root_check_index.to_int(), hash_check_count.to_int() - 1)
 
   let wrong_root = "00000000000000000000000000000000" +
     "00000000000000000000000000000000"
   guard @json.parse(
-      audit_verify_open_world_missing_slot_proof(
+      @worker.audit_verify_open_world_missing_slot_proof(
         wrong_root,
         8,
         3,
@@ -426,7 +435,7 @@ test "worker bridge opens bounded open-world missing-slot proof plans" {
   }
   ignore(directions.pop())
   guard @json.parse(
-      audit_verify_open_world_missing_slot_proof(
+      @worker.audit_verify_open_world_missing_slot_proof(
         expected_root,
         8,
         3,
@@ -441,18 +450,18 @@ test "worker bridge opens bounded open-world missing-slot proof plans" {
     shape_result["error"] is String("invalid_non_membership_shape") else {
     fail("expected missing-slot shape refusal")
   }
-  assert_eq(audit_open_world_encounter_registration_key(-1), "")
+  assert_eq(@worker.audit_open_world_encounter_registration_key(-1), "")
 }
 
 ///|
 test "worker bridge opens an entirely omitted one-slot registry" {
-  let fixture = audit_benchmark_make_open_world_missing_slot_proof(1, 0)
+  let fixture = @worker.audit_benchmark_make_open_world_missing_slot_proof(1, 0)
   guard @json.parse(fixture) is Object(fields) &&
     fields["expected_root"] is String(expected_root) &&
     fields["proof_entry_count"] is Number(0.0, ..) else {
     fail("expected empty missing-slot fixture")
   }
-  let verified = audit_verify_open_world_missing_slot_proof(
+  let verified = @worker.audit_verify_open_world_missing_slot_proof(
     expected_root,
     1,
     0,
@@ -477,7 +486,7 @@ test "worker bridge binds signed left evidence to a missing-slot proof" {
   let participant_seed = "202122232425262728292a2b2c2d2e2f" +
     "303132333435363738393a3b3c3d3e3f"
   for source in ["authority_signed_encounter", "observer_quorum"] {
-    let fixture = audit_benchmark_make_open_world_missing_slot_conflict_bundle(
+    let fixture = @worker.audit_benchmark_make_open_world_missing_slot_conflict_bundle(
       authority_seed, participant_seed, "world:missing-slot", "world:missing-slot:encounter-0",
       source,
     )
@@ -496,7 +505,7 @@ test "worker bridge binds signed left evidence to a missing-slot proof" {
       fail("expected signed compact missing-slot conflict fixture")
     }
     assert_true(bundle_bytes < 262144.0)
-    let verified = audit_verify_open_world_missing_slot_conflict(
+    let verified = @worker.audit_verify_open_world_missing_slot_conflict(
       bundle_hex, "world:missing-slot", authority_key, transparency_log_session_id,
       transparency_publisher_key, transparency_digest, audit_digest, seal_digest,
       encounter_digest, 0, source,
@@ -515,7 +524,7 @@ test "worker bridge binds signed left evidence to a missing-slot proof" {
     assert_eq(actual_source, source)
     assert_eq(actual_encounter_digest, encounter_digest)
   }
-  let fixture = audit_benchmark_make_open_world_missing_slot_conflict_bundle(
+  let fixture = @worker.audit_benchmark_make_open_world_missing_slot_conflict_bundle(
     authority_seed, participant_seed, "world:missing-slot", "world:missing-slot:encounter-0",
     "authority_signed_encounter",
   )
@@ -532,7 +541,7 @@ test "worker bridge binds signed left evidence to a missing-slot proof" {
   }
   let tampered_encounter = "00" + encounter_digest[2:].to_owned()
   guard @json.parse(
-      audit_verify_open_world_missing_slot_conflict(
+      @worker.audit_verify_open_world_missing_slot_conflict(
         bundle_hex, "world:missing-slot", authority_key, transparency_log_session_id,
         transparency_publisher_key, transparency_digest, audit_digest, seal_digest,
         tampered_encounter, 0, "authority_signed_encounter",
@@ -552,21 +561,21 @@ test "worker bridge owns observer signing decisions keys and store roots" {
   let encounter_a = "33".repeat(32)
   let encounter_b = "44".repeat(32)
   assert_eq(
-    audit_classify_open_world_observer_signing(true, false, false),
+    @worker.audit_classify_open_world_observer_signing(true, false, false),
     "sign_new",
   )
   assert_eq(
-    audit_classify_open_world_observer_signing(true, true, true),
+    @worker.audit_classify_open_world_observer_signing(true, true, true),
     "reuse_existing",
   )
   assert_eq(
-    audit_classify_open_world_observer_signing(true, true, false),
+    @worker.audit_classify_open_world_observer_signing(true, true, false),
     "reject_conflict",
   )
-  let key_a = audit_open_world_observer_signing_key(plan_a, 0)
-  let key_b = audit_open_world_observer_signing_key(plan_b, 1)
+  let key_a = @worker.audit_open_world_observer_signing_key(plan_a, 0)
+  let key_b = @worker.audit_open_world_observer_signing_key(plan_b, 1)
   guard @json.parse(
-      audit_open_world_observer_signing_store_snapshot([key_a, key_b], [
+      @worker.audit_open_world_observer_signing_store_snapshot([key_a, key_b], [
         encounter_a, encounter_b,
       ]),
     )
@@ -577,7 +586,7 @@ test "worker bridge owns observer signing decisions keys and store roots" {
     fail("expected observer signing store snapshot")
   }
   guard @json.parse(
-      audit_open_world_observer_signing_store_snapshot([key_b, key_a], [
+      @worker.audit_open_world_observer_signing_store_snapshot([key_b, key_a], [
         encounter_b, encounter_a,
       ]),
     )
@@ -587,7 +596,7 @@ test "worker bridge owns observer signing decisions keys and store roots" {
   }
   assert_eq(root, second_root)
   guard @json.parse(
-      audit_open_world_observer_signing_store_snapshot([key_a, key_a], [
+      @worker.audit_open_world_observer_signing_store_snapshot([key_a, key_a], [
         encounter_a, encounter_b,
       ]),
     )
@@ -603,7 +612,7 @@ test "worker bridge verifies real-crypto current-owner inventory proof" {
     "101112131415161718191a1b1c1d1e1f"
   let participant_seed = "202122232425262728292a2b2c2d2e2f" +
     "303132333435363738393a3b3c3d3e3f"
-  let fixture = audit_benchmark_make_inventory_listing_proof_bundle(
+  let fixture = @worker.audit_benchmark_make_inventory_listing_proof_bundle(
     authority_seed, participant_seed, "inventory-session", "creation-checkpoint",
     1, "asset-1", "alice", "bob", "raid-token", 1, "loot-event", 0, 1,
   )
@@ -615,7 +624,7 @@ test "worker bridge verifies real-crypto current-owner inventory proof" {
     fields["game_manifest_digest"] is String(game_manifest_digest) else {
     fail("expected real inventory listing fixture")
   }
-  let verified = audit_verify_inventory_listing_proof_bundle(
+  let verified = @worker.audit_verify_inventory_listing_proof_bundle(
     bundle_hex, "inventory-session", authority_key, checkpoint_digest, game_manifest_digest,
     "asset-1", "alice", "raid-token", 1, "loot-event", 0, "bob", false,
   )
@@ -675,7 +684,7 @@ test "worker bridge verifies real-crypto current-owner inventory proof" {
     canonical_record != "" else {
     fail("expected current-owner proof verification")
   }
-  let stale_owner = audit_verify_inventory_listing_proof_bundle(
+  let stale_owner = @worker.audit_verify_inventory_listing_proof_bundle(
     bundle_hex, "inventory-session", authority_key, checkpoint_digest, game_manifest_digest,
     "asset-1", "alice", "raid-token", 1, "loot-event", 0, "alice", false,
   )
@@ -692,7 +701,7 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     "101112131415161718191a1b1c1d1e1f"
   let participant_seed = "202122232425262728292a2b2c2d2e2f" +
     "303132333435363738393a3b3c3d3e3f"
-  let fixture = audit_benchmark_make_inventory_lineage_proof_bundle(
+  let fixture = @worker.audit_benchmark_make_inventory_lineage_proof_bundle(
     authority_seed, participant_seed, "inventory-session", "creation-checkpoint",
     1, "asset-1", "alice", "bob", "raid-token", 1, "loot-event", 0, 1,
   )
@@ -708,7 +717,7 @@ test "worker bridge verifies a real-crypto bounded inventory lineage slice" {
     fields["anchor_lineage_root"] is String(anchor_lineage_root) else {
     fail("expected real inventory lineage fixture")
   }
-  let verified = audit_verify_inventory_lineage_proof_bundle(
+  let verified = @worker.audit_verify_inventory_lineage_proof_bundle(
     bundle_hex,
     "inventory-session",
     authority_key,
@@ -792,7 +801,7 @@ test "worker bridge verifies one real-crypto atomic multi-asset checkpoint" {
     "101112131415161718191a1b1c1d1e1f"
   let participant_seed = "202122232425262728292a2b2c2d2e2f" +
     "303132333435363738393a3b3c3d3e3f"
-  let fixture = audit_benchmark_make_inventory_checkpoint_proof_bundle(
+  let fixture = @worker.audit_benchmark_make_inventory_checkpoint_proof_bundle(
     authority_seed,
     participant_seed,
     "inventory-session",
@@ -814,7 +823,7 @@ test "worker bridge verifies one real-crypto atomic multi-asset checkpoint" {
     fields["game_manifest_digest"] is String(game_manifest_digest) else {
     fail("expected real multi-asset inventory fixture")
   }
-  let verified = audit_verify_inventory_checkpoint_proof_bundle(
+  let verified = @worker.audit_verify_inventory_checkpoint_proof_bundle(
     bundle_hex,
     "inventory-session",
     authority_key,
@@ -868,7 +877,7 @@ test "worker bridge verifies one real-crypto atomic multi-asset checkpoint" {
     write_set_digest != "" else {
     fail("expected atomic multi-asset inventory verification")
   }
-  let stale = audit_verify_inventory_checkpoint_proof_bundle(
+  let stale = @worker.audit_verify_inventory_checkpoint_proof_bundle(
     bundle_hex,
     "inventory-session",
     authority_key,

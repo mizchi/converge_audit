@@ -1,0 +1,50 @@
+{
+  "benchmark": "encounter-empty-inventory-v1",
+  "rounds": 20,
+  "warmup": 1,
+  "generationSize": 128,
+  "batchSize": 16,
+  "totalEmptySettlements": 2688,
+  "environment": {
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "storage": "SQLite :memory:",
+    "inProcessSignedHttpIncluded": true,
+    "clientCheckpointCryptoIncluded": true,
+    "networkIncluded": false,
+    "fsyncIncluded": false,
+    "indexedDbIncluded": false,
+    "workerSchedulingIncluded": false,
+    "caseBindings": 0
+  },
+  "retirement": {
+    "samples": 160,
+    "p50Ms": 1.569833000000017,
+    "p95Ms": 9.303791000000274
+  },
+  "allEmptyPage": {
+    "samples": 20,
+    "p50Ms": 0.18866700000000947,
+    "p95Ms": 3.784041999999772
+  },
+  "bytes": {
+    "coldJsonBeforeLastRetirement": 278034,
+    "coldJsonAfter": 0,
+    "maxCheckpoint": 834,
+    "maxPage": 173
+  },
+  "final": {
+    "receiptCount": 2688,
+    "itemCount": 0,
+    "origins": 0,
+    "inventoryMembers": 0,
+    "emptyRanges": [
+      {
+        "first": 1,
+        "last": 2688
+      }
+    ],
+    "checkpointHeads": 1
+  }
+}

@@ -165,7 +165,7 @@ fn append_digest(buffer : StringBuilder, digest : @bft.Digest) -> Unit {
 /// has an explicit presence tag. The version prefix keeps future formats from
 /// colliding with this one.
 pub fn serialize_checkpoint(checkpoint : Checkpoint) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "checkpoint-v1")
   append_field(buffer, checkpoint.session_id)
   append_field(buffer, checkpoint.epoch.to_string())

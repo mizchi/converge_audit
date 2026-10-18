@@ -8,7 +8,7 @@ let dungeon_player_attack_receipt_table : String = "converge.dungeon.player-atta
 pub fn serialize_dungeon_player_attack(
   intent : DungeonPlayerAttackIntent,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "dungeon-player-attack-v1")
   append_field(buffer, intent.encounter_id)
   append_field(buffer, intent.player_id)
@@ -20,7 +20,7 @@ pub fn serialize_dungeon_player_attack(
 pub fn serialize_dungeon_player_attack_receipt(
   receipt : DungeonPlayerAttackReceipt,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "dungeon-player-attack-receipt-v1")
   append_field(buffer, receipt.input_digest.0)
   append_int_field(buffer, receipt.received_tick)
@@ -36,7 +36,7 @@ pub fn make_dungeon_player_attack_event(
   intent~ : DungeonPlayerAttackIntent,
 ) -> @types.Event {
   {
-    id: { peer, counter },
+    id: { peer, counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(
@@ -62,7 +62,7 @@ pub fn make_dungeon_player_attack_receipt_event(
   receipt~ : DungeonPlayerAttackReceipt,
 ) -> @types.Event {
   {
-    id: { peer, counter },
+    id: { peer, counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(
@@ -150,7 +150,7 @@ fn dungeon_raid_manifest(
   defense_manifest : @bft.Digest,
   rules : DungeonRaidRules,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "telegraph-dungeon-raid-kernel-v1")
   append_field(buffer, defense_manifest.0)
   append_int_field(buffer, rules.boss_max_hp)
@@ -195,7 +195,7 @@ fn dungeon_raid_public_state_root(
   cooldown_violators : Array[String],
   cleared : Bool,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "telegraph-dungeon-raid-state-v1")
   append_field(buffer, defense_root.0)
   append_int_field(buffer, boss_hp)

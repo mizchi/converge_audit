@@ -55,8 +55,8 @@ fn inventory_listing_central_fixture() -> InventoryListingCentralFixture raise E
     let id = "inventory-witness-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
     witness_signers.push(signer)
-    witnesses.push({ id, key: signer.public_key() })
-    participants.push({ id, key: signer.public_key() })
+    witnesses.push({ id, key: signer.public_key(), })
+    participants.push({ id, key: signer.public_key(), })
   }
   let game_manifest_digest = @bft.Digest("canonical-asset-kernel-v1")
   let session_id = "inventory-session"
@@ -102,7 +102,7 @@ fn inventory_listing_central_fixture() -> InventoryListingCentralFixture raise E
       witnesses,
       max_faults: 1,
       attestations,
-      proof: { record, map_proof },
+      proof: { record, map_proof, },
     },
   }
 }
@@ -169,8 +169,8 @@ fn inventory_lineage_central_bundle(
 fn verify_inventory_lineage_fixture(
   fixture : InventoryListingCentralFixture,
   bundle : @wire.InventoryLineageProofBundle,
-) -> InventoryLineageCentralResult {
-  verify_inventory_lineage_proof_bundle(
+) -> @central_replay.InventoryLineageCentralResult {
+  @central_replay.verify_inventory_lineage_proof_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     @wire.encode_inventory_lineage_proof_bundle(bundle),
@@ -211,7 +211,7 @@ test "central lineage proof rejects an omitted slice" {
   match
     verify_inventory_lineage_fixture(fixture, {
       ..bundle,
-      lineage: { ..bundle.lineage, transfers: [] },
+      lineage: { ..bundle.lineage, transfers: [], },
     }) {
     InventoryLineageCentralRefused(
       InventoryLineageVerificationRefused(
@@ -228,8 +228,8 @@ fn verify_inventory_listing_fixture(
   bundle : @wire.InventoryListingProofBundle,
   seller_id? : String = "bob",
   origin? : @market.ItemReceipt = fixture.origin,
-) -> InventoryListingCentralResult {
-  verify_inventory_listing_proof_bundle(
+) -> @central_replay.InventoryListingCentralResult {
+  @central_replay.verify_inventory_listing_proof_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     @wire.encode_inventory_listing_proof_bundle(bundle),
@@ -281,7 +281,7 @@ test "central inventory proof accepts only the current owner and exact origin" {
 test "central inventory proof fails closed on stale boundary quorum and tampering" {
   let fixture = inventory_listing_central_fixture()
   assert_eq(
-    verify_inventory_listing_proof_bundle(
+    @central_replay.verify_inventory_listing_proof_bundle(
       @bft.FnvHasher::new(),
       @bft.MockVerifier::new(),
       @wire.encode_inventory_listing_proof_bundle(fixture.bundle),
@@ -294,8 +294,8 @@ test "central inventory proof fails closed on stale boundary quorum and tamperin
       rejected_ancestor=false,
       limits=@wire.InventoryListingWireLimits::default(),
     ),
-    InventoryListingCentralResult::InventoryListingRefused(
-      InventoryListingCentralRefusal::InventoryExpectedCheckpointMismatch,
+    @central_replay.InventoryListingCentralResult::InventoryListingRefused(
+      @central_replay.InventoryListingCentralRefusal::InventoryExpectedCheckpointMismatch,
     ),
   )
   let attestations = fixture.bundle.attestations
@@ -305,14 +305,16 @@ test "central inventory proof fails closed on stale boundary quorum and tamperin
   }
   assert_eq(
     verify_inventory_listing_fixture(fixture, under_quorum),
-    InventoryListingCentralResult::InventoryListingRefused(
-      InventoryListingCentralRefusal::InventoryWitnessQuorumPending(2, 3),
+    @central_replay.InventoryListingCentralResult::InventoryListingRefused(
+      @central_replay.InventoryListingCentralRefusal::InventoryWitnessQuorumPending(
+        2, 3,
+      ),
     ),
   )
   let proof = fixture.bundle.proof
   let tampered = @wire.InventoryListingProofBundle::{
     ..fixture.bundle,
-    proof: { ..proof, record: { ..proof.record, version: 2 } },
+    proof: { ..proof, record: { ..proof.record, version: 2, }, },
   }
   match verify_inventory_listing_fixture(fixture, tampered) {
     InventoryListingRefused(InventoryCurrentOwnerProofRefused) => ()
@@ -326,7 +328,7 @@ priv struct InventoryCheckpointCentralFixture {
   authority_key : @bft.PublicKey
   checkpoint_digest : @bft.Digest
   game_manifest_digest : @bft.Digest
-  expected_assets : Array[ExpectedInventoryCheckpointAsset]
+  expected_assets : Array[@central_replay.ExpectedInventoryCheckpointAsset]
   bundle : @wire.InventoryCheckpointProofBundle
 }
 
@@ -385,7 +387,7 @@ fn inventory_checkpoint_central_fixture() -> InventoryCheckpointCentralFixture r
       Some(value) => value
       None => fail("expected multi-asset inventory proof")
     }
-    proofs.push({ record, map_proof })
+    proofs.push({ record, map_proof, })
   }
   let witness_signers : Array[@bft.MockSigner] = []
   let witnesses : Array[@witness_manifest.ReplayWitnessIdentity] = []
@@ -394,8 +396,8 @@ fn inventory_checkpoint_central_fixture() -> InventoryCheckpointCentralFixture r
     let id = "inventory-witness-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
     witness_signers.push(signer)
-    witnesses.push({ id, key: signer.public_key() })
-    participants.push({ id, key: signer.public_key() })
+    witnesses.push({ id, key: signer.public_key(), })
+    participants.push({ id, key: signer.public_key(), })
   }
   let game_manifest_digest = @bft.Digest("canonical-asset-kernel-v1")
   let prepared = @checkpoint.prepare_checkpoint(hasher, {
@@ -429,7 +431,7 @@ fn inventory_checkpoint_central_fixture() -> InventoryCheckpointCentralFixture r
       ),
     )
   }
-  let expected_assets : Array[ExpectedInventoryCheckpointAsset] = []
+  let expected_assets : Array[@central_replay.ExpectedInventoryCheckpointAsset] = []
   for origin in origins {
     expected_assets.push({
       origin,
@@ -461,9 +463,9 @@ fn inventory_checkpoint_central_fixture() -> InventoryCheckpointCentralFixture r
 ///|
 fn verify_inventory_checkpoint_fixture(
   fixture : InventoryCheckpointCentralFixture,
-  expected_assets? : Array[ExpectedInventoryCheckpointAsset] = fixture.expected_assets,
-) -> InventoryCheckpointCentralResult {
-  verify_inventory_checkpoint_proof_bundle(
+  expected_assets? : Array[@central_replay.ExpectedInventoryCheckpointAsset] = fixture.expected_assets,
+) -> @central_replay.InventoryCheckpointCentralResult {
+  @central_replay.verify_inventory_checkpoint_proof_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     @wire.encode_inventory_checkpoint_proof_bundle(fixture.bundle),
@@ -499,7 +501,7 @@ test "central multi-asset checkpoint verifies one shared certificate and every h
 test "central multi-asset checkpoint rejects one stale or revoked member" {
   let fixture = inventory_checkpoint_central_fixture()
   let stale = fixture.expected_assets.copy()
-  stale[1] = { ..stale[1], current_version: 1 }
+  stale[1] = { ..stale[1], current_version: 1, }
   match verify_inventory_checkpoint_fixture(fixture, expected_assets=stale) {
     InventoryCheckpointCentralRefused(
       InventoryCheckpointAssetHeadVersionMismatch(1)
@@ -507,7 +509,7 @@ test "central multi-asset checkpoint rejects one stale or revoked member" {
     _ => fail("expected one stale asset to reject the whole checkpoint")
   }
   let revoked = fixture.expected_assets.copy()
-  revoked[1] = { ..revoked[1], lineage_clean: false }
+  revoked[1] = { ..revoked[1], lineage_clean: false, }
   match verify_inventory_checkpoint_fixture(fixture, expected_assets=revoked) {
     InventoryCheckpointCentralRefused(InventoryCheckpointAssetLineageRevoked(1)) =>
       ()

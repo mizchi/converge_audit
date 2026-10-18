@@ -32,7 +32,7 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 ///|
 /// Canonical preimage for one Merkle leaf hash.
 pub fn canonical_leaf_payload(payload : String) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "merkle-leaf-v1")
   append_field(buffer, payload)
   buffer.to_string()
@@ -44,7 +44,7 @@ pub fn canonical_node_payload(
   left : @bft.Digest,
   right : @bft.Digest,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "merkle-node-v1")
   append_field(buffer, left.0)
   append_field(buffer, right.0)
@@ -54,7 +54,7 @@ pub fn canonical_node_payload(
 ///|
 /// Canonical preimage for an empty Merkle tree content hash.
 pub fn canonical_empty_payload() -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "merkle-empty-v1")
   buffer.to_string()
 }
@@ -65,7 +65,7 @@ pub fn canonical_root_payload(
   leaf_count : Int,
   content_root : @bft.Digest,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "merkle-root-v1")
   append_field(buffer, leaf_count.to_string())
   append_field(buffer, content_root.0)
@@ -173,7 +173,7 @@ pub fn MerkleTree::proof(self : MerkleTree, leaf_index : Int) -> MerkleProof? {
     }
     index /= 2
   }
-  Some(MerkleProof::{ leaf_index, leaf_count: self.leaf_hashes.length(), path })
+  Some(MerkleProof::{ leaf_index, leaf_count: self.leaf_hashes.length(), path, })
 }
 
 ///|

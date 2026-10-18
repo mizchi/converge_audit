@@ -39,7 +39,7 @@ pub fn inventory_lineage_transition_valid(
 pub fn serialize_inventory_lineage_transition(
   transition : InventoryLineageTransition,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "inventory-asset-lineage-transition-v1")
   append_field(buffer, transition.asset_id)
   append_field(buffer, transition.origin_receipt_digest.0)

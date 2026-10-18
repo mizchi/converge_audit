@@ -1,0 +1,51 @@
+{
+  "benchmark": "encounter-inventory-compaction-v1",
+  "rounds": 100,
+  "warmup": 10,
+  "batchSize": 16,
+  "receiptsPerDatabase": 16,
+  "environment": {
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "storage": "SQLite :memory:",
+    "networkIncluded": false,
+    "fsyncIncluded": false,
+    "httpAuthenticationIncluded": false,
+    "indexedDbIncluded": false
+  },
+  "timings": {
+    "clientVerify16TicketsAndReceipts": {
+      "p50Ms": 2.2492080000001806,
+      "p95Ms": 2.3563329999999496
+    },
+    "serverCompact16": {
+      "p50Ms": 0.2584579999999903,
+      "p95Ms": 0.3575829999999769
+    },
+    "serverRetry16": {
+      "p50Ms": 0.1269999999999527,
+      "p95Ms": 0.14699999999999136
+    },
+    "serverCatalogPage3": {
+      "p50Ms": 0.03958299999999326,
+      "p95Ms": 0.04816700000003493
+    },
+    "clientVerifyCheckpoint": {
+      "p50Ms": 0.06754100000000562,
+      "p95Ms": 0.08091699999999946
+    },
+    "serverMarketOldItem": {
+      "p50Ms": 0.09658300000000963,
+      "p95Ms": 0.10608300000001236
+    }
+  },
+  "bytes": {
+    "localControlBefore": 27861,
+    "localControlAfter": 807,
+    "checkpoint": 714,
+    "catalogPage3": 5312,
+    "compactionCommand": 692,
+    "listing": 376
+  }
+}

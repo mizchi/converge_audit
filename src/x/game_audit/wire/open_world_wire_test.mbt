@@ -37,7 +37,7 @@ fn wire_anchor_envelope_for_test(
     Some(proof) => proof
     None => fail("expected wire anchor membership proof")
   }
-  { signed_checkpoint, anchor, membership_proof }
+  { signed_checkpoint, anchor, membership_proof, }
 }
 
 ///|
@@ -74,18 +74,20 @@ test "observer anchor envelope has a canonical versioned wire round trip" {
     7,
     @bft.Digest("wire-checkpoint-6"),
   )
-  let encoded = encode_open_world_observer_signing_anchor_envelope(envelope)
+  let encoded = @wire.encode_open_world_observer_signing_anchor_envelope(
+    envelope,
+  )
   let decoded = match
-    decode_open_world_observer_signing_anchor_envelope(
+    @wire.decode_open_world_observer_signing_anchor_envelope(
       encoded,
-      limits=OpenWorldAuditWireLimits::default(),
+      limits=@wire.OpenWorldAuditWireLimits::default(),
     ) {
     Ok(decoded) => decoded
     Err(_) => fail("expected canonical envelope decode")
   }
   assert_eq(decoded, envelope)
   assert_eq(
-    encode_open_world_observer_signing_anchor_envelope(decoded),
+    @wire.encode_open_world_observer_signing_anchor_envelope(decoded),
     encoded,
   )
 }
@@ -101,21 +103,23 @@ test "wire decoder rejects noncanonical and unsupported versions" {
     3,
     @bft.Digest("wire-version-2"),
   )
-  let encoded = encode_open_world_observer_signing_anchor_envelope(envelope)
+  let encoded = @wire.encode_open_world_observer_signing_anchor_envelope(
+    envelope,
+  )
   match
-    decode_open_world_observer_signing_anchor_envelope(
+    @wire.decode_open_world_observer_signing_anchor_envelope(
       make_noncanonical_version(encoded),
-      limits=OpenWorldAuditWireLimits::default(),
+      limits=@wire.OpenWorldAuditWireLimits::default(),
     ) {
-    Err(OpenWorldAuditWireError::WireNonCanonicalEncoding) => ()
+    Err(@wire.OpenWorldAuditWireError::WireNonCanonicalEncoding) => ()
     _ => fail("expected noncanonical envelope refusal")
   }
   match
-    decode_open_world_observer_signing_anchor_envelope(
+    @wire.decode_open_world_observer_signing_anchor_envelope(
       replace_canonical_version(encoded, b'\x02'),
-      limits=OpenWorldAuditWireLimits::default(),
+      limits=@wire.OpenWorldAuditWireLimits::default(),
     ) {
-    Err(OpenWorldAuditWireError::WireUnsupportedVersion(version)) =>
+    Err(@wire.OpenWorldAuditWireError::WireUnsupportedVersion(version)) =>
       assert_eq(version, 2)
     _ => fail("expected unsupported wire version refusal")
   }
@@ -132,33 +136,35 @@ test "wire decoder enforces byte text and proof budgets before capability use" {
     9,
     @bft.Digest("wire-budget-8"),
   )
-  let encoded = encode_open_world_observer_signing_anchor_envelope(envelope)
-  let default_limits = OpenWorldAuditWireLimits::default()
+  let encoded = @wire.encode_open_world_observer_signing_anchor_envelope(
+    envelope,
+  )
+  let default_limits = @wire.OpenWorldAuditWireLimits::default()
   match
-    decode_open_world_observer_signing_anchor_envelope(encoded, limits={
+    @wire.decode_open_world_observer_signing_anchor_envelope(encoded, limits={
       ..default_limits,
       max_envelope_bytes: encoded.length() - 1,
     }) {
-    Err(OpenWorldAuditWireError::WireInputTooLarge(actual, maximum)) => {
+    Err(@wire.OpenWorldAuditWireError::WireInputTooLarge(actual, maximum)) => {
       assert_eq(actual, encoded.length())
       assert_eq(maximum, encoded.length() - 1)
     }
     _ => fail("expected envelope byte-budget refusal")
   }
   match
-    decode_open_world_observer_signing_anchor_envelope(encoded, limits={
+    @wire.decode_open_world_observer_signing_anchor_envelope(encoded, limits={
       ..default_limits,
       max_text_bytes: 3,
     }) {
-    Err(OpenWorldAuditWireError::WireTextTooLarge(_, 3)) => ()
+    Err(@wire.OpenWorldAuditWireError::WireTextTooLarge(_, 3)) => ()
     _ => fail("expected text-budget refusal")
   }
   match
-    decode_open_world_observer_signing_anchor_envelope(encoded, limits={
+    @wire.decode_open_world_observer_signing_anchor_envelope(encoded, limits={
       ..default_limits,
       max_proof_steps: -1,
     }) {
-    Err(OpenWorldAuditWireError::WireProofTooLong(_, -1)) => ()
+    Err(@wire.OpenWorldAuditWireError::WireProofTooLong(_, -1)) => ()
     _ => fail("expected proof-budget refusal")
   }
 }
@@ -175,26 +181,29 @@ test "gap request and response round trip under independent budgets" {
     target_epoch: 12,
     max_items: 2,
   }
-  let request_bytes = encode_open_world_observer_signing_anchor_gap_request(
+  let request_bytes = @wire.encode_open_world_observer_signing_anchor_gap_request(
     request,
   )
   assert_eq(
-    decode_open_world_observer_signing_anchor_gap_request(
+    @wire.decode_open_world_observer_signing_anchor_gap_request(
       request_bytes,
-      limits=OpenWorldAuditWireLimits::default(),
+      limits=@wire.OpenWorldAuditWireLimits::default(),
     ),
     Ok(request),
   )
   let oversized_request = {
     ..request,
-    max_items: OpenWorldAuditWireLimits::default().max_gap_response_items + 1,
+    max_items: @wire.OpenWorldAuditWireLimits::default().max_gap_response_items +
+    1,
   }
   match
-    decode_open_world_observer_signing_anchor_gap_request(
-      encode_open_world_observer_signing_anchor_gap_request(oversized_request),
-      limits=OpenWorldAuditWireLimits::default(),
+    @wire.decode_open_world_observer_signing_anchor_gap_request(
+      @wire.encode_open_world_observer_signing_anchor_gap_request(
+        oversized_request,
+      ),
+      limits=@wire.OpenWorldAuditWireLimits::default(),
     ) {
-    Err(OpenWorldAuditWireError::WireGapItemsTooMany(257, 256)) => ()
+    Err(@wire.OpenWorldAuditWireError::WireGapItemsTooMany(257, 256)) => ()
     _ => fail("expected request-item-budget refusal")
   }
   let envelope = wire_anchor_envelope_for_test(
@@ -207,22 +216,25 @@ test "gap request and response round trip under independent budgets" {
   let response = @open_world.OpenWorldObserverSigningAnchorGapResponse::{
     envelopes: [envelope, envelope],
   }
-  let response_bytes = encode_open_world_observer_signing_anchor_gap_response(
+  let response_bytes = @wire.encode_open_world_observer_signing_anchor_gap_response(
     response,
   )
   assert_eq(
-    decode_open_world_observer_signing_anchor_gap_response(
+    @wire.decode_open_world_observer_signing_anchor_gap_response(
       response_bytes,
-      limits=OpenWorldAuditWireLimits::default(),
+      limits=@wire.OpenWorldAuditWireLimits::default(),
     ),
     Ok(response),
   )
   match
-    decode_open_world_observer_signing_anchor_gap_response(response_bytes, limits={
-      ..OpenWorldAuditWireLimits::default(),
-      max_gap_response_items: 1,
-    }) {
-    Err(OpenWorldAuditWireError::WireGapItemsTooMany(2, 1)) => ()
+    @wire.decode_open_world_observer_signing_anchor_gap_response(
+      response_bytes,
+      limits={
+        ..@wire.OpenWorldAuditWireLimits::default(),
+        max_gap_response_items: 1,
+      },
+    ) {
+    Err(@wire.OpenWorldAuditWireError::WireGapItemsTooMany(2, 1)) => ()
     _ => fail("expected response-item-budget refusal")
   }
 }
@@ -230,19 +242,19 @@ test "gap request and response round trip under independent budgets" {
 ///|
 test "wire decoder rejects malformed and truncated CBOR" {
   match
-    decode_open_world_observer_signing_anchor_envelope(
+    @wire.decode_open_world_observer_signing_anchor_envelope(
       b"\x84\x01",
-      limits=OpenWorldAuditWireLimits::default(),
+      limits=@wire.OpenWorldAuditWireLimits::default(),
     ) {
-    Err(OpenWorldAuditWireError::WireMalformedCbor) => ()
+    Err(@wire.OpenWorldAuditWireError::WireMalformedCbor) => ()
     _ => fail("expected malformed CBOR refusal")
   }
   match
-    decode_open_world_observer_signing_anchor_envelope(
+    @wire.decode_open_world_observer_signing_anchor_envelope(
       b"\x7a\x7f\xff\xff\xff",
-      limits=OpenWorldAuditWireLimits::default(),
+      limits=@wire.OpenWorldAuditWireLimits::default(),
     ) {
-    Err(OpenWorldAuditWireError::WireMalformedCbor) => ()
+    Err(@wire.OpenWorldAuditWireError::WireMalformedCbor) => ()
     _ => fail("expected impossible declared CBOR length refusal")
   }
 }
@@ -259,7 +271,7 @@ test "wire anchor envelope encoded-size baseline" {
     @bft.Digest("wire-size-14"),
   )
   inspect(
-    encode_open_world_observer_signing_anchor_envelope(envelope).length(),
+    @wire.encode_open_world_observer_signing_anchor_envelope(envelope).length(),
     content=(
       #|400
     ),

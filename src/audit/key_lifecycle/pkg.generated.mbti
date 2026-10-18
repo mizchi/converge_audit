@@ -30,8 +30,10 @@ pub(all) enum HistoricalKeyAdmissionDecision {
   RejectHistoricalKeyScheme
   RejectHistoricalKeySignature
 } derive(Eq, @debug.Debug)
+pub fn HistoricalKeyAdmissionDecision::equal(Self, Self) -> Bool
+pub fn HistoricalKeyAdmissionDecision::not_equal(Self, Self) -> Bool
+pub fn HistoricalKeyAdmissionDecision::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

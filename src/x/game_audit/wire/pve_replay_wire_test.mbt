@@ -19,7 +19,7 @@ fn pve_wire_signed_event(
     author_key: @bft.PublicKey("key:" + peer_id),
     dep_hashes: digest_dependencies,
     event: {
-      id: { peer: @types.PeerId(peer_id), counter },
+      id: { peer: @types.PeerId(peer_id), counter, },
       deps: event_dependencies,
       lamport: counter + 1,
       op: @types.RowOp::Insert(tbl="wire.events", row_id=digest, values=[
@@ -34,7 +34,7 @@ fn pve_wire_signed_event(
 }
 
 ///|
-fn pve_wire_bundle() -> PveReplayBundle {
+fn pve_wire_bundle() -> @wire.PveReplayBundle {
   let session = "dungeon:wire-v1"
   let telegraph = pve_wire_signed_event(
     session,
@@ -130,25 +130,28 @@ fn pve_wire_bundle() -> PveReplayBundle {
               client_tick: 13,
               to_x: 5,
             },
-            observed: { input_digest: input.digest, received_tick: 14 },
+            observed: { input_digest: input.digest, received_tick: 14, },
           },
         ],
       },
     ],
-    asset_effects: [{ source: loot_source, effect: loot_effect }],
+    asset_effects: [{ source: loot_source, effect: loot_effect, }],
   }
 }
 
 ///|
 test "PvE replay bundle has a canonical versioned round trip" {
   let bundle = pve_wire_bundle()
-  let encoded = encode_pve_replay_bundle(bundle)
+  let encoded = @wire.encode_pve_replay_bundle(bundle)
   let decoded = match
-    decode_pve_replay_bundle(encoded, limits=PveReplayWireLimits::default()) {
+    @wire.decode_pve_replay_bundle(
+      encoded,
+      limits=@wire.PveReplayWireLimits::default(),
+    ) {
     Ok(value) => value
     Err(_) => fail("expected PvE replay bundle decode")
   }
-  assert_eq(encode_pve_replay_bundle(decoded), encoded)
+  assert_eq(@wire.encode_pve_replay_bundle(decoded), encoded)
   assert_eq(decoded.authority_peer_id, bundle.authority_peer_id)
   assert_eq(decoded.signed_checkpoint, bundle.signed_checkpoint)
   assert_eq(decoded.config, bundle.config)
@@ -174,67 +177,70 @@ test "PvE replay bundle has a canonical versioned round trip" {
 
 ///|
 test "PvE replay decoder rejects unsupported and noncanonical versions" {
-  let encoded = encode_pve_replay_bundle(pve_wire_bundle())
+  let encoded = @wire.encode_pve_replay_bundle(pve_wire_bundle())
   match
-    decode_pve_replay_bundle(
+    @wire.decode_pve_replay_bundle(
       replace_canonical_version(encoded, b'\x03'),
-      limits=PveReplayWireLimits::default(),
+      limits=@wire.PveReplayWireLimits::default(),
     ) {
-    Err(PveReplayWireError::PveWireUnsupportedVersion(3)) => ()
+    Err(@wire.PveReplayWireError::PveWireUnsupportedVersion(3)) => ()
     _ => fail("expected unsupported PvE wire version refusal")
   }
   match
-    decode_pve_replay_bundle(
+    @wire.decode_pve_replay_bundle(
       make_noncanonical_version(encoded),
-      limits=PveReplayWireLimits::default(),
+      limits=@wire.PveReplayWireLimits::default(),
     ) {
-    Err(PveReplayWireError::PveWireNonCanonicalEncoding) => ()
+    Err(@wire.PveReplayWireError::PveWireNonCanonicalEncoding) => ()
     _ => fail("expected noncanonical PvE wire refusal")
   }
 }
 
 ///|
 test "PvE replay decoder enforces byte and collection budgets" {
-  let encoded = encode_pve_replay_bundle(pve_wire_bundle())
-  let defaults = PveReplayWireLimits::default()
+  let encoded = @wire.encode_pve_replay_bundle(pve_wire_bundle())
+  let defaults = @wire.PveReplayWireLimits::default()
   match
-    decode_pve_replay_bundle(encoded, limits={
+    @wire.decode_pve_replay_bundle(encoded, limits={
       ..defaults,
       max_bundle_bytes: encoded.length() - 1,
     }) {
-    Err(PveReplayWireError::PveWireInputTooLarge(actual, maximum)) => {
+    Err(@wire.PveReplayWireError::PveWireInputTooLarge(actual, maximum)) => {
       assert_eq(actual, encoded.length())
       assert_eq(maximum, encoded.length() - 1)
     }
     _ => fail("expected PvE byte-budget refusal")
   }
   match
-    decode_pve_replay_bundle(encoded, limits={ ..defaults, max_players: 0 }) {
-    Err(PveReplayWireError::PveWirePlayersTooMany(1, 0)) => ()
+    @wire.decode_pve_replay_bundle(encoded, limits={
+      ..defaults,
+      max_players: 0,
+    }) {
+    Err(@wire.PveReplayWireError::PveWirePlayersTooMany(1, 0)) => ()
     _ => fail("expected PvE player-budget refusal")
   }
   match
-    decode_pve_replay_bundle(encoded, limits={
+    @wire.decode_pve_replay_bundle(encoded, limits={
       ..defaults,
       max_total_dodge_evidence: 0,
     }) {
-    Err(PveReplayWireError::PveWireDodgeEvidenceTooMany(1, 0)) => ()
+    Err(@wire.PveReplayWireError::PveWireDodgeEvidenceTooMany(1, 0)) => ()
     _ => fail("expected PvE evidence-budget refusal")
   }
   match
-    decode_pve_replay_bundle(encoded, limits={
+    @wire.decode_pve_replay_bundle(encoded, limits={
       ..defaults,
       max_asset_effects: 0,
     }) {
-    Err(PveReplayWireError::PveWireAssetEffectsTooMany(1, 0)) => ()
+    Err(@wire.PveReplayWireError::PveWireAssetEffectsTooMany(1, 0)) => ()
     _ => fail("expected PvE asset-effect-budget refusal")
   }
   match
-    decode_pve_replay_bundle(encoded, limits={
+    @wire.decode_pve_replay_bundle(encoded, limits={
       ..defaults,
       max_dependencies_per_event: 0,
     }) {
-    Err(PveReplayWireError::PveWireDependenciesTooMany(1, 0)) => ()
+    Err(@wire.PveReplayWireError::PveWireDependenciesTooMany(1, 0)) => ()
     _ => fail("expected PvE dependency-budget refusal")
   }
 }

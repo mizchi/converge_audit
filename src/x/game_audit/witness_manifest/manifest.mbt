@@ -22,7 +22,7 @@ pub fn serialize_replay_witness_session_manifest(
   witnesses~ : Array[ReplayWitnessIdentity],
   max_faults~ : Int,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "replay-witness-session-v1")
   append_field(buffer, game_manifest_digest.0)
   append_field(buffer, referee_key.0)

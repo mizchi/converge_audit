@@ -42,18 +42,18 @@ test "independent transparency checkpoint publishes exact audit and seal" {
     hidden_state_commitment: None,
   })
   let published = @authmap.AuthenticatedMap::new(hasher)
-  let audit_key = open_world_audit_transparency_plan_key(
+  let audit_key = @open_world.open_world_audit_transparency_plan_key(
     world_id~,
     audit_epoch=10,
   )
-  let seal_key = open_world_audit_transparency_seal_key(
+  let seal_key = @open_world.open_world_audit_transparency_seal_key(
     world_id~,
     audit_epoch=10,
   )
   ignore(
     published.put(
       audit_key,
-      open_world_audit_transparency_plan_value(
+      @open_world.open_world_audit_transparency_plan_value(
         audit_checkpoint_digest=audit.digest(),
       ),
     ),
@@ -61,7 +61,7 @@ test "independent transparency checkpoint publishes exact audit and seal" {
   ignore(
     published.put(
       seal_key,
-      open_world_audit_transparency_seal_value(
+      @open_world.open_world_audit_transparency_seal_value(
         audit_checkpoint_digest=audit.digest(),
         seal_checkpoint_digest=seal.digest(),
       ),
@@ -71,7 +71,7 @@ test "independent transparency checkpoint publishes exact audit and seal" {
     session_id: log_session_id,
     epoch: 4,
     previous_checkpoint: @bft.Digest("transparency-3"),
-    manifest_digest: open_world_audit_transparency_log_manifest(
+    manifest_digest: @open_world.open_world_audit_transparency_log_manifest(
       hasher,
       log_session_id~,
     ),
@@ -82,13 +82,13 @@ test "independent transparency checkpoint publishes exact audit and seal" {
   })
   let audit_proof = published.proof(audit_key).unwrap()
   let seal_proof = published.proof(seal_key).unwrap()
-  let envelope = OpenWorldAuditTransparencyEnvelope::{
+  let envelope = @open_world.OpenWorldAuditTransparencyEnvelope::{
     signed_checkpoint: publication,
     audit_membership_proof: audit_proof,
     seal_membership_proof: seal_proof,
   }
   match
-    open_open_world_audit_transparency_envelope(
+    @open_world.open_open_world_audit_transparency_envelope(
       hasher,
       verifier,
       expected_publisher_key=publisher.public_key(),
@@ -107,7 +107,7 @@ test "independent transparency checkpoint publishes exact audit and seal" {
     _ => fail("expected published audit transparency capability")
   }
   assert_true(
-    open_open_world_audit_transparency_envelope(
+    @open_world.open_open_world_audit_transparency_envelope(
       hasher,
       verifier,
       expected_publisher_key=publisher.public_key(),
@@ -120,12 +120,12 @@ test "independent transparency checkpoint publishes exact audit and seal" {
     )
     is AuditTransparencyRefused(AuditTransparencyExpectedCheckpointMismatch),
   )
-  let forged = OpenWorldAuditTransparencyEnvelope::{
+  let forged = @open_world.OpenWorldAuditTransparencyEnvelope::{
     ..envelope,
     seal_membership_proof: audit_proof,
   }
   assert_true(
-    open_open_world_audit_transparency_envelope(
+    @open_world.open_open_world_audit_transparency_envelope(
       hasher,
       verifier,
       expected_publisher_key=publisher.public_key(),

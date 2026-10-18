@@ -1,0 +1,81 @@
+///|
+predicate encounter_generation_roll_allowed_post(
+  expected_matches : Bool,
+  can_advance : Bool,
+  all_terminal_retired : Bool,
+  all_archive_released : Bool,
+  result : Bool,
+) {
+  if expected_matches && can_advance &&
+    all_terminal_retired && all_archive_released {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma admitted_encounter_generation_roll_requires_every_guard(
+  expected_matches : Bool,
+  can_advance : Bool,
+  all_terminal_retired : Bool,
+  all_archive_released : Bool,
+) where {
+  proof_require: encounter_generation_roll_allowed_post(
+    expected_matches, can_advance, all_terminal_retired, all_archive_released,
+    true,
+  ),
+  proof_ensure: expected_matches == true,
+  proof_ensure: can_advance == true,
+  proof_ensure: all_terminal_retired == true,
+  proof_ensure: all_archive_released == true,
+} {
+}
+
+///|
+pub lemma generation_roll_with_stale_expected_value_is_rejected(
+  can_advance : Bool,
+  all_terminal_retired : Bool,
+  all_archive_released : Bool,
+) where {
+  proof_ensure: encounter_generation_roll_allowed_post(
+    false, can_advance, all_terminal_retired, all_archive_released, false,
+  ),
+} {
+}
+
+///|
+pub lemma generation_roll_without_advance_capacity_is_rejected(
+  expected_matches : Bool,
+  all_terminal_retired : Bool,
+  all_archive_released : Bool,
+) where {
+  proof_ensure: encounter_generation_roll_allowed_post(
+    expected_matches, false, all_terminal_retired, all_archive_released, false,
+  ),
+} {
+}
+
+///|
+pub lemma generation_roll_with_unretired_terminal_state_is_rejected(
+  expected_matches : Bool,
+  can_advance : Bool,
+  all_archive_released : Bool,
+) where {
+  proof_ensure: encounter_generation_roll_allowed_post(
+    expected_matches, can_advance, false, all_archive_released, false,
+  ),
+} {
+}
+
+///|
+pub lemma generation_roll_with_unreleased_archive_is_rejected(
+  expected_matches : Bool,
+  can_advance : Bool,
+  all_terminal_retired : Bool,
+) where {
+  proof_ensure: encounter_generation_roll_allowed_post(
+    expected_matches, can_advance, all_terminal_retired, false, false,
+  ),
+} {
+}

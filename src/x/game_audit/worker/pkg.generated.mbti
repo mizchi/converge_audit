@@ -38,6 +38,18 @@ pub fn audit_classify_central_replay(Bool, Bool, Bool, Bool, Bool) -> String
 
 pub fn audit_classify_open_world_observer_signing(Bool, Bool, Bool) -> String
 
+pub fn audit_encounter_empty_receipt_retire_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_encounter_generation_roll_allowed(Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_encounter_recovery_forget_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_encounter_recovery_release_allowed(Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_encounter_terminal_cleanup_allowed(Bool, Int, Int, Bool) -> Bool
+
+pub fn audit_encounter_termination_allowed(Bool, Bool, Bool, Bool, Int, Int) -> Bool
+
 pub fn audit_evidence_case_source_resolution_allowed(Bool, Bool, Bool, Bool) -> Bool
 
 pub fn audit_evidence_lineage_case_admission_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
@@ -103,4 +115,3 @@ pub fn audit_verify_pvp_replay_bundle(String, String, String, String) -> String
 // Type aliases
 
 // Traits
-

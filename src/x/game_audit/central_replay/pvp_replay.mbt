@@ -216,7 +216,7 @@ fn pvp_witness_participants(
 ) -> Array[@attestation.Participant] {
   let participants : Array[@attestation.Participant] = []
   for witness in bundle.witnesses {
-    participants.push({ id: witness.id, key: witness.key })
+    participants.push({ id: witness.id, key: witness.key, })
   }
   participants
 }

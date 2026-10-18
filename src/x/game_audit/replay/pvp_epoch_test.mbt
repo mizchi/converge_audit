@@ -8,7 +8,7 @@ priv struct TestPvpCommand {
 }
 
 ///|
-fn pvp_config(damage? : Int = 6) -> PvpEpochConfig {
+fn pvp_config(damage? : Int = 6) -> @replay.PvpEpochConfig {
   {
     match_id: "match-1",
     epoch: 1,
@@ -26,15 +26,15 @@ fn pvp_config(damage? : Int = 6) -> PvpEpochConfig {
 }
 
 ///|
-fn pvp_teams() -> Array[PvpTeam] {
+fn pvp_teams() -> Array[@replay.PvpTeam] {
   [
-    { team_id: "blue", initial_score: 0 },
-    { team_id: "orange", initial_score: 0 },
+    { team_id: "blue", initial_score: 0, },
+    { team_id: "orange", initial_score: 0, },
   ]
 }
 
 ///|
-fn pvp_players() -> Array[PvpPlayer] {
+fn pvp_players() -> Array[@replay.PvpPlayer] {
   [
     {
       player_id: "alice",
@@ -56,10 +56,10 @@ fn pvp_players() -> Array[PvpPlayer] {
 ///|
 fn pvp_witnesses() -> Array[@witness_manifest.ReplayWitnessIdentity] {
   [
-    { id: "witness-0", key: @bft.PublicKey("witness-0") },
-    { id: "witness-1", key: @bft.PublicKey("witness-1") },
-    { id: "witness-2", key: @bft.PublicKey("witness-2") },
-    { id: "witness-3", key: @bft.PublicKey("witness-3") },
+    { id: "witness-0", key: @bft.PublicKey("witness-0"), },
+    { id: "witness-1", key: @bft.PublicKey("witness-1"), },
+    { id: "witness-2", key: @bft.PublicKey("witness-2"), },
+    { id: "witness-3", key: @bft.PublicKey("witness-3"), },
   ]
 }
 
@@ -80,7 +80,7 @@ fn accept_pvp_event(
 fn pvp_transcript(
   specs : Array[TestPvpCommand],
   damage? : Int = 6,
-) -> Array[PvpCommandEvidence] raise Error {
+) -> Array[@replay.PvpCommandEvidence] raise Error {
   let config = pvp_config(damage~)
   let hasher = @bft.FnvHasher::new()
   let adapter = @bft.AuditAdapter::new(
@@ -96,14 +96,14 @@ fn pvp_transcript(
   )
   assert_true(adapter.register_peer(@types.PeerId("alice"), alice.public_key()))
   assert_true(adapter.register_peer(@types.PeerId("bob"), bob.public_key()))
-  let transcript : Array[PvpCommandEvidence] = []
+  let transcript : Array[@replay.PvpCommandEvidence] = []
   for index, spec in specs {
     let signer : &@bft.Signer = if spec.player_id == "alice" {
       alice
     } else {
       bob
     }
-    let intent = PvpCommandIntent::{
+    let intent = @replay.PvpCommandIntent::{
       match_id: config.match_id,
       epoch: config.epoch,
       base_checkpoint_digest: config.previous_checkpoint,
@@ -112,7 +112,7 @@ fn pvp_transcript(
       move_to_x: spec.to_x,
       attack_target_id: spec.target_id,
     }
-    let input_event = make_pvp_command_event(
+    let input_event = @replay.make_pvp_command_event(
       peer=@types.PeerId(spec.player_id),
       counter=spec.counter,
       lamport=index * 2,
@@ -120,11 +120,11 @@ fn pvp_transcript(
       intent~,
     )
     let input = accept_pvp_event(adapter, signer, input_event, [])
-    let observed = PvpCommandReceipt::{
+    let observed = @replay.PvpCommandReceipt::{
       command_digest: input.digest(),
       received_tick: spec.tick + 1,
     }
-    let receipt_event = make_pvp_command_receipt_event(
+    let receipt_event = @replay.make_pvp_command_receipt_event(
       peer=@types.PeerId("referee"),
       counter=index,
       lamport=index * 2 + 1,
@@ -134,17 +134,17 @@ fn pvp_transcript(
     let receipt = accept_pvp_event(adapter, referee, receipt_event, [
       input.digest(),
     ])
-    transcript.push({ input, receipt, intent, observed })
+    transcript.push({ input, receipt, intent, observed, })
   }
   transcript
 }
 
 ///|
 fn prepare_pvp(
-  transcript : Array[PvpCommandEvidence],
+  transcript : Array[@replay.PvpCommandEvidence],
   damage? : Int = 6,
-) -> PvpEpochCandidateResult {
-  prepare_pvp_epoch(
+) -> @replay.PvpEpochCandidateResult {
+  @replay.prepare_pvp_epoch(
     @bft.FnvHasher::new(),
     session_id="pvp-session",
     referee_key=@bft.PublicKey("referee"),
@@ -159,7 +159,7 @@ fn prepare_pvp(
 
 ///|
 fn pvp_checkpoint(
-  candidate : PvpEpochCandidate,
+  candidate : @replay.PvpEpochCandidate,
   public_state_root? : @bft.Digest,
 ) -> @checkpoint.VerifiedCheckpoint raise Error {
   let hasher = @bft.FnvHasher::new()
@@ -191,10 +191,34 @@ fn pvp_checkpoint(
 ///|
 test "simultaneous PvP wipe and roots are independent of transcript order" {
   let transcript = pvp_transcript([
-    { player_id: "alice", counter: 0, tick: 0, to_x: 0, target_id: Some("bob") },
-    { player_id: "bob", counter: 0, tick: 0, to_x: 2, target_id: Some("alice") },
-    { player_id: "alice", counter: 1, tick: 1, to_x: 0, target_id: Some("bob") },
-    { player_id: "bob", counter: 1, tick: 1, to_x: 2, target_id: Some("alice") },
+    {
+      player_id: "alice",
+      counter: 0,
+      tick: 0,
+      to_x: 0,
+      target_id: Some("bob"),
+    },
+    {
+      player_id: "bob",
+      counter: 0,
+      tick: 0,
+      to_x: 2,
+      target_id: Some("alice"),
+    },
+    {
+      player_id: "alice",
+      counter: 1,
+      tick: 1,
+      to_x: 0,
+      target_id: Some("bob"),
+    },
+    {
+      player_id: "bob",
+      counter: 1,
+      tick: 1,
+      to_x: 2,
+      target_id: Some("alice"),
+    },
   ])
   let reverse = [transcript[3], transcript[2], transcript[1], transcript[0]]
   match (prepare_pvp(transcript), prepare_pvp(reverse)) {
@@ -204,15 +228,15 @@ test "simultaneous PvP wipe and roots are independent of transcript order" {
       assert_eq(left.event_root(), right.event_root())
       assert_eq(left.public_state_root(), right.public_state_root())
       let checkpoint = pvp_checkpoint(left)
-      match finalize_pvp_epoch(left, checkpoint) {
+      match @replay.finalize_pvp_epoch(left, checkpoint) {
         PvpEpochFinalized(resolution) => {
           assert_eq(resolution.player_states(), [
-            { player_id: "alice", team_id: "blue", position_x: 0, hp: 0 },
-            { player_id: "bob", team_id: "orange", position_x: 2, hp: 0 },
+            { player_id: "alice", team_id: "blue", position_x: 0, hp: 0, },
+            { player_id: "bob", team_id: "orange", position_x: 2, hp: 0, },
           ])
           assert_eq(resolution.team_states(), [
-            { team_id: "orange", score: 1 },
-            { team_id: "blue", score: 1 },
+            { team_id: "orange", score: 1, },
+            { team_id: "blue", score: 1, },
           ])
           assert_eq(resolution.accepted_command_count(), 4)
           assert_eq(resolution.equivocator_ids(), [])
@@ -231,20 +255,26 @@ test "simultaneous PvP wipe and roots are independent of transcript order" {
 ///|
 test "movement resolves before attacks so telegraphed range has client-time agency" {
   let transcript = pvp_transcript([
-    { player_id: "alice", counter: 0, tick: 0, to_x: 0, target_id: Some("bob") },
-    { player_id: "bob", counter: 0, tick: 0, to_x: 5, target_id: None },
+    {
+      player_id: "alice",
+      counter: 0,
+      tick: 0,
+      to_x: 0,
+      target_id: Some("bob"),
+    },
+    { player_id: "bob", counter: 0, tick: 0, to_x: 5, target_id: None, },
   ])
   match prepare_pvp(transcript) {
     PvpCandidateReady(candidate) =>
-      match finalize_pvp_epoch(candidate, pvp_checkpoint(candidate)) {
+      match @replay.finalize_pvp_epoch(candidate, pvp_checkpoint(candidate)) {
         PvpEpochFinalized(resolution) => {
           assert_eq(resolution.player_states(), [
-            { player_id: "alice", team_id: "blue", position_x: 0, hp: 10 },
-            { player_id: "bob", team_id: "orange", position_x: 5, hp: 10 },
+            { player_id: "alice", team_id: "blue", position_x: 0, hp: 10, },
+            { player_id: "bob", team_id: "orange", position_x: 5, hp: 10, },
           ])
           assert_eq(resolution.team_states(), [
-            { team_id: "orange", score: 0 },
-            { team_id: "blue", score: 0 },
+            { team_id: "orange", score: 0, },
+            { team_id: "blue", score: 0, },
           ])
         }
         _ => fail("moving-target epoch did not finalize")
@@ -264,7 +294,7 @@ test "two commands in one player tick become an order-independent equivocation" 
         to_x: 0,
         target_id: Some("bob"),
       },
-      { player_id: "alice", counter: 1, tick: 0, to_x: 3, target_id: None },
+      { player_id: "alice", counter: 1, tick: 0, to_x: 3, target_id: None, },
       {
         player_id: "bob",
         counter: 0,
@@ -279,17 +309,17 @@ test "two commands in one player tick become an order-independent equivocation" 
   match (prepare_pvp(transcript, damage=10), prepare_pvp(reverse, damage=10)) {
     (PvpCandidateReady(left), PvpCandidateReady(right)) => {
       assert_eq(left.public_state_root(), right.public_state_root())
-      match finalize_pvp_epoch(left, pvp_checkpoint(left)) {
+      match @replay.finalize_pvp_epoch(left, pvp_checkpoint(left)) {
         PvpEpochFinalized(resolution) => {
           assert_eq(resolution.equivocator_ids(), ["alice"])
           assert_eq(resolution.accepted_command_count(), 1)
           assert_eq(resolution.player_states(), [
-            { player_id: "alice", team_id: "blue", position_x: 0, hp: 0 },
-            { player_id: "bob", team_id: "orange", position_x: 2, hp: 10 },
+            { player_id: "alice", team_id: "blue", position_x: 0, hp: 0, },
+            { player_id: "bob", team_id: "orange", position_x: 2, hp: 10, },
           ])
           assert_eq(resolution.team_states(), [
-            { team_id: "orange", score: 1 },
-            { team_id: "blue", score: 0 },
+            { team_id: "orange", score: 1, },
+            { team_id: "blue", score: 0, },
           ])
         }
         _ => fail("equivocation epoch did not finalize")
@@ -302,20 +332,26 @@ test "two commands in one player tick become an order-independent equivocation" 
 ///|
 test "PvP checkpoint must commit the replayed public state" {
   let transcript = pvp_transcript([
-    { player_id: "alice", counter: 0, tick: 0, to_x: 0, target_id: Some("bob") },
+    {
+      player_id: "alice",
+      counter: 0,
+      tick: 0,
+      to_x: 0,
+      target_id: Some("bob"),
+    },
   ])
   match prepare_pvp(transcript) {
     PvpCandidateReady(candidate) =>
       assert_eq(
-        finalize_pvp_epoch(
+        @replay.finalize_pvp_epoch(
           candidate,
           pvp_checkpoint(
             candidate,
             public_state_root=@bft.Digest("forged-state"),
           ),
         ),
-        PvpEpochFinalizeResult::PvpFinalizeRefused(
-          PvpEpochRefusal::CheckpointPublicStateRootMismatch,
+        @replay.PvpEpochFinalizeResult::PvpFinalizeRefused(
+          @replay.PvpEpochRefusal::CheckpointPublicStateRootMismatch,
         ),
       )
     _ => fail("valid PvP transcript did not prepare")
@@ -328,7 +364,7 @@ test "PvP game manifest is independent of team and player roster order" {
   let teams = pvp_teams()
   let players = pvp_players()
   assert_eq(
-    pvp_epoch_game_manifest(
+    @replay.pvp_epoch_game_manifest(
       hasher,
       "pvp-session",
       @bft.PublicKey("referee"),
@@ -336,7 +372,7 @@ test "PvP game manifest is independent of team and player roster order" {
       teams,
       players,
     ),
-    pvp_epoch_game_manifest(
+    @replay.pvp_epoch_game_manifest(
       hasher,
       "pvp-session",
       @bft.PublicKey("referee"),
@@ -360,12 +396,12 @@ test "out-of-arena movement is rejected before unsafe distance arithmetic" {
   ])
   match prepare_pvp(transcript) {
     PvpCandidateReady(candidate) =>
-      match finalize_pvp_epoch(candidate, pvp_checkpoint(candidate)) {
+      match @replay.finalize_pvp_epoch(candidate, pvp_checkpoint(candidate)) {
         PvpEpochFinalized(resolution) => {
           assert_eq(resolution.accepted_command_count(), 0)
           assert_eq(resolution.player_states(), [
-            { player_id: "alice", team_id: "blue", position_x: 0, hp: 10 },
-            { player_id: "bob", team_id: "orange", position_x: 2, hp: 10 },
+            { player_id: "alice", team_id: "blue", position_x: 0, hp: 10, },
+            { player_id: "bob", team_id: "orange", position_x: 2, hp: 10, },
           ])
         }
         _ => fail("bounded invalid-command epoch did not finalize")
@@ -377,11 +413,23 @@ test "out-of-arena movement is rejected before unsafe distance arithmetic" {
 ///|
 test "PvP cooldown suppresses only the illegal attack and commits the violator" {
   let transcript = pvp_transcript([
-    { player_id: "alice", counter: 0, tick: 0, to_x: 0, target_id: Some("bob") },
-    { player_id: "alice", counter: 1, tick: 1, to_x: 1, target_id: Some("bob") },
+    {
+      player_id: "alice",
+      counter: 0,
+      tick: 0,
+      to_x: 0,
+      target_id: Some("bob"),
+    },
+    {
+      player_id: "alice",
+      counter: 1,
+      tick: 1,
+      to_x: 1,
+      target_id: Some("bob"),
+    },
   ])
   match
-    prepare_pvp_epoch(
+    @replay.prepare_pvp_epoch(
       @bft.FnvHasher::new(),
       session_id="pvp-session",
       referee_key=@bft.PublicKey("referee"),
@@ -394,11 +442,11 @@ test "PvP cooldown suppresses only the illegal attack and commits the violator" 
       attack_cooldown_ticks=2,
     ) {
     PvpCandidateReady(candidate) =>
-      match finalize_pvp_epoch(candidate, pvp_checkpoint(candidate)) {
+      match @replay.finalize_pvp_epoch(candidate, pvp_checkpoint(candidate)) {
         PvpEpochFinalized(resolution) => {
           assert_eq(resolution.player_states(), [
-            { player_id: "alice", team_id: "blue", position_x: 1, hp: 10 },
-            { player_id: "bob", team_id: "orange", position_x: 2, hp: 4 },
+            { player_id: "alice", team_id: "blue", position_x: 1, hp: 10, },
+            { player_id: "bob", team_id: "orange", position_x: 2, hp: 4, },
           ])
           assert_eq(resolution.cooldown_violator_ids(), ["alice"])
           assert_eq(resolution.accepted_command_count(), 2)
@@ -411,14 +459,14 @@ test "PvP cooldown suppresses only the illegal attack and commits the violator" 
 
 ///|
 test "PvP objective scores only uncontested living-team occupation" {
-  let config = { ..pvp_config(), ticks_per_epoch: 3 }
-  let objective = PvpObjectiveRule::{
+  let config = { ..pvp_config(), ticks_per_epoch: 3, }
+  let objective = @replay.PvpObjectiveRule::{
     center_x: 0,
     radius: 1,
     score_per_tick: 2,
   }
   match
-    prepare_pvp_epoch(
+    @replay.prepare_pvp_epoch(
       @bft.FnvHasher::new(),
       session_id="pvp-session",
       referee_key=@bft.PublicKey("referee"),
@@ -431,18 +479,18 @@ test "PvP objective scores only uncontested living-team occupation" {
       objective_rule=Some(objective),
     ) {
     PvpCandidateReady(candidate) =>
-      match finalize_pvp_epoch(candidate, pvp_checkpoint(candidate)) {
+      match @replay.finalize_pvp_epoch(candidate, pvp_checkpoint(candidate)) {
         PvpEpochFinalized(resolution) =>
           assert_eq(resolution.team_states(), [
-            { team_id: "orange", score: 0 },
-            { team_id: "blue", score: 6 },
+            { team_id: "orange", score: 0, },
+            { team_id: "blue", score: 6, },
           ])
         _ => fail("objective epoch did not finalize")
       }
     _ => fail("objective epoch did not prepare")
   }
   assert_true(
-    pvp_epoch_game_manifest(
+    @replay.pvp_epoch_game_manifest(
       @bft.FnvHasher::new(),
       "pvp-session",
       @bft.PublicKey("referee"),
@@ -451,7 +499,7 @@ test "PvP objective scores only uncontested living-team occupation" {
       pvp_players(),
       objective_rule=Some(objective),
     ) !=
-    pvp_epoch_game_manifest(
+    @replay.pvp_epoch_game_manifest(
       @bft.FnvHasher::new(),
       "pvp-session",
       @bft.PublicKey("referee"),

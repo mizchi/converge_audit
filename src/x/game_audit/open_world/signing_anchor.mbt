@@ -4,7 +4,7 @@ pub fn open_world_observer_signing_anchor_log_manifest(
   hasher : &@bft.Hasher,
   log_session_id~ : String,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-observer-signing-anchor-log-v1")
   append_field(buffer, log_session_id)
   hasher.hash_string(buffer.to_string())
@@ -15,7 +15,7 @@ pub fn open_world_observer_signing_anchor_log_manifest(
 pub fn open_world_observer_signing_anchor_key(
   anchor : OpenWorldObserverSigningAnchor,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-observer-signing-anchor-key-v1")
   append_field(buffer, anchor.observer_id)
   append_field(buffer, anchor.signer_key.0)
@@ -27,7 +27,7 @@ pub fn open_world_observer_signing_anchor_key(
 pub fn open_world_observer_signing_anchor_value(
   anchor : OpenWorldObserverSigningAnchor,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-observer-signing-anchor-value-v1")
   append_field(buffer, anchor.root.0)
   append_field(buffer, anchor.size.to_string())

@@ -1,7 +1,7 @@
 ///|
 test "lineage transition commitment binds its parent and Unicode fields" {
   let hasher = @bft.FnvHasher::new()
-  let transition : InventoryLineageTransition = {
+  let transition : @inventory_transition.InventoryLineageTransition = {
     asset_id: "asset-雪😀",
     origin_receipt_digest: @bft.Digest("origin-digest"),
     from_owner: "alice-猫",
@@ -11,14 +11,18 @@ test "lineage transition commitment binds its parent and Unicode fields" {
     source_event: @bft.Digest("transfer-event"),
     previous_lineage_root: @bft.Digest("previous-root"),
   }
-  assert_true(inventory_lineage_transition_valid(transition))
+  assert_true(
+    @inventory_transition.inventory_lineage_transition_valid(transition),
+  )
   assert_eq(
-    inventory_lineage_transition_root(hasher, transition),
-    hasher.hash_string(serialize_inventory_lineage_transition(transition)),
+    @inventory_transition.inventory_lineage_transition_root(hasher, transition),
+    hasher.hash_string(
+      @inventory_transition.serialize_inventory_lineage_transition(transition),
+    ),
   )
   assert_not_eq(
-    inventory_lineage_transition_root(hasher, transition),
-    inventory_lineage_transition_root(hasher, {
+    @inventory_transition.inventory_lineage_transition_root(hasher, transition),
+    @inventory_transition.inventory_lineage_transition_root(hasher, {
       ..transition,
       previous_lineage_root: @bft.Digest("other-root"),
     }),
@@ -27,7 +31,7 @@ test "lineage transition commitment binds its parent and Unicode fields" {
 
 ///|
 test "lineage transition rejects an invalid ownership edge" {
-  let transition : InventoryLineageTransition = {
+  let transition : @inventory_transition.InventoryLineageTransition = {
     asset_id: "asset-1",
     origin_receipt_digest: @bft.Digest("origin-digest"),
     from_owner: "alice",
@@ -37,5 +41,7 @@ test "lineage transition rejects an invalid ownership edge" {
     source_event: @bft.Digest("transfer-event"),
     previous_lineage_root: @bft.Digest("previous-root"),
   }
-  assert_false(inventory_lineage_transition_valid(transition))
+  assert_false(
+    @inventory_transition.inventory_lineage_transition_valid(transition),
+  )
 }

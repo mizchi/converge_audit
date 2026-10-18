@@ -7,7 +7,7 @@ fn item(
   source_event? : @bft.Digest = @bft.Digest("unauthenticated-source"),
   output_index? : Int = 0,
 ) -> @market.ItemReceipt {
-  { asset_id, recipient_id, item_type, quantity, source_event, output_index }
+  { asset_id, recipient_id, item_type, quantity, source_event, output_index, }
 }
 
 ///|
@@ -104,7 +104,7 @@ fn replayed_transfer(
   session_id? : String = "dungeon-42",
   counter? : Int = 1,
   effect_author? : String = "game-server",
-) -> (AssetTransfer, @replay.ReplayedAssetEffect) raise Error {
+) -> (@inventory.AssetTransfer, @replay.ReplayedAssetEffect) raise Error {
   let effect = @replay.AssetEffect::Transfer(
     asset_id~,
     from_owner~,
@@ -118,7 +118,7 @@ fn replayed_transfer(
     effect_author~,
   )
   (
-    AssetTransfer::{
+    @inventory.AssetTransfer::{
       asset_id,
       from_owner,
       to_owner,
@@ -131,11 +131,11 @@ fn replayed_transfer(
 
 ///|
 fn plan_or_fail(
-  inventory : InventoryIndex,
+  inventory : @inventory.InventoryIndex,
   creations : @market.ReceiptBatch,
-  transfers : Array[AssetTransfer],
+  transfers : Array[@inventory.AssetTransfer],
   effects : Array[@replay.ReplayedAssetEffect],
-) -> InventoryPlan raise Error {
+) -> @inventory.InventoryPlan raise Error {
   match inventory.plan(creations, transfers, effects~) {
     Planned(plan) => plan
     PlanRejected(_) => fail("expected valid inventory plan")
@@ -144,8 +144,8 @@ fn plan_or_fail(
 
 ///|
 fn finalized_plan(
-  inventory : InventoryIndex,
-  plan : InventoryPlan,
+  inventory : @inventory.InventoryIndex,
+  plan : @inventory.InventoryPlan,
   epoch : Int,
   previous_override? : @bft.Digest? = None,
   state_override? : @bft.Digest? = None,
@@ -185,7 +185,7 @@ fn finalized_plan(
     hasher,
     verifier,
     prepared,
-    [{ id: "checkpoint-auditor", key: @bft.PublicKey("checkpoint-auditor") }],
+    [{ id: "checkpoint-auditor", key: @bft.PublicKey("checkpoint-auditor"), }],
   )
   let auditor = @bft.MockSigner::new("checkpoint-auditor")
   match
@@ -208,8 +208,8 @@ fn finalized_plan(
 }
 
 ///|
-fn new_inventory() -> InventoryIndex {
-  InventoryIndex::new(
+fn new_inventory() -> @inventory.InventoryIndex {
+  @inventory.InventoryIndex::new(
     @bft.FnvHasher::new(),
     session_id="dungeon-42",
     genesis_checkpoint=@bft.Digest("genesis"),
@@ -272,14 +272,17 @@ test "committed creation is indexed and cannot be created again" {
   let plan = plan_or_fail(inventory, creations, [], [replayed])
   assert_eq(plan.replay_manifest_digest(), Some(replayed.manifest_digest()))
   let finalized = finalized_plan(inventory, plan, 1)
-  assert_eq(inventory.commit(finalized, plan), InventoryCommitResult::Committed)
+  assert_eq(
+    inventory.commit(finalized, plan),
+    @inventory.InventoryCommitResult::Committed,
+  )
   let record = inventory.get("asset-1").unwrap()
   assert_eq(record.owner_id, "alice")
   assert_eq(record.version, 0)
   assert_eq(inventory.last_checkpoint(), finalized.digest())
   assert_eq(
     inventory.commit(finalized, plan),
-    InventoryCommitResult::AlreadyCommitted,
+    @inventory.InventoryCommitResult::AlreadyCommitted,
   )
   match inventory.plan(batch([receipt]), [], effects=[replayed]) {
     PlanRejected(DuplicateAsset("asset-1")) => ()
@@ -301,25 +304,28 @@ test "authorized transfer updates owner version and authenticated proof" {
   let origin_record = inventory.get("asset-1").unwrap()
   assert_eq(
     origin_record.lineage_root,
-    inventory_origin_lineage_root(hasher, receipt),
+    @inventory.inventory_origin_lineage_root(hasher, receipt),
   )
   let origin_proof = inventory.proof("asset-1").unwrap()
   assert_false(
-    inventory_proof_matches_origin_receipt(
+    @inventory.inventory_proof_matches_origin_receipt(
       hasher,
-      { ..origin_proof, record: { ..origin_proof.record, owner_id: "mallory" } },
+      {
+        ..origin_proof,
+        record: { ..origin_proof.record, owner_id: "mallory", },
+      },
       receipt,
     ),
   )
   let (transfer, transfer_effect) = replayed_transfer()
-  let transition = asset_lineage_transition(origin_record, transfer)
+  let transition = @inventory.asset_lineage_transition(origin_record, transfer)
   let transfer_plan = plan_or_fail(inventory, batch([]), [transfer], [
     transfer_effect,
   ])
   let finalized = finalized_plan(inventory, transfer_plan, 2)
   assert_eq(
     inventory.commit(finalized, transfer_plan),
-    InventoryCommitResult::Committed,
+    @inventory.InventoryCommitResult::Committed,
   )
   let record = inventory.get("asset-1").unwrap()
   assert_eq(record.owner_id, "bob")
@@ -329,20 +335,24 @@ test "authorized transfer updates owner version and authenticated proof" {
   assert_eq(record.last_event, transfer.source_event)
   assert_eq(
     record.lineage_root,
-    asset_lineage_transition_root(hasher, transition),
+    @inventory.asset_lineage_transition_root(hasher, transition),
   )
   assert_true(record.lineage_root != origin_record.lineage_root)
   let proof = inventory.proof("asset-1").unwrap()
-  assert_true(verify_inventory_proof(hasher, inventory.root(), proof))
-  assert_true(inventory_proof_matches_origin_receipt(hasher, proof, receipt))
+  assert_true(
+    @inventory.verify_inventory_proof(hasher, inventory.root(), proof),
+  )
+  assert_true(
+    @inventory.inventory_proof_matches_origin_receipt(hasher, proof, receipt),
+  )
   assert_false(
-    inventory_proof_matches_origin_receipt(hasher, proof, {
+    @inventory.inventory_proof_matches_origin_receipt(hasher, proof, {
       ..receipt,
       recipient_id: "mallory",
     }),
   )
   assert_true(
-    market_accepts_inventory_listing(
+    @inventory.market_accepts_inventory_listing(
       hasher,
       finalized,
       proof,
@@ -351,7 +361,7 @@ test "authorized transfer updates owner version and authenticated proof" {
     ),
   )
   assert_false(
-    market_accepts_inventory_listing(
+    @inventory.market_accepts_inventory_listing(
       hasher,
       finalized,
       proof,
@@ -402,12 +412,12 @@ test "invalid recipient same owner and unreplayed source are rejected" {
     inventory.commit(finalized_plan(inventory, create_plan, 1), create_plan),
   )
   let (valid, _) = replayed_transfer()
-  match inventory.plan(batch([]), [{ ..valid, to_owner: "" }], effects=[]) {
+  match inventory.plan(batch([]), [{ ..valid, to_owner: "", }], effects=[]) {
     PlanRejected(InvalidTransfer(0, InvalidRecipient)) => ()
     _ => fail("empty recipient unexpectedly accepted")
   }
   match
-    inventory.plan(batch([]), [{ ..valid, to_owner: "alice" }], effects=[]) {
+    inventory.plan(batch([]), [{ ..valid, to_owner: "alice", }], effects=[]) {
     PlanRejected(InvalidTransfer(0, SameOwner)) => ()
     _ => fail("same-owner transfer unexpectedly accepted")
   }
@@ -452,15 +462,18 @@ test "checkpoint root mismatch and stale competing plan do not commit" {
   )
   assert_eq(
     inventory.commit(wrong_root, first),
-    InventoryCommitResult::PublicStateRootMismatch,
+    @inventory.InventoryCommitResult::PublicStateRootMismatch,
   )
   assert_eq(inventory.size(), 0)
   let accepted = finalized_plan(inventory, first, 1)
-  assert_eq(inventory.commit(accepted, first), InventoryCommitResult::Committed)
+  assert_eq(
+    inventory.commit(accepted, first),
+    @inventory.InventoryCommitResult::Committed,
+  )
   let stale = finalized_plan(new_inventory(), competing, 1)
   assert_eq(
     inventory.commit(stale, competing),
-    InventoryCommitResult::StalePlan,
+    @inventory.InventoryCommitResult::StalePlan,
   )
   assert_eq(inventory.get("asset-b"), None)
 }
@@ -479,7 +492,7 @@ test "all checkpoint bindings fail closed without mutating inventory" {
   )
   assert_eq(
     inventory.commit(wrong_session, plan),
-    InventoryCommitResult::SessionMismatch,
+    @inventory.InventoryCommitResult::SessionMismatch,
   )
   let wrong_previous = finalized_plan(
     inventory,
@@ -489,12 +502,12 @@ test "all checkpoint bindings fail closed without mutating inventory" {
   )
   assert_eq(
     inventory.commit(wrong_previous, plan),
-    InventoryCommitResult::PreviousCheckpointMismatch,
+    @inventory.InventoryCommitResult::PreviousCheckpointMismatch,
   )
   let old_epoch = finalized_plan(inventory, plan, -1)
   assert_eq(
     inventory.commit(old_epoch, plan),
-    InventoryCommitResult::EpochRegression,
+    @inventory.InventoryCommitResult::EpochRegression,
   )
   let wrong_manifest = finalized_plan(
     inventory,
@@ -504,7 +517,7 @@ test "all checkpoint bindings fail closed without mutating inventory" {
   )
   assert_eq(
     inventory.commit(wrong_manifest, plan),
-    InventoryCommitResult::ReplayManifestMismatch,
+    @inventory.InventoryCommitResult::ReplayManifestMismatch,
   )
   let wrong_delta = finalized_plan(
     inventory,
@@ -514,7 +527,7 @@ test "all checkpoint bindings fail closed without mutating inventory" {
   )
   assert_eq(
     inventory.commit(wrong_delta, plan),
-    InventoryCommitResult::AssetDeltaRootMismatch,
+    @inventory.InventoryCommitResult::AssetDeltaRootMismatch,
   )
   let wrong_state = finalized_plan(
     inventory,
@@ -524,7 +537,7 @@ test "all checkpoint bindings fail closed without mutating inventory" {
   )
   assert_eq(
     inventory.commit(wrong_state, plan),
-    InventoryCommitResult::PublicStateRootMismatch,
+    @inventory.InventoryCommitResult::PublicStateRootMismatch,
   )
   assert_eq(inventory.root(), original_root)
   assert_eq(inventory.size(), 0)
@@ -539,12 +552,14 @@ test "inventory membership proof binds current owner and record" {
   ignore(inventory.commit(finalized_plan(inventory, plan, 1), plan))
   let proof = inventory.proof("asset-1").unwrap()
   assert_false(
-    verify_inventory_proof(hasher, inventory.root(), {
+    @inventory.verify_inventory_proof(hasher, inventory.root(), {
       ..proof,
-      record: { ..proof.record, owner_id: "mallory" },
+      record: { ..proof.record, owner_id: "mallory", },
     }),
   )
-  assert_false(verify_inventory_proof(hasher, @bft.Digest("wrong-root"), proof))
+  assert_false(
+    @inventory.verify_inventory_proof(hasher, @bft.Digest("wrong-root"), proof),
+  )
 }
 
 ///|
@@ -570,17 +585,23 @@ test "inventory origin plan exposes both canonical hash stages" {
     source_event: @bft.Digest("loot-event-1"),
     output_index: 3,
   }
-  let plan = inventory_origin_verification_plan(hasher, receipt)
-  assert_eq(plan.receipt_statement, serialize_inventory_origin_receipt(receipt))
+  let plan = @inventory.inventory_origin_verification_plan(hasher, receipt)
+  assert_eq(
+    plan.receipt_statement,
+    @inventory.serialize_inventory_origin_receipt(receipt),
+  )
   assert_eq(plan.receipt_digest, hasher.hash_string(plan.receipt_statement))
   assert_eq(
     plan.lineage_statement,
-    serialize_inventory_origin_lineage(plan.receipt_digest),
+    @inventory.serialize_inventory_origin_lineage(plan.receipt_digest),
   )
   assert_eq(plan.lineage_root, hasher.hash_string(plan.lineage_statement))
   assert_eq(
     plan.receipt_digest,
-    inventory_origin_receipt_digest(hasher, receipt),
+    @inventory.inventory_origin_receipt_digest(hasher, receipt),
   )
-  assert_eq(plan.lineage_root, inventory_origin_lineage_root(hasher, receipt))
+  assert_eq(
+    plan.lineage_root,
+    @inventory.inventory_origin_lineage_root(hasher, receipt),
+  )
 }

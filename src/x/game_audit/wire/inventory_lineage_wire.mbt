@@ -357,5 +357,5 @@ pub fn decode_inventory_lineage_proof_bundle(
     }
     transfers.push(transfer)
   }
-  Ok({ listing, lineage: { anchor, transfers } })
+  Ok({ listing, lineage: { anchor, transfers, }, })
 }

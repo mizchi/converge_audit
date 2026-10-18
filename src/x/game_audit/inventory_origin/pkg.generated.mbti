@@ -28,6 +28,9 @@ pub(all) struct InventoryOrigin {
   source_event : @converge_audit.Digest
   output_index : Int
 } derive(Eq, @debug.Debug)
+pub fn InventoryOrigin::equal(Self, Self) -> Bool
+pub fn InventoryOrigin::not_equal(Self, Self) -> Bool
+pub fn InventoryOrigin::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InventoryOriginVerificationPlan {
   receipt_statement : String
@@ -35,8 +38,10 @@ pub(all) struct InventoryOriginVerificationPlan {
   lineage_statement : String
   lineage_root : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn InventoryOriginVerificationPlan::equal(Self, Self) -> Bool
+pub fn InventoryOriginVerificationPlan::not_equal(Self, Self) -> Bool
+pub fn InventoryOriginVerificationPlan::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

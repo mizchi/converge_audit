@@ -167,7 +167,7 @@ fn inventory_checkpoint_write_set_digest(
   expected_assets : Array[ExpectedInventoryCheckpointAsset],
   records : Array[@inventory.AssetRecord],
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   inventory_checkpoint_append_field(buffer, "inventory-checkpoint-write-set-v1")
   inventory_checkpoint_append_field(buffer, session_id)
   inventory_checkpoint_append_field(buffer, checkpoint_digest.0)
@@ -205,7 +205,7 @@ fn inventory_checkpoint_witnesses(
 ) -> Array[@attestation.Participant] {
   let participants : Array[@attestation.Participant] = []
   for witness in bundle.witnesses {
-    participants.push({ id: witness.id, key: witness.key })
+    participants.push({ id: witness.id, key: witness.key, })
   }
   participants
 }

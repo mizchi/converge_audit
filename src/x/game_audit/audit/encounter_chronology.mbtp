@@ -1,0 +1,231 @@
+///|
+predicate encounter_commit_allowed_post(
+  fresh : Bool,
+  now : Int,
+  release_at : Int,
+  result : Bool,
+) {
+  if fresh && now >= 0 && release_at >= 0 && now < release_at {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma committed_encounter_has_fresh_pre_release_clock(
+  fresh : Bool,
+  now : Int,
+  release_at : Int,
+) where {
+  proof_require: encounter_commit_allowed_post(fresh, now, release_at, true),
+  proof_ensure: fresh == true,
+  proof_ensure: now >= 0,
+  proof_ensure: release_at >= 0,
+  proof_ensure: now < release_at,
+} {
+}
+
+///|
+pub lemma encounter_commit_at_or_after_release_is_rejected(
+  fresh : Bool,
+  now : Int,
+  release_at : Int,
+) where {
+  proof_require: now >= release_at,
+  proof_ensure: encounter_commit_allowed_post(fresh, now, release_at, false),
+} {
+}
+
+///|
+pub lemma encounter_commit_without_freshness_is_rejected(
+  now : Int,
+  release_at : Int,
+) where {
+  proof_ensure: encounter_commit_allowed_post(false, now, release_at, false),
+} {
+}
+
+///|
+predicate encounter_reveal_allowed_post(
+  committed_at : Int,
+  release_at : Int,
+  now : Int,
+  result : Bool,
+) {
+  if committed_at >= 0 && committed_at < release_at && release_at <= now {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma revealed_encounter_has_ordered_nonnegative_clock(
+  committed_at : Int,
+  release_at : Int,
+  now : Int,
+) where {
+  proof_require: encounter_reveal_allowed_post(
+    committed_at, release_at, now, true,
+  ),
+  proof_ensure: committed_at >= 0,
+  proof_ensure: committed_at < release_at,
+  proof_ensure: release_at <= now,
+  proof_ensure: release_at >= 0,
+  proof_ensure: now >= 0,
+} {
+}
+
+///|
+pub lemma encounter_reveal_before_release_is_rejected(
+  committed_at : Int,
+  release_at : Int,
+  now : Int,
+) where {
+  proof_require: now < release_at,
+  proof_ensure: encounter_reveal_allowed_post(
+    committed_at, release_at, now, false,
+  ),
+} {
+}
+
+///|
+predicate encounter_consume_allowed_post(
+  revealed : Bool,
+  consumed : Bool,
+  replay_verified : Bool,
+  root_matches : Bool,
+  result : Bool,
+) {
+  if revealed && !consumed && replay_verified && root_matches {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma consumed_encounter_requires_every_authentication_fact(
+  revealed : Bool,
+  consumed : Bool,
+  replay_verified : Bool,
+  root_matches : Bool,
+) where {
+  proof_require: encounter_consume_allowed_post(
+    revealed, consumed, replay_verified, root_matches, true,
+  ),
+  proof_ensure: revealed == true,
+  proof_ensure: consumed == false,
+  proof_ensure: replay_verified == true,
+  proof_ensure: root_matches == true,
+} {
+}
+
+///|
+pub lemma encounter_second_consumption_is_rejected(
+  revealed : Bool,
+  replay_verified : Bool,
+  root_matches : Bool,
+) where {
+  proof_ensure: encounter_consume_allowed_post(
+    revealed, true, replay_verified, root_matches, false,
+  ),
+} {
+}
+
+///|
+pub lemma encounter_unverified_replay_cannot_be_consumed(
+  revealed : Bool,
+  consumed : Bool,
+  root_matches : Bool,
+) where {
+  proof_ensure: encounter_consume_allowed_post(
+    revealed, consumed, false, root_matches, false,
+  ),
+} {
+}
+
+///|
+pub lemma encounter_wrong_root_cannot_be_consumed(
+  revealed : Bool,
+  consumed : Bool,
+  replay_verified : Bool,
+) where {
+  proof_ensure: encounter_consume_allowed_post(
+    revealed, consumed, replay_verified, false, false,
+  ),
+} {
+}
+
+///|
+predicate encounter_retention_release_allowed_post(
+  settled : Bool,
+  retention_until : Int,
+  now : Int,
+  unresolved : Bool,
+  result : Bool,
+) {
+  if settled && retention_until >= 0 && now >= 0 &&
+    retention_until <= now && !unresolved {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma released_encounter_retention_has_settlement_elapsed_deadline_and_no_hold(
+  settled : Bool,
+  retention_until : Int,
+  now : Int,
+  unresolved : Bool,
+) where {
+  proof_require: encounter_retention_release_allowed_post(
+    settled, retention_until, now, unresolved, true,
+  ),
+  proof_ensure: settled == true,
+  proof_ensure: retention_until >= 0,
+  proof_ensure: now >= 0,
+  proof_ensure: retention_until <= now,
+  proof_ensure: unresolved == false,
+} {
+}
+
+///|
+pub lemma unsettled_encounter_retention_is_never_released(
+  retention_until : Int,
+  now : Int,
+  unresolved : Bool,
+) where {
+  proof_ensure: encounter_retention_release_allowed_post(
+    false, retention_until, now, unresolved, false,
+  ),
+} {
+}
+
+///|
+pub lemma held_encounter_retention_is_never_released(
+  settled : Bool,
+  retention_until : Int,
+  now : Int,
+) where {
+  proof_ensure: encounter_retention_release_allowed_post(
+    settled, retention_until, now, true, false,
+  ),
+} {
+}
+
+///|
+pub lemma early_encounter_retention_is_never_released(
+  settled : Bool,
+  retention_until : Int,
+  now : Int,
+  unresolved : Bool,
+) where {
+  proof_require: now < retention_until,
+  proof_ensure: encounter_retention_release_allowed_post(
+    settled, retention_until, now, unresolved, false,
+  ),
+} {
+}

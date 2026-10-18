@@ -24,6 +24,9 @@ pub(all) struct QuorumMember {
   member_id : String
   member_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn QuorumMember::equal(Self, Self) -> Bool
+pub fn QuorumMember::not_equal(Self, Self) -> Bool
+pub fn QuorumMember::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignedVote {
   statement : VoteStatement
@@ -31,6 +34,9 @@ pub(all) struct SignedVote {
   signature : @converge_audit.Signature
   signer_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn SignedVote::equal(Self, Self) -> Bool
+pub fn SignedVote::not_equal(Self, Self) -> Bool
+pub fn SignedVote::to_repr(Self) -> @debug.Repr
 
 pub(all) struct VoteAlert {
   kind : VoteAlertKind
@@ -38,6 +44,9 @@ pub(all) struct VoteAlert {
   digest : @converge_audit.Digest
   detail : String
 } derive(Eq, @debug.Debug)
+pub fn VoteAlert::equal(Self, Self) -> Bool
+pub fn VoteAlert::not_equal(Self, Self) -> Bool
+pub fn VoteAlert::to_repr(Self) -> @debug.Repr
 
 pub(all) enum VoteAlertKind {
   VoteInvalidRoster
@@ -49,11 +58,17 @@ pub(all) enum VoteAlertKind {
   VoteWrongDomain
   VoteEquivocation
 } derive(Eq, @debug.Debug)
+pub fn VoteAlertKind::equal(Self, Self) -> Bool
+pub fn VoteAlertKind::not_equal(Self, Self) -> Bool
+pub fn VoteAlertKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum VoteChoice {
   ApproveChoice
   ChallengeChoice
 } derive(Eq, @debug.Debug)
+pub fn VoteChoice::equal(Self, Self) -> Bool
+pub fn VoteChoice::not_equal(Self, Self) -> Bool
+pub fn VoteChoice::to_repr(Self) -> @debug.Repr
 
 pub struct VoteCollector {
   hasher : &@converge_audit.Hasher
@@ -77,6 +92,9 @@ pub(all) enum VoteDeliveryResult {
   VoteDuplicate
   VoteRejected(VoteAlert)
 } derive(Eq, @debug.Debug)
+pub fn VoteDeliveryResult::equal(Self, Self) -> Bool
+pub fn VoteDeliveryResult::not_equal(Self, Self) -> Bool
+pub fn VoteDeliveryResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct VoteStatement {
   subject_digest : @converge_audit.Digest
@@ -84,8 +102,10 @@ pub(all) struct VoteStatement {
   domain : String
   choice : VoteChoice
 } derive(Eq, @debug.Debug)
+pub fn VoteStatement::equal(Self, Self) -> Bool
+pub fn VoteStatement::not_equal(Self, Self) -> Bool
+pub fn VoteStatement::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

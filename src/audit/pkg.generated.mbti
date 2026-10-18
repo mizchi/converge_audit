@@ -28,6 +28,12 @@ pub fn accepted_evidence_poll_claim_requires_due_available_lease(Int, Int, Int, 
 
 pub fn accepted_player_local_prune_requires_every_guard(Int, Int, Int, Bool, Bool) -> Unit
 
+pub fn admitted_player_local_payload_requires_every_budget_guard(Int, Int, Int, Int, Int, Int, Int) -> Unit
+
+pub fn admitted_player_local_payload_reservation_requires_every_guard(Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Unit
+
+pub fn admitted_player_local_payload_scope_requires_every_guard(Int, Int) -> Unit
+
 pub fn advanced_checkpoint_head_requires_exact_extension(Bool, Bool, Bool, Int, Int, Bool) -> Unit
 
 pub fn authenticated_checkpoint_delivery_requires_every_trust_fact(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
@@ -78,15 +84,25 @@ pub fn evidence_poll_backoff_step_never_exceeds_cap(Int, Int, Int) -> Unit
 
 pub fn evidence_poll_claim_at_or_after_deadline_is_never_admitted(Int, Int, Int, Bool) -> Unit
 
+pub fn exhausted_player_local_payload_reservation_bytes_are_rejected(Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Unit
+
+pub fn exhausted_player_local_payload_reservation_items_are_rejected(Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Unit
+
 pub fn expired_evidence_has_no_localization_precision(Int, Int, Int, Int, Int, Int, Int) -> Unit
 
 pub fn expired_evidence_inbox_page_is_never_admitted(Int, Int, Int, Int, Int, Int, Bool, Bool) -> Unit
 
 pub fn finality_upper_bound_includes_full_macro_window(Int, Int, Int) -> Unit
 
+pub fn full_player_local_payload_scope_pool_never_registers(Int, Int) -> Unit
+
+pub fn held_player_local_payload_is_never_prunable(Bool, Bool, Bool) -> Unit
+
 pub fn inactive_evidence_hold_is_never_resolved_again(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn invalid_audit_watermark_refuses_event_time(Int, Int, Int) -> Unit
+
+pub fn invalid_player_local_payload_reservation_headroom_is_rejected(Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Unit
 
 pub fn invalid_producer_signature_never_authenticates_delivery(Bool, Bool, Bool, Bool, Bool) -> Unit
 
@@ -98,7 +114,15 @@ pub fn micro_checkpoints_per_macro_checkpoint(VerifiedCheckpointPolicy) -> Int
 
 pub fn missing_checkpoint_heads_create_gap_not_fork(Int, Int, Bool, Bool) -> Unit
 
+pub fn negative_player_local_payload_scope_count_never_registers(Int, Int) -> Unit
+
 pub fn non_success_ack_never_completes_outbox(Bool, Bool, Bool, Bool) -> Unit
+
+pub fn nonpositive_player_local_payload_reservation_bytes_are_rejected(Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Unit
+
+pub fn nonpositive_player_local_payload_reservation_items_are_rejected(Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Unit
+
+pub fn nonpositive_player_local_payload_scope_limit_never_registers(Int, Int) -> Unit
 
 pub fn open_checkpoint_policy(CheckpointPolicy) -> CheckpointPolicyOpenResult
 
@@ -124,13 +148,25 @@ pub fn player_local_evidence_poll_lease_expiry(Int, Int, Int) -> Int
 
 pub fn player_local_evidence_poll_next_retry_at(Int, Int, Int, Int, Int) -> Int
 
+pub fn player_local_payload_admission_allowed(Int, Int, Int, Int, Int, Int, Int) -> Bool
+
+pub fn player_local_payload_prunable(Bool, Bool, Bool, Bool) -> Bool
+
+pub fn player_local_payload_reservation_allowed(Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Bool
+
+pub fn player_local_payload_scope_registration_allowed(Int, Int) -> Bool
+
 pub fn prepared_atomic_seal_requires_every_binding(Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn protected_player_local_checkpoint_is_never_prunable(Int, Int, Int, Bool) -> Unit
 
+pub fn pruned_player_local_payload_requires_every_trusted_fact(Bool, Bool, Bool, Bool) -> Unit
+
 pub fn ready_epoch_closure_requires_all_trust_facts(Bool, Bool, Bool) -> Unit
 
 pub fn retained_event_leaves_give_event_interval_precision(Int, Int, Int, Int, Int, Int, Int) -> Unit
+
+pub fn retained_player_local_payload_is_never_prunable(Bool, Bool, Bool) -> Unit
 
 pub fn runtime_atomic_seal_advance_allowed(Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
 
@@ -141,6 +177,8 @@ pub fn runtime_checkpoint_delivery_authentication_allowed(Bool, Bool, Bool, Bool
 pub fn runtime_epoch_closure_facts_valid(Bool, Bool, Bool) -> Bool
 
 pub fn unacknowledged_player_local_checkpoint_is_never_prunable(Int, Int, Int, Bool) -> Unit
+
+pub fn unacknowledged_player_local_payload_is_never_prunable(Bool, Bool, Bool) -> Unit
 
 pub fn unauthenticated_evidence_case_is_never_dismissed(Bool, Bool, Bool) -> Unit
 
@@ -156,6 +194,8 @@ pub fn unavailable_capacity_never_prepares_atomic_seal(Bool, Bool, Bool, Bool, B
 
 pub fn under_quorum_never_authenticates_checkpoint_delivery(Bool, Bool, Bool, Bool, Bool) -> Unit
 
+pub fn unfinalized_player_local_payload_is_never_prunable(Bool, Bool, Bool) -> Unit
+
 pub fn unresolved_case_never_resolves_player_local_hold(Bool, Bool, Bool) -> Unit
 
 pub fn valid_checkpoint_policy_fields_are_nested(Int, Int, Int, Int, Int, Int) -> Unit
@@ -169,6 +209,9 @@ pub(all) enum AuditEventTimeDecision {
   AuditEventBehindWatermark
   InvalidAuditWatermark
 } derive(Eq, @debug.Debug)
+pub fn AuditEventTimeDecision::equal(Self, Self) -> Bool
+pub fn AuditEventTimeDecision::not_equal(Self, Self) -> Bool
+pub fn AuditEventTimeDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointHeadDecision {
   Advance
@@ -180,7 +223,10 @@ pub(all) enum CheckpointHeadDecision {
   BoundaryMismatch
 } derive(Eq, @debug.Debug)
 pub fn CheckpointHeadDecision::advances(Self) -> Bool
+pub fn CheckpointHeadDecision::equal(Self, Self) -> Bool
 pub fn CheckpointHeadDecision::is_fork(Self) -> Bool
+pub fn CheckpointHeadDecision::not_equal(Self, Self) -> Bool
+pub fn CheckpointHeadDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CheckpointPolicy {
   event_interval_ms : Int
@@ -190,6 +236,9 @@ pub(all) struct CheckpointPolicy {
   micro_checkpoint_retention_ms : Int
   macro_checkpoint_retention_ms : Int
 } derive(Eq, @debug.Debug)
+pub fn CheckpointPolicy::equal(Self, Self) -> Bool
+pub fn CheckpointPolicy::not_equal(Self, Self) -> Bool
+pub fn CheckpointPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointPolicyError {
   NonPositiveEventInterval
@@ -199,16 +248,25 @@ pub(all) enum CheckpointPolicyError {
   MicroRetentionBeforeEventRetention
   MacroRetentionBeforeMicroRetention
 } derive(Eq, @debug.Debug)
+pub fn CheckpointPolicyError::equal(Self, Self) -> Bool
+pub fn CheckpointPolicyError::not_equal(Self, Self) -> Bool
+pub fn CheckpointPolicyError::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointPolicyOpenResult {
   Opened(VerifiedCheckpointPolicy)
   Refused(CheckpointPolicyError)
 } derive(Eq, @debug.Debug)
+pub fn CheckpointPolicyOpenResult::equal(Self, Self) -> Bool
+pub fn CheckpointPolicyOpenResult::not_equal(Self, Self) -> Bool
+pub fn CheckpointPolicyOpenResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct FinalityEstimate {
   average_ms : Int
   p99_upper_ms : Int
 } derive(Eq, @debug.Debug)
+pub fn FinalityEstimate::equal(Self, Self) -> Bool
+pub fn FinalityEstimate::not_equal(Self, Self) -> Bool
+pub fn FinalityEstimate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum RetainedEvidenceLevel {
   EventLeaves
@@ -216,13 +274,18 @@ pub(all) enum RetainedEvidenceLevel {
   MacroCheckpointRoots
   EvidenceExpired
 } derive(Eq, @debug.Debug)
+pub fn RetainedEvidenceLevel::equal(Self, Self) -> Bool
+pub fn RetainedEvidenceLevel::not_equal(Self, Self) -> Bool
+pub fn RetainedEvidenceLevel::to_repr(Self) -> @debug.Repr
 
 pub struct VerifiedCheckpointPolicy {
   value : CheckpointPolicy
 } derive(Eq, @debug.Debug)
+pub fn VerifiedCheckpointPolicy::equal(Self, Self) -> Bool
+pub fn VerifiedCheckpointPolicy::not_equal(Self, Self) -> Bool
 pub fn VerifiedCheckpointPolicy::policy(Self) -> CheckpointPolicy
+pub fn VerifiedCheckpointPolicy::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

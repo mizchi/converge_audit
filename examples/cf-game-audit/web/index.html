@@ -3,87 +3,63 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="相互監査checkpointを使うCloudflare Workersブラウザゲーム参照実装"
-    />
+    <meta name="description" content="開始権と署名付きレシートで戦利品を確定するローカルファーストゲーム" />
     <title>Audit Survivors</title>
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <main class="shell">
       <header class="masthead">
-        <div>
-          <p class="eyebrow">LOCAL-FIRST / MUTUAL AUDIT</p>
-          <h1>Audit Survivors</h1>
-          <p class="lede">予兆を避け、敵を自動攻撃し、監査可能な戦利品を拾う。</p>
-        </div>
+        <div><p class="eyebrow">LOCAL-FIRST / ENCOUNTER</p><h1>Audit Survivors</h1>
+          <p class="lede">予兆を避け、戦利品を持ち帰る。内容は戦闘の確定後に公開されます。</p></div>
         <div class="run-controls">
-          <label>
-            Encounter seed
-            <input id="seed" inputmode="numeric" value="4660" />
-          </label>
-          <button id="restart" type="button">新しいrun</button>
+          <label>割り当て済みの開始権<select id="admission" aria-label="開始権"></select></label>
+          <button id="start" type="button" disabled>戦闘を開始</button>
         </div>
       </header>
-
       <section class="status-strip" aria-label="encounter status">
-        <span>HP <strong id="hp">3 / 3</strong></span>
-        <span>Tick <strong id="tick">0</strong></span>
-        <span>Enemies <strong id="enemy-count">1</strong></span>
-        <span class="audit-state">● <strong id="audit-status">recording 0 / 30</strong></span>
+        <span>HP <strong id="hp">—</strong></span><span>進行 <strong id="tick">0 / 60</strong></span>
+        <span>保存済み <strong id="durable">0 / 2</strong></span>
+        <span class="audit-state"><strong id="session-status" role="status">接続しています</strong></span>
       </section>
-
       <div class="workspace">
         <section class="arena-panel">
-          <canvas
-            id="arena"
-            width="1280"
-            height="720"
-            aria-label="Audit Survivors game arena"
-          ></canvas>
-          <div class="controls-hint">
-            <kbd>WASD</kbd> / <kbd>矢印</kbd> 移動　攻撃は自動　橙色の予兆から退避
+          <canvas id="arena" width="1280" height="720" aria-label="Audit Survivors game arena"></canvas>
+          <div class="controls-hint"><kbd>WASD</kbd> / <kbd>矢印</kbd> 移動　攻撃は自動　1戦3秒</div>
+          <div class="session-actions">
+            <button id="refresh" type="button">状態を再確認</button>
+            <button id="terminate" type="button" disabled>中断して終了</button>
+            <button id="cleanup" type="button" disabled>復旧用ログを解放</button>
+            <button id="forget-terminated" type="button" disabled>終了した戦闘を片付ける</button>
+            <button id="archive" type="button" disabled>ログをサーバーへ預ける</button>
           </div>
+          <p id="session-message">開始権の割り当てを確認しています。</p>
+          <p class="controls-hint">サーバーへ預けると、この端末のログ保存枠が空きます。サーバーは保持期限とcaseの解決までログを保管します。</p>
+          <p id="session-error" role="alert" hidden></p>
+          <p class="controls-hint">中断すると開始権は戻りません。途中でページを閉じた場合、未保存の入力を補って再開することはできません。</p>
         </section>
-
         <aside class="sidebar">
-          <section class="panel">
-            <div class="panel-title">
-              <h2>Inventory</h2>
-              <span id="inventory-count">0</span>
-            </div>
-            <div id="inventory" class="inventory empty-state">
-              戦利品はまだない
+          <section class="panel"><div class="panel-title"><h2>戦利品</h2><span id="inventory-count">0</span></div>
+            <div id="inventory" class="inventory empty-state">戦利品の内容は確定後に表示されます。</div>
+            <div class="session-actions">
+              <button id="inventory-first" type="button" disabled>保管済みの先頭へ</button>
+              <button id="inventory-next" type="button" disabled>保管済みの次へ</button>
             </div>
           </section>
-
-          <section class="panel audit-panel">
-            <h2>Audit pipeline</h2>
-            <ol>
-              <li id="event-stage" class="active">30Hz local event</li>
-              <li id="micro-stage">1s micro checkpoint</li>
-              <li>peer witness quorum</li>
-              <li id="authority-stage">authority item replay</li>
-              <li id="market-stage">market listing</li>
-            </ol>
-            <dl class="audit-metrics">
-              <div><dt>sealed</dt><dd id="micro-count">0</dd></div>
-              <div><dt>pending</dt><dd id="pending-count">0 / 30</dd></div>
-              <div><dt>rollback tick</dt><dd id="rollback-tick">0</dd></div>
-              <div class="digest-row">
-                <dt>latest root</dt><dd><code id="checkpoint-root">—</code></dd>
-              </div>
-            </dl>
-            <p>拾ったitemはすぐ使えるが、ACKまでは出品できない。</p>
+          <section class="panel"><h2>保存状況</h2>
+            <p id="storage-status">確認中</p>
+            <button id="compact" type="button" disabled>レシートを集約</button>
+            <button id="retire-empty" type="button" disabled>空のレシートを片付ける</button>
+            <p class="controls-hint">端末には直近16戦までを保存します。ログ解放後にレシートを集約すると、以前の戦利品を保管済み一覧から参照できます。</p>
           </section>
-
-          <section class="panel">
-            <h2>Event log</h2>
-            <ol id="event-log" class="event-log"></ol>
-          </section>
+          <section class="panel"><details><summary>開始権の割り当て用情報</summary>
+            <p class="controls-hint">運営がこの端末へ開始権を割り当てるための公開情報です。</p>
+            <label>端末公開鍵<input id="owner-key" readonly aria-label="端末公開鍵" /></label>
+            <p id="room-label"></p>
+          </details></section>
         </aside>
       </div>
+      <p class="controls-hint">開発用の参照ゲーム。市場への受理は、売買や所有権の移転とは別の操作です。</p>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

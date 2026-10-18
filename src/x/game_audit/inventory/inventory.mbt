@@ -201,7 +201,7 @@ pub fn inventory_origin_verification_plan(
   let receipt_digest = hasher.hash_string(receipt_statement)
   let lineage_statement = serialize_inventory_origin_lineage(receipt_digest)
   let lineage_root = hasher.hash_string(lineage_statement)
-  { receipt_statement, receipt_digest, lineage_statement, lineage_root }
+  { receipt_statement, receipt_digest, lineage_statement, lineage_root, }
 }
 
 ///|
@@ -408,7 +408,7 @@ fn replay_key(
   source_digest : @bft.Digest,
   effect : @replay.AssetEffect,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, source_digest.0)
   append_field(buffer, @replay.serialize_asset_effect(effect))
   buffer.to_string()
@@ -592,7 +592,7 @@ pub fn InventoryIndex::proof(
 ) -> InventoryProof? {
   match (self.records.get(asset_id), self.state_map.proof(asset_id)) {
     (Some(record), Some(map_proof)) =>
-      Some(InventoryProof::{ record, map_proof })
+      Some(InventoryProof::{ record, map_proof, })
     _ => None
   }
 }

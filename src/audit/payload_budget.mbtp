@@ -1,0 +1,141 @@
+///|
+predicate player_local_payload_admission_post(
+  current_bytes : Int,
+  current_items : Int,
+  incoming_bytes : Int,
+  max_bytes : Int,
+  max_items : Int,
+  max_item_bytes : Int,
+  reserved_bytes : Int,
+  result : Bool,
+) {
+  if current_bytes >= 0 &&
+    current_items >= 0 &&
+    incoming_bytes > 0 &&
+    max_bytes >= 0 &&
+    max_items >= 0 &&
+    max_item_bytes >= 0 &&
+    reserved_bytes >= 0 &&
+    incoming_bytes <= max_item_bytes &&
+    current_items < max_items &&
+    reserved_bytes <= max_bytes &&
+    current_bytes <= max_bytes - reserved_bytes &&
+    incoming_bytes <= max_bytes - reserved_bytes - current_bytes {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma admitted_player_local_payload_requires_every_budget_guard(
+  current_bytes : Int,
+  current_items : Int,
+  incoming_bytes : Int,
+  max_bytes : Int,
+  max_items : Int,
+  max_item_bytes : Int,
+  reserved_bytes : Int,
+) where {
+  proof_require: player_local_payload_admission_post(
+    current_bytes, current_items, incoming_bytes, max_bytes, max_items,
+    max_item_bytes, reserved_bytes, true,
+  ),
+  proof_ensure: current_bytes >= 0,
+  proof_ensure: current_items >= 0,
+  proof_ensure: incoming_bytes > 0,
+  proof_ensure: max_bytes >= 0,
+  proof_ensure: max_items >= 0,
+  proof_ensure: max_item_bytes >= 0,
+  proof_ensure: reserved_bytes >= 0,
+  proof_ensure: incoming_bytes <= max_item_bytes,
+  proof_ensure: current_items < max_items,
+  proof_ensure: reserved_bytes <= max_bytes,
+  proof_ensure: current_bytes <= max_bytes - reserved_bytes,
+  proof_ensure: incoming_bytes <= max_bytes - reserved_bytes - current_bytes,
+} {
+}
+
+///|
+predicate player_local_payload_prunable_post(
+  delivery_acknowledged : Bool,
+  gameplay_finalized : Bool,
+  retention_closed : Bool,
+  unresolved_reference : Bool,
+  result : Bool,
+) {
+  if delivery_acknowledged &&
+    gameplay_finalized &&
+    retention_closed &&
+    !unresolved_reference {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma pruned_player_local_payload_requires_every_trusted_fact(
+  delivery_acknowledged : Bool,
+  gameplay_finalized : Bool,
+  retention_closed : Bool,
+  unresolved_reference : Bool,
+) where {
+  proof_require: player_local_payload_prunable_post(
+    delivery_acknowledged, gameplay_finalized, retention_closed,
+    unresolved_reference, true,
+  ),
+  proof_ensure: delivery_acknowledged == true,
+  proof_ensure: gameplay_finalized == true,
+  proof_ensure: retention_closed == true,
+  proof_ensure: unresolved_reference == false,
+} {
+}
+
+///|
+pub lemma unacknowledged_player_local_payload_is_never_prunable(
+  gameplay_finalized : Bool,
+  retention_closed : Bool,
+  unresolved_reference : Bool,
+) where {
+  proof_ensure: player_local_payload_prunable_post(
+    false, gameplay_finalized, retention_closed, unresolved_reference, false,
+  ),
+} {
+}
+
+///|
+pub lemma unfinalized_player_local_payload_is_never_prunable(
+  delivery_acknowledged : Bool,
+  retention_closed : Bool,
+  unresolved_reference : Bool,
+) where {
+  proof_ensure: player_local_payload_prunable_post(
+    delivery_acknowledged, false, retention_closed, unresolved_reference, false,
+  ),
+} {
+}
+
+///|
+pub lemma retained_player_local_payload_is_never_prunable(
+  delivery_acknowledged : Bool,
+  gameplay_finalized : Bool,
+  unresolved_reference : Bool,
+) where {
+  proof_ensure: player_local_payload_prunable_post(
+    delivery_acknowledged, gameplay_finalized, false, unresolved_reference, false,
+  ),
+} {
+}
+
+///|
+pub lemma held_player_local_payload_is_never_prunable(
+  delivery_acknowledged : Bool,
+  gameplay_finalized : Bool,
+  retention_closed : Bool,
+) where {
+  proof_ensure: player_local_payload_prunable_post(
+    delivery_acknowledged, gameplay_finalized, retention_closed, true, false,
+  ),
+} {
+}

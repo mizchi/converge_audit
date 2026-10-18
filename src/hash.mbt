@@ -13,7 +13,7 @@ pub(all) struct FnvHasher {}
 ///|
 /// Create a new FnvHasher.
 pub fn FnvHasher::new() -> FnvHasher {
-  FnvHasher::{  }
+  FnvHasher::{ }
 }
 
 ///|
@@ -51,7 +51,7 @@ fn nibble_to_hex_char(n : Int) -> Char {
 
 ///|
 fn uint_to_hex(value : UInt) -> String {
-  let buf = StringBuilder::new()
+  let buf = StringBuilder()
   for i = 7; i >= 0; i = i - 1 {
     let shift = i * 4
     let nibble = (value >> shift).land(0xF).reinterpret_as_int()

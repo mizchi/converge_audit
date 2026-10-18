@@ -1,0 +1,63 @@
+///|
+predicate player_local_payload_scope_registration_post(
+  current_scopes : Int,
+  max_scopes : Int,
+  result : Bool,
+) {
+  if current_scopes >= 0 && max_scopes > 0 && current_scopes < max_scopes {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma admitted_player_local_payload_scope_requires_every_guard(
+  current_scopes : Int,
+  max_scopes : Int,
+) where {
+  proof_require: player_local_payload_scope_registration_post(
+    current_scopes, max_scopes, true,
+  ),
+  proof_ensure: current_scopes >= 0,
+  proof_ensure: max_scopes > 0,
+  proof_ensure: current_scopes < max_scopes,
+  proof_ensure: current_scopes + 1 <= max_scopes,
+} {
+}
+
+///|
+pub lemma full_player_local_payload_scope_pool_never_registers(
+  current_scopes : Int,
+  max_scopes : Int,
+) where {
+  proof_require: current_scopes >= max_scopes,
+  proof_ensure: player_local_payload_scope_registration_post(
+    current_scopes, max_scopes, false,
+  ),
+} {
+}
+
+///|
+pub lemma negative_player_local_payload_scope_count_never_registers(
+  current_scopes : Int,
+  max_scopes : Int,
+) where {
+  proof_require: current_scopes < 0,
+  proof_ensure: player_local_payload_scope_registration_post(
+    current_scopes, max_scopes, false,
+  ),
+} {
+}
+
+///|
+pub lemma nonpositive_player_local_payload_scope_limit_never_registers(
+  current_scopes : Int,
+  max_scopes : Int,
+) where {
+  proof_require: max_scopes <= 0,
+  proof_ensure: player_local_payload_scope_registration_post(
+    current_scopes, max_scopes, false,
+  ),
+} {
+}

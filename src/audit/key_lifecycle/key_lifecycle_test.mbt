@@ -1,7 +1,7 @@
 ///|
 test "historical key admission uses signing time instead of verification time" {
   assert_eq(
-    classify_historical_key_admission(
+    @key_lifecycle.classify_historical_key_admission(
       key_binding_matches=true,
       key_version=1,
       key_valid_from_ms=0,
@@ -21,7 +21,7 @@ test "historical key admission uses signing time instead of verification time" {
 ///|
 test "historical key admission rejects validity and revocation boundaries" {
   assert_eq(
-    classify_historical_key_admission(
+    @key_lifecycle.classify_historical_key_admission(
       key_binding_matches=true,
       key_version=1,
       key_valid_from_ms=0,
@@ -37,7 +37,7 @@ test "historical key admission rejects validity and revocation boundaries" {
     RejectHistoricalKeyExpiredAtIssuance,
   )
   assert_eq(
-    classify_historical_key_admission(
+    @key_lifecycle.classify_historical_key_admission(
       key_binding_matches=true,
       key_version=1,
       key_valid_from_ms=0,
@@ -57,7 +57,7 @@ test "historical key admission rejects validity and revocation boundaries" {
 ///|
 test "historical key admission rejects a substituted key version" {
   assert_eq(
-    classify_historical_key_admission(
+    @key_lifecycle.classify_historical_key_admission(
       key_binding_matches=false,
       key_version=2,
       key_valid_from_ms=100,

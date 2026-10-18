@@ -125,7 +125,7 @@ fn benchmark_dungeon_input(player_count : Int) -> DungeonBenchmarkInput {
     let player_id = "player-" + index.to_string()
     let signer = @bft.MockSigner::new(player_id)
     ignore(adapter.register_peer(@types.PeerId(player_id), signer.public_key()))
-    players.push({ player_id, public_key: signer.public_key(), initial_x: 0 })
+    players.push({ player_id, public_key: signer.public_key(), initial_x: 0, })
     let intent = DodgeIntent::{
       attack_id: attack.attack_id,
       player_id,
@@ -161,7 +161,7 @@ fn benchmark_dungeon_input(player_count : Int) -> DungeonBenchmarkInput {
       Accepted(source) => source
       _ => abort("benchmark receipt authentication failed")
     }
-    evidence.push({ input, receipt, intent, observed })
+    evidence.push({ input, receipt, intent, observed, })
   }
   let manifest = telegraph_dungeon_manifest(
     hasher,
@@ -190,7 +190,7 @@ fn benchmark_dungeon_input(player_count : Int) -> DungeonBenchmarkInput {
     Opened(value) => value
     _ => abort("benchmark checkpoint verification failed")
   }
-  { config, players, checkpoint, telegraph, attack, evidence }
+  { config, players, checkpoint, telegraph, attack, evidence, }
 }
 
 ///|
@@ -269,7 +269,7 @@ fn benchmark_encounter_input(
     let player_id = "player-" + index.to_string()
     let signer = @bft.MockSigner::new(player_id)
     ignore(adapter.register_peer(@types.PeerId(player_id), signer.public_key()))
-    players.push({ player_id, public_key: signer.public_key(), initial_x: 0 })
+    players.push({ player_id, public_key: signer.public_key(), initial_x: 0, })
   }
   let attacks : Array[DungeonEncounterAttack] = []
   let transcripts : Array[DungeonAttackTranscript] = []
@@ -281,7 +281,7 @@ fn benchmark_encounter_input(
       center_x: 0,
       radius: 2,
     }
-    let spec = DungeonEncounterAttack::{ attack, damage: 1 }
+    let spec = DungeonEncounterAttack::{ attack, damage: 1, }
     let event = make_dungeon_telegraph_event(
       peer=@types.PeerId("game-server"),
       counter=index,
@@ -334,7 +334,7 @@ fn benchmark_encounter_input(
         Accepted(source) => source
         _ => abort("benchmark encounter receipt authentication failed")
       }
-      evidence.push({ input, receipt, intent, observed })
+      evidence.push({ input, receipt, intent, observed, })
     }
     attacks.push(spec)
     transcripts.push({
@@ -343,7 +343,7 @@ fn benchmark_encounter_input(
       dodge_evidence: evidence,
     })
   }
-  { config, players, attacks, transcripts }
+  { config, players, attacks, transcripts, }
 }
 
 ///|
@@ -420,8 +420,8 @@ fn benchmark_pvp_epoch_input(
     score_per_elimination: 1,
   }
   let teams : Array[PvpTeam] = [
-    { team_id: "blue", initial_score: 0 },
-    { team_id: "orange", initial_score: 0 },
+    { team_id: "blue", initial_score: 0, },
+    { team_id: "orange", initial_score: 0, },
   ]
   let players : Array[PvpPlayer] = []
   for player_index in 0..<player_count {
@@ -491,15 +491,15 @@ fn benchmark_pvp_epoch_input(
         Accepted(source) => source
         _ => abort("benchmark PvP receipt authentication failed")
       }
-      transcript.push({ input, receipt, intent, observed })
+      transcript.push({ input, receipt, intent, observed, })
     }
   }
   let witnesses : Array[@witness_manifest.ReplayWitnessIdentity] = []
   for index in 0..<4 {
     let id = "witness-" + index.to_string()
-    witnesses.push({ id, key: @bft.PublicKey(id) })
+    witnesses.push({ id, key: @bft.PublicKey(id), })
   }
-  { config, teams, players, transcript, witnesses }
+  { config, teams, players, transcript, witnesses, }
 }
 
 ///|

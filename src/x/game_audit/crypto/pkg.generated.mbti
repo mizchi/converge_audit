@@ -17,19 +17,22 @@ pub struct ExperimentalEd25519Signer {
 }
 pub fn ExperimentalEd25519Signer::from_seed_hex(String) -> Self?
 pub fn ExperimentalEd25519Signer::new(Bytes) -> Self raise @ed25519.Ed25519Error
+pub fn ExperimentalEd25519Signer::public_key(Self) -> @converge_audit.PublicKey
+pub fn ExperimentalEd25519Signer::sign(Self, @converge_audit.Digest) -> @converge_audit.Signature
 pub impl @converge_audit.Signer for ExperimentalEd25519Signer
 
 pub struct ExperimentalEd25519Verifier {
 }
 pub fn ExperimentalEd25519Verifier::new() -> Self
+pub fn ExperimentalEd25519Verifier::verify(Self, @converge_audit.PublicKey, @converge_audit.Digest, @converge_audit.Signature) -> Bool
 pub impl @converge_audit.Verifier for ExperimentalEd25519Verifier
 
 pub struct ExperimentalSha256Hasher {
 }
+pub fn ExperimentalSha256Hasher::hash_string(Self, String) -> @converge_audit.Digest
 pub fn ExperimentalSha256Hasher::new() -> Self
 pub impl @converge_audit.Hasher for ExperimentalSha256Hasher
 
 // Type aliases
 
 // Traits
-

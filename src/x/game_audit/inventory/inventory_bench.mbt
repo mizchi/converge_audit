@@ -152,7 +152,7 @@ fn benchmark_finalize(
     hasher,
     verifier,
     prepared,
-    [{ id: "checkpoint-auditor", key: @bft.PublicKey("checkpoint-auditor") }],
+    [{ id: "checkpoint-auditor", key: @bft.PublicKey("checkpoint-auditor"), }],
   )
   let auditor = @bft.MockSigner::new("checkpoint-auditor")
   match

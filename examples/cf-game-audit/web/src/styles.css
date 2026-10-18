@@ -24,7 +24,7 @@ body {
     linear-gradient(155deg, #080d0d 0%, #0b1412 52%, #080d0d 100%);
 }
 
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 
 .shell {
   width: min(1500px, 100%);
@@ -65,6 +65,13 @@ h2 { margin-bottom: 10px; font-size: 14px; letter-spacing: 0.04em; }
   border-radius: 6px;
   background: #0c1514;
 }
+.run-controls select { display: block; max-width: 240px; padding: 9px; margin-top: 5px; color: var(--ink); background: #0c1514; border: 1px solid var(--line); border-radius: 6px; }
+.session-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.session-actions button { font-size: 12px; }
+#session-message, #storage-status { font-size: 13px; line-height: 1.6; color: var(--muted); }
+#session-error { color: var(--danger); font-size: 13px; }
+#owner-key { width: 100%; margin-top: 8px; padding: 6px; color: var(--muted); background: #0c1514; border: 1px solid var(--line); font-size: 10px; }
+summary { cursor: pointer; font-size: 12px; }
 
 button {
   padding: 10px 14px;

@@ -8,7 +8,7 @@ fn observer_roster(
     let id = "observer-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
     signers.push(signer)
-    observers.push({ id, key: signer.public_key() })
+    observers.push({ id, key: signer.public_key(), })
   }
   (signers, observers)
 }
@@ -21,9 +21,13 @@ fn sign_observation_for_test(
   observer_id~ : String,
   registration_index~ : Int,
   encounter_digest~ : @bft.Digest,
-) -> SignedOpenWorldRegistrationObservation raise Error {
+) -> @open_world.SignedOpenWorldRegistrationObservation raise Error {
   let ledger = match
-    OpenWorldObserverSigningLedger::new(hasher, signer, observer_id~) {
+    @open_world.OpenWorldObserverSigningLedger::new(
+      hasher,
+      signer,
+      observer_id~,
+    ) {
     ObserverSigningLedgerReady(ledger) => ledger
     _ => fail("expected observer signing ledger")
   }
@@ -47,7 +51,7 @@ fn observer_plan(
   max_faults : Int,
   world_id? : String = "observed-world",
 ) -> @checkpoint.VerifiedCheckpoint raise Error {
-  let observer_manifest = open_world_observer_manifest(
+  let observer_manifest = @open_world.open_world_observer_manifest(
     hasher,
     observers~,
     max_faults~,
@@ -56,7 +60,7 @@ fn observer_plan(
     session_id: world_id,
     epoch: 20,
     previous_checkpoint: @bft.Digest("world-epoch-19"),
-    manifest_digest: open_world_audit_manifest(
+    manifest_digest: @open_world.open_world_audit_manifest(
       hasher,
       game_manifest_digest=@bft.Digest("observed-world-kernel-v1"),
       observer_manifest_digest=observer_manifest,
@@ -67,7 +71,7 @@ fn observer_plan(
     public_state_root: @bft.Digest("observer-plan-state"),
     asset_delta_root: @bft.Digest("no-assets"),
     hidden_state_commitment: Some(
-      open_world_audit_seed_commitment(
+      @open_world.open_world_audit_seed_commitment(
         hasher,
         world_id~,
         epoch=20,
@@ -97,9 +101,9 @@ fn observer_collector(
   max_faults : Int,
   registration_index? : Int = 7,
   encounter_digest? : @bft.Digest = @bft.Digest("encounter-seven"),
-) -> OpenWorldRegistrationObserverCollector raise Error {
+) -> @open_world.OpenWorldRegistrationObserverCollector raise Error {
   match
-    OpenWorldRegistrationObserverCollector::new(
+    @open_world.OpenWorldRegistrationObserverCollector::new(
       hasher,
       verifier,
       plan,
@@ -124,17 +128,21 @@ test "observer manifest is roster-order independent and plan-bound" {
   let (_, observers) = observer_roster(4)
   let reversed = [observers[3], observers[2], observers[1], observers[0]]
   assert_eq(
-    open_world_observer_manifest(hasher, observers~, max_faults=1),
-    open_world_observer_manifest(hasher, observers=reversed, max_faults=1),
+    @open_world.open_world_observer_manifest(hasher, observers~, max_faults=1),
+    @open_world.open_world_observer_manifest(
+      hasher,
+      observers=reversed,
+      max_faults=1,
+    ),
   )
   assert_not_eq(
-    open_world_observer_manifest(hasher, observers~, max_faults=1),
-    open_world_observer_manifest(hasher, observers~, max_faults=0),
+    @open_world.open_world_observer_manifest(hasher, observers~, max_faults=1),
+    @open_world.open_world_observer_manifest(hasher, observers~, max_faults=0),
   )
   let plan = observer_plan(hasher, verifier, authority, observers, 1)
   let (_, foreign) = observer_roster(5)
   assert_true(
-    OpenWorldRegistrationObserverCollector::new(
+    @open_world.OpenWorldRegistrationObserverCollector::new(
       hasher,
       verifier,
       plan,
@@ -169,12 +177,12 @@ test "n minus f observer receipts certify one exact registration" {
     )
     assert_eq(
       collector.deliver(receipt),
-      OpenWorldObservationDeliveryResult::ObservationAccepted,
+      @open_world.OpenWorldObservationDeliveryResult::ObservationAccepted,
     )
     if index == 0 {
       assert_eq(
         collector.deliver(receipt),
-        OpenWorldObservationDeliveryResult::ObservationDuplicate,
+        @open_world.OpenWorldObservationDeliveryResult::ObservationDuplicate,
       )
     }
   }
@@ -245,7 +253,7 @@ test "observer receipts are bound to target roster and signature" {
     registration_index=7,
     encounter_digest=@bft.Digest("encounter-seven"),
   )
-  let forged : SignedOpenWorldRegistrationObservation = {
+  let forged : @open_world.SignedOpenWorldRegistrationObservation = {
     ..valid,
     signature: @bft.Signature("forged"),
   }
@@ -280,7 +288,7 @@ test "under-quorum and invalid observer rosters fail closed" {
   }
   assert_eq(
     collector.certify(),
-    OpenWorldRegistrationCertificationResult::RegistrationObservationPending(
+    @open_world.OpenWorldRegistrationCertificationResult::RegistrationObservationPending(
       2, 3,
     ),
   )
@@ -289,7 +297,7 @@ test "under-quorum and invalid observer rosters fail closed" {
     hasher, verifier, authority, invalid_observers, 1,
   )
   assert_true(
-    OpenWorldRegistrationObserverCollector::new(
+    @open_world.OpenWorldRegistrationObserverCollector::new(
       hasher,
       verifier,
       invalid_plan,
@@ -305,7 +313,7 @@ test "under-quorum and invalid observer rosters fail closed" {
   )
   let duplicate_key = [
     observers[0],
-    { id: "duplicate-key", key: observers[0].key },
+    { id: "duplicate-key", key: observers[0].key, },
     observers[2],
     observers[3],
   ]
@@ -313,7 +321,7 @@ test "under-quorum and invalid observer rosters fail closed" {
     hasher, verifier, authority, duplicate_key, 1,
   )
   assert_true(
-    OpenWorldRegistrationObserverCollector::new(
+    @open_world.OpenWorldRegistrationObserverCollector::new(
       hasher,
       verifier,
       duplicate_plan,
@@ -338,7 +346,7 @@ fn observer_certificate(
   observers : Array[@attestation.Participant],
   registration_index : Int,
   encounter_digest : @bft.Digest,
-) -> OpenWorldRegistrationCertificate raise Error {
+) -> @open_world.OpenWorldRegistrationCertificate raise Error {
   let collector = observer_collector(
     hasher,
     verifier,
@@ -377,13 +385,13 @@ fn revealed_observer_epoch(
   observer_manifest_digest : @bft.Digest,
   registry : @authmap.AuthenticatedMap,
   registered_count : Int,
-) -> RevealedOpenWorldAuditEpoch raise Error {
+) -> @open_world.RevealedOpenWorldAuditEpoch raise Error {
   let eligible = @merkle.MerkleTree::build(hasher, [])
   let prepared = @checkpoint.prepare_checkpoint(hasher, {
     session_id: plan.checkpoint().session_id,
     epoch: plan.checkpoint().epoch + 1,
     previous_checkpoint: plan.digest(),
-    manifest_digest: open_world_anchor_seal_manifest(
+    manifest_digest: @open_world.open_world_anchor_seal_manifest(
       hasher,
       audit_manifest_digest=plan.checkpoint().manifest_digest,
       registered_count~,
@@ -405,7 +413,7 @@ fn revealed_observer_epoch(
     _ => fail("expected verified observer seal")
   }
   match
-    reveal_open_world_audit_epoch(
+    @open_world.reveal_open_world_audit_epoch(
       hasher,
       plan,
       seal,
@@ -440,11 +448,11 @@ test "observer quorum and non-membership prove a hidden registration" {
   let registry = @authmap.AuthenticatedMap::new(hasher)
   ignore(
     registry.put(
-      open_world_encounter_registration_key(0),
+      @open_world.open_world_encounter_registration_key(0),
       "registered-encounter-zero",
     ),
   )
-  let observer_manifest_digest = open_world_observer_manifest(
+  let observer_manifest_digest = @open_world.open_world_observer_manifest(
     hasher,
     observers~,
     max_faults=1,
@@ -453,18 +461,24 @@ test "observer quorum and non-membership prove a hidden registration" {
     hasher, verifier, authority, plan, observer_manifest_digest, registry, 8,
   )
   let absence = registry
-    .absence_proof(open_world_encounter_registration_key(7))
+    .absence_proof(@open_world.open_world_encounter_registration_key(7))
     .unwrap()
   match
-    detect_observed_open_world_seal_conflict(
+    @open_world.detect_observed_open_world_seal_conflict(
       hasher,
       epoch,
       certificate,
       missing_registration=absence,
     ) {
     SealConflictDetected(conflict) => {
-      assert_eq(conflict.kind(), OpenWorldSealConflictKind::MissingSlot)
-      assert_eq(conflict.source(), OpenWorldSealConflictSource::ObserverQuorum)
+      assert_eq(
+        conflict.kind(),
+        @open_world.OpenWorldSealConflictKind::MissingSlot,
+      )
+      assert_eq(
+        conflict.source(),
+        @open_world.OpenWorldSealConflictSource::ObserverQuorum,
+      )
       assert_eq(conflict.encounter_digest(), @bft.Digest("encounter-seven"))
       assert_eq(conflict.observer_approval_count(), Some(3))
     }
@@ -491,11 +505,11 @@ test "foreign observer certificate and tampered absence cannot accuse seal" {
   let registry = @authmap.AuthenticatedMap::new(hasher)
   ignore(
     registry.put(
-      open_world_encounter_registration_key(0),
+      @open_world.open_world_encounter_registration_key(0),
       "registered-encounter-zero",
     ),
   )
-  let observer_manifest_digest = open_world_observer_manifest(
+  let observer_manifest_digest = @open_world.open_world_observer_manifest(
     hasher,
     observers~,
     max_faults=1,
@@ -504,14 +518,14 @@ test "foreign observer certificate and tampered absence cannot accuse seal" {
     hasher, verifier, authority, plan, observer_manifest_digest, registry, 8,
   )
   let absence = registry
-    .absence_proof(open_world_encounter_registration_key(7))
+    .absence_proof(@open_world.open_world_encounter_registration_key(7))
     .unwrap()
   let tampered : @authmap.AuthMapAbsenceProof = {
     ..absence,
-    key: open_world_encounter_registration_key(6),
+    key: @open_world.open_world_encounter_registration_key(6),
   }
   assert_true(
-    detect_observed_open_world_seal_conflict(
+    @open_world.detect_observed_open_world_seal_conflict(
       hasher,
       epoch,
       certificate,
@@ -537,7 +551,7 @@ test "foreign observer certificate and tampered absence cannot accuse seal" {
     @bft.Digest("encounter-seven"),
   )
   assert_true(
-    detect_observed_open_world_seal_conflict(
+    @open_world.detect_observed_open_world_seal_conflict(
       hasher,
       epoch,
       foreign_certificate,

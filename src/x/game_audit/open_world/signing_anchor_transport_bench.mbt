@@ -36,7 +36,7 @@ fn bench_signing_anchor_envelope_chain(
       Some(proof) => proof
       None => abort("benchmark wire anchor proof missing")
     }
-    envelopes.push({ signed_checkpoint, anchor, membership_proof })
+    envelopes.push({ signed_checkpoint, anchor, membership_proof, })
     previous = signed_checkpoint.digest
   }
   envelopes

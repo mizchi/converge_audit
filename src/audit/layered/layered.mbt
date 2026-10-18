@@ -149,7 +149,7 @@ fn append_int_field(buffer : StringBuilder, value : Int) -> Unit {
 
 ///|
 fn serialize_micro_checkpoint_core(checkpoint : MicroCheckpoint) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "layered-micro-v1")
   append_field(buffer, checkpoint.scope_id)
   append_int_field(buffer, checkpoint.macro_epoch)
@@ -164,7 +164,7 @@ fn serialize_micro_checkpoint_core(checkpoint : MicroCheckpoint) -> String {
 ///|
 /// Canonical macro-leaf representation of a micro checkpoint.
 pub fn serialize_micro_checkpoint(checkpoint : MicroCheckpoint) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "layered-micro-record-v1")
   append_field(buffer, serialize_micro_checkpoint_core(checkpoint))
   append_field(buffer, checkpoint.digest.0)
@@ -181,7 +181,7 @@ fn micro_checkpoint_digest(
 
 ///|
 fn serialize_macro_checkpoint_core(checkpoint : MacroCheckpoint) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "layered-macro-v1")
   append_field(buffer, checkpoint.scope_id)
   append_int_field(buffer, checkpoint.epoch)
@@ -197,7 +197,7 @@ fn serialize_macro_checkpoint_core(checkpoint : MacroCheckpoint) -> String {
 ///|
 /// Canonical storage/wire representation of a macro checkpoint.
 pub fn serialize_macro_checkpoint(checkpoint : MacroCheckpoint) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "layered-macro-record-v1")
   append_field(buffer, serialize_macro_checkpoint_core(checkpoint))
   append_field(buffer, checkpoint.digest.0)
@@ -483,7 +483,7 @@ pub fn LayeredCheckpointBuilder::advance_watermark(
 
 ///|
 pub fn LayeredCheckpointEmission::empty() -> LayeredCheckpointEmission {
-  LayeredCheckpointEmission::{ micro_values: [], macro_values: [] }
+  LayeredCheckpointEmission::{ micro_values: [], macro_values: [], }
 }
 
 ///|

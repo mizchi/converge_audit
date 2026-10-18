@@ -8,7 +8,7 @@ test "inventory head advances iff every monotonic binding holds" {
     let epoch_advances = (mask & 16) != 0
     let owner_version_consistent = (mask & 32) != 0
     assert_eq(
-      inventory_head_advance_allowed(
+      @audit.inventory_head_advance_allowed(
         creation_eligible~,
         proof_verified~,
         manifest_matches~,
@@ -35,7 +35,7 @@ test "multi-asset checkpoint commits iff every shared and per-asset binding hold
     let every_proof_verified = (mask & 256) != 0
     let every_head_version_matches = (mask & 512) != 0
     assert_eq(
-      multi_asset_inventory_checkpoint_allowed(
+      @audit.multi_asset_inventory_checkpoint_allowed(
         has_assets~,
         within_limit~,
         assets_canonical~,

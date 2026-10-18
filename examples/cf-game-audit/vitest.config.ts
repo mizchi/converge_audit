@@ -15,6 +15,9 @@ export default defineConfig({
       miniflare: {
         bindings: {
           ADMIN_TOKEN: "test-admin-token",
+          // Deterministic fixture only. Deployment must provision its own secret.
+          ENCOUNTER_SIGNING_SEED_HEX: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+          ENCOUNTER_SIGNING_PUBLIC_KEY: "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
           WITNESS_SOURCE_BUCKET_KEY: "test-source-bucket-key-000000000000",
           LINEAGE_ARBITER_ROSTER: JSON.stringify({
             "external-arbiter-a": {

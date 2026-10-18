@@ -116,7 +116,7 @@ pub fn asset_record_lineage_anchor(record : AssetRecord) -> AssetLineageAnchor {
 pub fn serialize_asset_owner_key_binding(
   binding : AssetOwnerKeyBinding,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "inventory-owner-key-binding-v1")
   append_field(buffer, binding.session_id)
   append_field(buffer, binding.owner_id)
@@ -151,7 +151,7 @@ pub fn sign_asset_owner_key_binding(
 pub fn serialize_asset_lineage_transfer_authorization(
   authorization : AssetLineageTransferAuthorization,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "inventory-lineage-transfer-authorization-v1")
   append_field(buffer, authorization.session_id)
   append_field(
@@ -226,7 +226,7 @@ fn asset_owner_key_binding_cache_key(
   expected_owner_key : @bft.PublicKey,
   expected_authority_key : @bft.PublicKey,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, serialize_asset_owner_key_binding(signed.binding))
   append_field(buffer, signed.digest.0)
   append_field(buffer, signed.signature.0)

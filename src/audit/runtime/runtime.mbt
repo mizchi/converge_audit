@@ -118,7 +118,7 @@ pub fn open_trusted_epoch_closure(
       } else if @audit.runtime_epoch_closure_facts_valid(
           frontier_complete, conflict_free, quorum_satisfied,
         ) {
-        EpochClosureReady(TrustedEpochClosure::{ evidence_value: evidence })
+        EpochClosureReady(TrustedEpochClosure::{ evidence_value: evidence, })
       } else {
         abort("epoch closure fact validator diverged")
       }
@@ -470,7 +470,7 @@ pub fn open_authenticated_checkpoint_ack(
   } else if !authentication_succeeded {
     CheckpointAckRefused(AckAuthenticationFailed)
   } else {
-    CheckpointAckReady(AuthenticatedCheckpointAck::{ evidence_value: evidence })
+    CheckpointAckReady(AuthenticatedCheckpointAck::{ evidence_value: evidence, })
   }
 }
 

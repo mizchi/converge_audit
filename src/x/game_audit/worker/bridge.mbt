@@ -35,7 +35,7 @@ fn worker_bytes_from_hex(value : String) -> Bytes? {
 ///|
 fn worker_bytes_to_hex(bytes : Bytes) -> String {
   let digits = "0123456789abcdef"
-  let output = StringBuilder::new()
+  let output = StringBuilder()
   for byte in bytes {
     let value = byte.to_int()
     output.write_char(
@@ -1144,6 +1144,90 @@ pub fn audit_classify_central_replay(
 }
 
 ///|
+/// Primitive bridge to the game-layer indexed empty receipt retirement guard.
+pub fn audit_encounter_empty_receipt_retire_allowed(
+  settled : Bool,
+  assetless_receipt : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  old_generation : Bool,
+  index_matches : Bool,
+) -> Bool {
+  @audit.encounter_empty_receipt_retire_allowed(
+    settled, assetless_receipt, retention_released, hold_clear, old_generation, index_matches,
+  )
+}
+
+///|
+/// Primitive bridge to the game-layer forfeited recovery release guard.
+pub fn audit_encounter_recovery_release_allowed(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+) -> Bool {
+  @audit.encounter_recovery_release_allowed(
+    forfeited, retention_released, hold_clear, without_assets,
+  )
+}
+
+///|
+/// Primitive bridge to the game-layer old-generation recovery forget guard.
+pub fn audit_encounter_recovery_forget_allowed(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+  owner_released : Bool,
+  old_generation : Bool,
+) -> Bool {
+  @audit.encounter_recovery_forget_allowed(
+    forfeited, retention_released, hold_clear, without_assets, owner_released, old_generation,
+  )
+}
+
+///|
+/// Primitive bridge to the game-layer generation retirement guard.
+pub fn audit_encounter_generation_roll_allowed(
+  expected_matches : Bool,
+  can_advance : Bool,
+  all_terminal_retired : Bool,
+  all_archive_released : Bool,
+) -> Bool {
+  @audit.encounter_generation_roll_allowed(
+    expected_matches, can_advance, all_terminal_retired, all_archive_released,
+  )
+}
+
+///|
+/// Primitive bridge to the game-layer encounter termination guard.
+pub fn audit_encounter_termination_allowed(
+  settled : Bool,
+  already_terminated : Bool,
+  expire_requested : Bool,
+  has_commitment : Bool,
+  now : Int,
+  commit_deadline : Int,
+) -> Bool {
+  @audit.encounter_termination_allowed(
+    settled, already_terminated, expire_requested, has_commitment, now, commit_deadline,
+  )
+}
+
+///|
+/// Primitive bridge to the game-layer terminal evidence cleanup guard.
+pub fn audit_encounter_terminal_cleanup_allowed(
+  terminated : Bool,
+  now : Int,
+  retention_until : Int,
+  unresolved_reference : Bool,
+) -> Bool {
+  @audit.encounter_terminal_cleanup_allowed(
+    terminated, now, retention_until, unresolved_reference,
+  )
+}
+
+///|
 /// Stable bridge to the proved Worker marketplace persistence gate.
 pub fn audit_marketplace_creation_persist_allowed(
   open_world_boundary : Bool,
@@ -1495,7 +1579,7 @@ pub fn audit_benchmark_make_pve_replay_bundle(
   let transcript = @replay.DungeonAttackTranscript::{
     attack_id: attack.attack.attack_id,
     telegraph,
-    dodge_evidence: [{ input, receipt, intent, observed }],
+    dodge_evidence: [{ input, receipt, intent, observed, }],
   }
   let candidate = match
     @replay.prepare_dungeon_encounter(
@@ -1568,11 +1652,11 @@ pub fn audit_benchmark_make_pve_replay_bundle(
         attack_id: attack.attack.attack_id,
         telegraph: signed_telegraph,
         dodge_evidence: [
-          { input: signed_input, receipt: signed_receipt, intent, observed },
+          { input: signed_input, receipt: signed_receipt, intent, observed, },
         ],
       },
     ],
-    asset_effects: [{ source: signed_loot, effect: loot_effect }],
+    asset_effects: [{ source: signed_loot, effect: loot_effect, }],
   })
   Json::object({
     "ok": Json::boolean(true),
@@ -1754,8 +1838,8 @@ pub fn audit_benchmark_make_pvp_replay_bundle(
     score_per_elimination: 1,
   }
   let teams : Array[@replay.PvpTeam] = [
-    { team_id: "blue", initial_score: 0 },
-    { team_id: "orange", initial_score: 0 },
+    { team_id: "blue", initial_score: 0, },
+    { team_id: "orange", initial_score: 0, },
   ]
   let players : Array[@replay.PvpPlayer] = [
     {
@@ -1820,9 +1904,14 @@ pub fn audit_benchmark_make_pvp_replay_bundle(
       None => return worker_error("fixture_witness_key_failed")
     }
     witness_signers.push(signer)
-    witnesses.push({ id, key: signer.public_key() })
+    witnesses.push({ id, key: signer.public_key(), })
   }
-  let command = @replay.PvpCommandEvidence::{ input, receipt, intent, observed }
+  let command = @replay.PvpCommandEvidence::{
+    input,
+    receipt,
+    intent,
+    observed,
+  }
   let candidate = match
     @replay.prepare_pvp_epoch(
       hasher,
@@ -1891,7 +1980,7 @@ pub fn audit_benchmark_make_pvp_replay_bundle(
     witnesses,
     max_faults: 1,
     commands: [
-      { input: signed_input, receipt: signed_receipt, intent, observed },
+      { input: signed_input, receipt: signed_receipt, intent, observed, },
     ],
     attestations,
   })
@@ -2052,7 +2141,7 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
       None => return worker_error("fixture_observer_key_failed")
     }
     observer_signers.push(signer)
-    observers.push({ id, key: signer.public_key() })
+    observers.push({ id, key: signer.public_key(), })
   }
   let game_manifest_digest = hasher.hash_string("open-world-pve-game-v1")
   let observer_manifest_digest = @open_world.open_world_observer_manifest(
@@ -2131,7 +2220,7 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
     if !adapter.register_peer(@types.PeerId(player_id), player_key) {
       return worker_error("fixture_open_world_roster_refused")
     }
-    players.push({ player_id, public_key: player_key, initial_x: 0 })
+    players.push({ player_id, public_key: player_key, initial_x: 0, })
   }
   let attack = @replay.DungeonEncounterAttack::{
     attack: {
@@ -2164,7 +2253,7 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
       players~,
       attacks=[attack],
       transcripts=[
-        { attack_id: attack.attack.attack_id, telegraph, dodge_evidence: [] },
+        { attack_id: attack.attack.attack_id, telegraph, dodge_evidence: [], },
       ],
     ) {
     CandidateReady(value) => value
@@ -2192,7 +2281,7 @@ fn worker_benchmark_make_open_world_pve_replay_bundle(
       effect=loot_effect,
     )
     let signed_loot = adapter.sign(authority, loot_event, [telegraph.digest()])
-    asset_effects.push({ source: signed_loot, effect: loot_effect })
+    asset_effects.push({ source: signed_loot, effect: loot_effect, })
     loot_receipts.push({
       asset_id: @replay.dungeon_encounter_loot_asset_id(
         encounter_session_id,
@@ -3150,7 +3239,7 @@ fn worker_inventory_semantic_lineage(
       lineage_root: @inventory.asset_lineage_transition_root(hasher, transition),
     }
   }
-  Some({ record, anchor, transitions })
+  Some({ record, anchor, transitions, })
 }
 
 ///|
@@ -3228,8 +3317,8 @@ pub fn audit_benchmark_make_inventory_listing_proof_bundle(
       None => return worker_error("fixture_inventory_witness_key_failed")
     }
     witness_signers.push(signer)
-    witnesses.push({ id, key: signer.public_key() })
-    participants.push({ id, key: signer.public_key() })
+    witnesses.push({ id, key: signer.public_key(), })
+    participants.push({ id, key: signer.public_key(), })
   }
   let game_manifest_digest = @replay.CanonicalAssetKernel::new(
     hasher,
@@ -3274,7 +3363,7 @@ pub fn audit_benchmark_make_inventory_listing_proof_bundle(
     witnesses,
     max_faults: 1,
     attestations,
-    proof: { record, map_proof },
+    proof: { record, map_proof, },
   })
   Json::object({
     "ok": Json::boolean(true),
@@ -3813,7 +3902,7 @@ pub fn audit_benchmark_make_inventory_lineage_proof_bundle(
   }
   let encoded = @wire.encode_inventory_lineage_proof_bundle({
     listing,
-    lineage: { anchor: semantic.anchor, transfers },
+    lineage: { anchor: semantic.anchor, transfers, },
   })
   Json::object({
     "ok": Json::boolean(true),
@@ -4185,7 +4274,7 @@ pub fn audit_benchmark_make_inventory_checkpoint_proof_bundle(
       Some(value) => value
       None => return worker_error("fixture_inventory_checkpoint_proof_missing")
     }
-    proofs.push({ record, map_proof })
+    proofs.push({ record, map_proof, })
   }
   let witnesses : Array[@witness_manifest.ReplayWitnessIdentity] = []
   let participants : Array[@attestation.Participant] = []
@@ -4198,8 +4287,8 @@ pub fn audit_benchmark_make_inventory_checkpoint_proof_bundle(
       None => return worker_error("fixture_inventory_witness_key_failed")
     }
     witness_signers.push(signer)
-    witnesses.push({ id, key: signer.public_key() })
-    participants.push({ id, key: signer.public_key() })
+    witnesses.push({ id, key: signer.public_key(), })
+    participants.push({ id, key: signer.public_key(), })
   }
   let game_manifest_digest = @replay.CanonicalAssetKernel::new(
     hasher,

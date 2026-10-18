@@ -29,11 +29,17 @@ pub(all) struct ItemReceipt {
   source_event : @converge_audit.Digest
   output_index : Int
 } derive(Eq, @debug.Debug)
+pub fn ItemReceipt::equal(Self, Self) -> Bool
+pub fn ItemReceipt::not_equal(Self, Self) -> Bool
+pub fn ItemReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ItemReceiptProof {
   receipt : ItemReceipt
   merkle_proof : @merkle.MerkleProof
 } derive(Eq, @debug.Debug)
+pub fn ItemReceiptProof::equal(Self, Self) -> Bool
+pub fn ItemReceiptProof::not_equal(Self, Self) -> Bool
+pub fn ItemReceiptProof::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ItemReceiptValidation {
   ReceiptValid
@@ -43,6 +49,9 @@ pub(all) enum ItemReceiptValidation {
   InvalidQuantity
   InvalidOutputIndex
 } derive(Eq, @debug.Debug)
+pub fn ItemReceiptValidation::equal(Self, Self) -> Bool
+pub fn ItemReceiptValidation::not_equal(Self, Self) -> Bool
+pub fn ItemReceiptValidation::to_repr(Self) -> @debug.Repr
 
 pub struct ReceiptBatch {
   receipts : Array[ItemReceipt]
@@ -64,8 +73,10 @@ pub(all) enum ReceiptBatchError {
   DuplicateAssetId(String)
   DuplicateSourceOutput(Int)
 } derive(Eq, @debug.Debug)
+pub fn ReceiptBatchError::equal(Self, Self) -> Bool
+pub fn ReceiptBatchError::not_equal(Self, Self) -> Bool
+pub fn ReceiptBatchError::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

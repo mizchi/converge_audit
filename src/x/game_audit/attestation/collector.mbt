@@ -11,7 +11,7 @@ fn evidence_collector_for_purpose(
   purpose : AttestationPurpose,
 ) -> EvidenceCollector {
   let members : Array[@quorum.QuorumMember] = participants.map(fn(participant) {
-    { member_id: participant.id, member_key: participant.key }
+    { member_id: participant.id, member_key: participant.key, }
   })
   EvidenceCollector::{
     inner: @quorum.VoteCollector::new(

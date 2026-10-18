@@ -1,7 +1,7 @@
 ///|
 test "marketplace creation persists only after every binding passes" {
   assert_true(
-    marketplace_creation_persist_allowed(
+    @audit.marketplace_creation_persist_allowed(
       open_world_boundary=true,
       central_replay_verified=true,
       summary_normalized=true,
@@ -10,7 +10,7 @@ test "marketplace creation persists only after every binding passes" {
     ),
   )
   assert_false(
-    marketplace_creation_persist_allowed(
+    @audit.marketplace_creation_persist_allowed(
       open_world_boundary=true,
       central_replay_verified=true,
       summary_normalized=true,
@@ -19,7 +19,7 @@ test "marketplace creation persists only after every binding passes" {
     ),
   )
   assert_false(
-    marketplace_creation_persist_allowed(
+    @audit.marketplace_creation_persist_allowed(
       open_world_boundary=false,
       central_replay_verified=true,
       summary_normalized=true,

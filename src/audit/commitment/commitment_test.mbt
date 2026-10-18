@@ -7,7 +7,7 @@ struct ExampleGameCheckpoint {
 ///|
 impl CheckpointAdapter for ExampleGameCheckpoint with fn checkpoint_commitment(
   self : ExampleGameCheckpoint,
-) -> CheckpointCommitment {
+) -> @commitment.CheckpointCommitment {
   {
     scope_id: self.scope,
     epoch: self.epoch,
@@ -22,7 +22,7 @@ impl CheckpointAdapter for ExampleGameCheckpoint with fn checkpoint_commitment(
 
 ///|
 test "a game supplies semantics through the generic checkpoint adapter" {
-  let adapted = adapt_checkpoint(ExampleGameCheckpoint::{
+  let adapted = @commitment.adapt_checkpoint(ExampleGameCheckpoint::{
     scope: "match-7",
     epoch: 3,
   })

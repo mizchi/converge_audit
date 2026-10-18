@@ -1,0 +1,42 @@
+{
+  "benchmark": "encounter-recovery-release-v1",
+  "rounds": 20,
+  "warmup": 1,
+  "batchSize": 128,
+  "totalForfeits": 2688,
+  "environment": {
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "storage": "SQLite :memory:",
+    "inProcessSignedHttpIncluded": true,
+    "networkIncluded": false,
+    "fsyncIncluded": false,
+    "workerSchedulingIncluded": false,
+    "caseBindings": 0,
+    "retainedOrigins": 0
+  },
+  "release": {
+    "samples": 2560,
+    "p50Ms": 0.33016699999996035,
+    "p95Ms": 0.403583000000026
+  },
+  "roll": {
+    "samples": 20,
+    "p50Ms": 2.45637499999998,
+    "p95Ms": 2.69537500000024
+  },
+  "bytes": {
+    "maxProof": 1511,
+    "maxAcknowledgment": 150,
+    "hotJsonBeforeLastRoll": 228644,
+    "coldJsonAfterRoll": 0
+  },
+  "retainedRows": {
+    "hot": 0,
+    "origins": 0,
+    "admissions": 0,
+    "generationHeads": 1,
+    "generationFloors": 1
+  }
+}

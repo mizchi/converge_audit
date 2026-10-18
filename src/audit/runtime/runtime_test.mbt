@@ -4,7 +4,7 @@ fn test_digest(value : String) -> @commitment.AuditDigest {
 }
 
 ///|
-fn test_boundary(scope_id : String) -> AuditBoundary {
+fn test_boundary(scope_id : String) -> @runtime.AuditBoundary {
   {
     protocol_version: 1,
     purpose: "checkpoint-v1",
@@ -15,7 +15,7 @@ fn test_boundary(scope_id : String) -> AuditBoundary {
 }
 
 ///|
-fn test_closure_evidence() -> EpochClosureEvidence {
+fn test_closure_evidence() -> @runtime.EpochClosureEvidence {
   {
     boundary: test_boundary("scope-1"),
     epoch: 7,
@@ -32,9 +32,9 @@ fn ready_outbox(
   epoch : Int,
   digest : String,
   created_order : Int,
-) -> CheckpointOutboxEntry {
+) -> @runtime.CheckpointOutboxEntry {
   match
-    open_checkpoint_outbox_entry(
+    @runtime.open_checkpoint_outbox_entry(
       boundary=test_boundary(scope_id),
       destination_id~,
       epoch~,
@@ -49,11 +49,11 @@ fn ready_outbox(
 
 ///|
 fn claim_outbox(
-  entry : CheckpointOutboxEntry,
+  entry : @runtime.CheckpointOutboxEntry,
   now_ms~ : Int,
   lease_duration_ms~ : Int,
-) -> CheckpointOutboxEntry {
-  match claim_checkpoint_outbox(entry, now_ms~, lease_duration_ms~) {
+) -> @runtime.CheckpointOutboxEntry {
+  match @runtime.claim_checkpoint_outbox(entry, now_ms~, lease_duration_ms~) {
     OutboxClaimed(claimed) => claimed
     OutboxNotRetryable => abort("expected retryable outbox entry")
     OutboxClaimRefused(_) => abort("expected valid claim")
@@ -61,7 +61,9 @@ fn claim_outbox(
 }
 
 ///|
-fn raw_accepted_ack(entry : CheckpointOutboxEntry) -> CheckpointAckEvidence {
+fn raw_accepted_ack(
+  entry : @runtime.CheckpointOutboxEntry,
+) -> @runtime.CheckpointAckEvidence {
   {
     boundary: entry.boundary(),
     authority_id: entry.destination_id(),
@@ -73,25 +75,30 @@ fn raw_accepted_ack(entry : CheckpointOutboxEntry) -> CheckpointAckEvidence {
 
 ///|
 fn authenticate_ack_for_test(
-  evidence : CheckpointAckEvidence,
-) -> AuthenticatedCheckpointAck {
+  evidence : @runtime.CheckpointAckEvidence,
+) -> @runtime.AuthenticatedCheckpointAck {
   match
-    open_authenticated_checkpoint_ack(evidence, authentication_succeeded=true) {
+    @runtime.open_authenticated_checkpoint_ack(
+      evidence,
+      authentication_succeeded=true,
+    ) {
     CheckpointAckReady(ack) => ack
     CheckpointAckRefused(_) => abort("expected authenticated checkpoint ACK")
   }
 }
 
 ///|
-fn accepted_ack(entry : CheckpointOutboxEntry) -> AuthenticatedCheckpointAck {
+fn accepted_ack(
+  entry : @runtime.CheckpointOutboxEntry,
+) -> @runtime.AuthenticatedCheckpointAck {
   authenticate_ack_for_test(raw_accepted_ack(entry))
 }
 
 ///|
 fn acknowledge_outbox_for_test(
-  entry : CheckpointOutboxEntry,
-) -> CheckpointOutboxEntry {
-  match acknowledge_checkpoint_outbox(entry, accepted_ack(entry)) {
+  entry : @runtime.CheckpointOutboxEntry,
+) -> @runtime.CheckpointOutboxEntry {
+  match @runtime.acknowledge_checkpoint_outbox(entry, accepted_ack(entry)) {
     OutboxAcknowledged(acknowledged) => acknowledged
     OutboxAlreadyAcknowledged => abort("entry was not acknowledged yet")
     OutboxAckRefused(_) => abort("expected valid acknowledgment")
@@ -101,7 +108,7 @@ fn acknowledge_outbox_for_test(
 ///|
 test "trusted epoch closure is minted only from complete conflict-free quorum evidence" {
   let evidence = test_closure_evidence()
-  let ready = open_trusted_epoch_closure(
+  let ready = @runtime.open_trusted_epoch_closure(
     evidence,
     frontier_complete=true,
     conflict_free=true,
@@ -132,7 +139,7 @@ test "trusted epoch closure is minted only from complete conflict-free quorum ev
     _ => abort("complete closure evidence must open")
   }
   debug_inspect(
-    open_trusted_epoch_closure(
+    @runtime.open_trusted_epoch_closure(
       evidence,
       frontier_complete=false,
       conflict_free=true,
@@ -141,7 +148,7 @@ test "trusted epoch closure is minted only from complete conflict-free quorum ev
     content="EpochClosurePending(MissingFrontierEvents)",
   )
   debug_inspect(
-    open_trusted_epoch_closure(
+    @runtime.open_trusted_epoch_closure(
       evidence,
       frontier_complete=true,
       conflict_free=true,
@@ -150,7 +157,7 @@ test "trusted epoch closure is minted only from complete conflict-free quorum ev
     content="EpochClosurePending(UnderQuorum)",
   )
   debug_inspect(
-    open_trusted_epoch_closure(
+    @runtime.open_trusted_epoch_closure(
       evidence,
       frontier_complete=false,
       conflict_free=false,
@@ -164,8 +171,8 @@ test "trusted epoch closure is minted only from complete conflict-free quorum ev
 test "trusted epoch closure rejects malformed boundaries before evidence claims" {
   let evidence = test_closure_evidence()
   debug_inspect(
-    open_trusted_epoch_closure(
-      { ..evidence, boundary: { ..evidence.boundary, scope_id: "" } },
+    @runtime.open_trusted_epoch_closure(
+      { ..evidence, boundary: { ..evidence.boundary, scope_id: "", }, },
       frontier_complete=true,
       conflict_free=true,
       quorum_satisfied=true,
@@ -173,8 +180,8 @@ test "trusted epoch closure rejects malformed boundaries before evidence claims"
     content="EpochClosureRefused(EmptyScopeId)",
   )
   debug_inspect(
-    open_trusted_epoch_closure(
-      { ..evidence, epoch: -1 },
+    @runtime.open_trusted_epoch_closure(
+      { ..evidence, epoch: -1, },
       frontier_complete=true,
       conflict_free=true,
       quorum_satisfied=true,
@@ -182,8 +189,8 @@ test "trusted epoch closure rejects malformed boundaries before evidence claims"
     content="EpochClosureRefused(NegativeClosureEpoch)",
   )
   debug_inspect(
-    open_trusted_epoch_closure(
-      { ..evidence, certificate_digest: test_digest("") },
+    @runtime.open_trusted_epoch_closure(
+      { ..evidence, certificate_digest: test_digest(""), },
       frontier_complete=true,
       conflict_free=true,
       quorum_satisfied=true,
@@ -212,7 +219,7 @@ test "retry selection prioritizes the oldest retryable epoch within one route" {
     ready_outbox("scope-1", "authority-2", 0, "foreign-route", 0),
   ]
   debug_inspect(
-    select_oldest_retryable_checkpoint(
+    @runtime.select_oldest_retryable_checkpoint(
       entries,
       boundary=test_boundary("scope-1"),
       destination_id="authority-1",
@@ -226,7 +233,7 @@ test "retry selection prioritizes the oldest retryable epoch within one route" {
     lease_duration_ms=5,
   )
   debug_inspect(
-    select_oldest_retryable_checkpoint(
+    @runtime.select_oldest_retryable_checkpoint(
       [entries[0], expired],
       boundary=test_boundary("scope-1"),
       destination_id="authority-1",
@@ -239,7 +246,7 @@ test "retry selection prioritizes the oldest retryable epoch within one route" {
 ///|
 test "retry selection and outbox opening fail closed on invalid input" {
   debug_inspect(
-    open_checkpoint_outbox_entry(
+    @runtime.open_checkpoint_outbox_entry(
       boundary=test_boundary("scope-1"),
       destination_id="",
       epoch=1,
@@ -250,7 +257,7 @@ test "retry selection and outbox opening fail closed on invalid input" {
     content="OutboxEntryRefused(EmptyDestinationId)",
   )
   debug_inspect(
-    select_oldest_retryable_checkpoint(
+    @runtime.select_oldest_retryable_checkpoint(
       [],
       boundary=test_boundary("scope-1"),
       destination_id="authority-1",
@@ -259,7 +266,7 @@ test "retry selection and outbox opening fail closed on invalid input" {
     content="RetrySelectionRefused(NegativeSelectionTime)",
   )
   debug_inspect(
-    select_oldest_retryable_checkpoint(
+    @runtime.select_oldest_retryable_checkpoint(
       [],
       boundary=test_boundary("scope-1"),
       destination_id="authority-1",
@@ -273,14 +280,14 @@ test "retry selection and outbox opening fail closed on invalid input" {
 test "transport failure releases an in-flight lease without reopening acknowledged work" {
   let entry = ready_outbox("scope-1", "authority-1", 1, "checkpoint", 0)
   let claimed = claim_outbox(entry, now_ms=10, lease_duration_ms=20)
-  match release_checkpoint_outbox(claimed) {
+  match @runtime.release_checkpoint_outbox(claimed) {
     OutboxReleased(released) =>
       debug_inspect(released.state(), content="OutboxPending")
     OutboxReleaseNoop => abort("in-flight entry must return to pending")
   }
   let acknowledged = acknowledge_outbox_for_test(entry)
   debug_inspect(
-    release_checkpoint_outbox(acknowledged),
+    @runtime.release_checkpoint_outbox(acknowledged),
     content="OutboxReleaseNoop",
   )
 }
@@ -289,7 +296,7 @@ test "transport failure releases an in-flight lease without reopening acknowledg
 test "raw checkpoint acknowledgment cannot cross the authentication boundary" {
   let entry = ready_outbox("scope-1", "authority-1", 1, "checkpoint", 0)
   debug_inspect(
-    open_authenticated_checkpoint_ack(
+    @runtime.open_authenticated_checkpoint_ack(
       raw_accepted_ack(entry),
       authentication_succeeded=false,
     ),
@@ -300,13 +307,13 @@ test "raw checkpoint acknowledgment cannot cross the authentication boundary" {
 ///|
 test "only an exact authenticated success acknowledgment completes an outbox entry" {
   let entry = ready_outbox("scope-1", "authority-1", 1, "checkpoint", 0)
-  match acknowledge_checkpoint_outbox(entry, accepted_ack(entry)) {
+  match @runtime.acknowledge_checkpoint_outbox(entry, accepted_ack(entry)) {
     OutboxAcknowledged(acknowledged) => {
       debug_inspect(acknowledged.state(), content="OutboxAcknowledgedState")
       debug_inspect(
-        acknowledge_checkpoint_outbox(
+        @runtime.acknowledge_checkpoint_outbox(
           acknowledged,
-          { ..raw_accepted_ack(entry), decision: CheckpointDuplicate }
+          { ..raw_accepted_ack(entry), decision: CheckpointDuplicate, }
           |> authenticate_ack_for_test,
         ),
         content="OutboxAlreadyAcknowledged",
@@ -315,9 +322,9 @@ test "only an exact authenticated success acknowledgment completes an outbox ent
     _ => abort("exact accepted ACK must complete the entry")
   }
   match
-    acknowledge_checkpoint_outbox(
+    @runtime.acknowledge_checkpoint_outbox(
       entry,
-      { ..raw_accepted_ack(entry), decision: CheckpointDuplicate }
+      { ..raw_accepted_ack(entry), decision: CheckpointDuplicate, }
       |> authenticate_ack_for_test,
     ) {
     OutboxAcknowledged(acknowledged) =>
@@ -325,25 +332,25 @@ test "only an exact authenticated success acknowledgment completes an outbox ent
     _ => abort("exact duplicate ACK must complete the entry")
   }
   debug_inspect(
-    acknowledge_checkpoint_outbox(
+    @runtime.acknowledge_checkpoint_outbox(
       entry,
-      { ..raw_accepted_ack(entry), authority_id: "attacker" }
+      { ..raw_accepted_ack(entry), authority_id: "attacker", }
       |> authenticate_ack_for_test,
     ),
     content="OutboxAckRefused(AckAuthorityMismatch)",
   )
   debug_inspect(
-    acknowledge_checkpoint_outbox(
+    @runtime.acknowledge_checkpoint_outbox(
       entry,
-      { ..raw_accepted_ack(entry), checkpoint_digest: test_digest("other") }
+      { ..raw_accepted_ack(entry), checkpoint_digest: test_digest("other"), }
       |> authenticate_ack_for_test,
     ),
     content="OutboxAckRefused(AckDigestMismatch)",
   )
   debug_inspect(
-    acknowledge_checkpoint_outbox(
+    @runtime.acknowledge_checkpoint_outbox(
       entry,
-      { ..raw_accepted_ack(entry), decision: CheckpointGap }
+      { ..raw_accepted_ack(entry), decision: CheckpointGap, }
       |> authenticate_ack_for_test,
     ),
     content="OutboxAckRefused(AckDecisionNotSuccessful)",

@@ -42,6 +42,10 @@ pub fn accepted_replay_witness_certificate_has_valid_policy(Int, Int, Int) -> Un
 
 pub fn accepted_source_requires_exact_binding(Bool, Bool) -> Unit
 
+pub fn admitted_encounter_generation_roll_requires_every_guard(Bool, Bool, Bool, Bool) -> Unit
+
+pub fn admitted_encounter_termination_requires_unsettled_valid_clocks(Bool, Bool, Bool, Bool, Int, Int) -> Unit
+
 pub fn admitted_open_world_wire_requires_every_condition(Bool, Bool, Bool, Bool, Bool, Bool, Bool, OpenWorldWireAdmissionDecision) -> Unit
 
 pub fn advanced_inventory_head_requires_every_binding(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
@@ -51,6 +55,8 @@ pub fn advanced_signing_anchor_head_requires_exact_parent(Bool, Bool, Bool, Int,
 pub fn already_defeated_pvp_target_cannot_score_again(Int, Int, Bool, Int, Int) -> Unit
 
 pub fn anchor_only_central_job_awaits_transcript(Bool, Bool, Bool) -> Unit
+
+pub fn asset_bearing_encounter_recovery_cannot_be_released(Bool, Bool, Bool) -> Unit
 
 pub fn asset_lineage_certificate_allowed(certificate_authenticated~ : Bool, arbiter_known~ : Bool, lineage_bound~ : Bool, certificate_time_valid~ : Bool, lifecycle_valid~ : Bool, is_appeal~ : Bool, appeal_target_matches~ : Bool, appeal_window_open~ : Bool) -> Bool
 
@@ -78,15 +84,27 @@ pub fn classify_open_world_signing_anchor_publication(anchor_valid~ : Bool, log_
 
 pub fn classify_open_world_wire_admission(bytes_within_budget~ : Bool, canonical_encoding~ : Bool, supported_version~ : Bool, shape_valid~ : Bool, text_within_budget~ : Bool, proof_within_budget~ : Bool, items_within_budget~ : Bool) -> OpenWorldWireAdmissionDecision
 
+pub fn cleaned_terminal_encounter_has_elapsed_retention_and_no_hold(Bool, Int, Int, Bool) -> Unit
+
 pub fn cleared_raid_requires_defense_and_zero_boss_hp(Bool, Int) -> Unit
+
+pub fn committed_encounter_fresh_expiration_is_rejected(Bool, Int, Int) -> Unit
+
+pub fn committed_encounter_has_fresh_pre_release_clock(Bool, Int, Int) -> Unit
 
 pub fn conflicting_marketplace_creation_never_persists(Bool, Bool, Bool, Bool) -> Unit
 
 pub fn conflicting_observer_digest_is_rejected() -> Unit
 
+pub fn consumed_encounter_requires_every_authentication_fact(Bool, Bool, Bool, Bool) -> Unit
+
 pub fn contested_objective_never_scores(Int, Bool, Int, Int) -> Unit
 
 pub fn count_approvals(FixedArray[Bool]) -> Int
+
+pub fn current_generation_empty_encounter_receipt_cannot_retire(Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn current_generation_encounter_recovery_cannot_be_forgotten(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn decide_checkpoint(FixedArray[Bool], Int, challenged~ : Bool, authority~ : AuthorityVerdict, replay_matches~ : Bool) -> CheckpointDecision
 
@@ -100,11 +118,27 @@ pub fn dodge_receipt_bound_allowed(Int, Int, Int) -> Bool
 
 pub fn duplicate_signing_anchor_head_requires_known_digest(Bool, Bool, Bool, Int, Int, Bool) -> Unit
 
+pub fn early_encounter_fresh_expiration_is_rejected(Bool, Bool, Int, Int) -> Unit
+
+pub fn early_encounter_retention_is_never_released(Bool, Int, Int, Bool) -> Unit
+
 pub fn early_reaction_is_rejected(Int, Int, Int, Int, Bool) -> Unit
 
 pub fn encounter_clear_allowed(schedule_complete~ : Bool, survivor_count~ : Int) -> Bool
 
+pub fn encounter_commit_allowed(Bool, Int, Int) -> Bool
+
+pub fn encounter_commit_at_or_after_release_is_rejected(Bool, Int, Int) -> Unit
+
+pub fn encounter_commit_without_freshness_is_rejected(Int, Int) -> Unit
+
+pub fn encounter_consume_allowed(Bool, Bool, Bool, Bool) -> Bool
+
 pub fn encounter_death_is_absorbing(Int, Int, Bool, Int) -> Unit
+
+pub fn encounter_empty_receipt_retire_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn encounter_generation_roll_allowed(Bool, Bool, Bool, Bool) -> Bool
 
 pub fn encounter_hp_is_non_negative(Int, Int, Bool, Int) -> Unit
 
@@ -113,6 +147,26 @@ pub fn encounter_loot_allowed(encounter_cleared~ : Bool, player_hp~ : Int) -> Bo
 pub fn encounter_loot_requires_clear_and_living_player(Bool, Int) -> Unit
 
 pub fn encounter_miss_preserves_valid_hp(Int, Int, Int) -> Unit
+
+pub fn encounter_recovery_forget_allowed(Bool, Bool, Bool, Bool, Bool, Bool) -> Bool
+
+pub fn encounter_recovery_release_allowed(Bool, Bool, Bool, Bool) -> Bool
+
+pub fn encounter_retention_release_allowed(Bool, Int, Int, Bool) -> Bool
+
+pub fn encounter_reveal_allowed(Int, Int, Int) -> Bool
+
+pub fn encounter_reveal_before_release_is_rejected(Int, Int, Int) -> Unit
+
+pub fn encounter_second_consumption_is_rejected(Bool, Bool, Bool) -> Unit
+
+pub fn encounter_terminal_cleanup_allowed(Bool, Int, Int, Bool) -> Bool
+
+pub fn encounter_termination_allowed(Bool, Bool, Bool, Bool, Int, Int) -> Bool
+
+pub fn encounter_unverified_replay_cannot_be_consumed(Bool, Bool, Bool) -> Unit
+
+pub fn encounter_wrong_root_cannot_be_consumed(Bool, Bool, Bool) -> Unit
 
 pub fn excessive_backdate_is_rejected(Int, Int, Int, Bool) -> Unit
 
@@ -134,7 +188,27 @@ pub fn foreign_signing_anchor_head_never_advances_or_accuses(Bool, Bool, Int, In
 
 pub fn foreign_transparency_boundary_never_publishes(Bool, Bool, Bool, Bool, Bool) -> Unit
 
+pub fn forgotten_encounter_recovery_requires_release_owner_and_old_generation(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn fresh_encounter_expiration_requires_no_commitment_and_elapsed_deadline(Bool, Bool, Int, Int) -> Unit
+
 pub fn future_client_tick_is_rejected(Int, Int, Int, Bool) -> Unit
+
+pub fn generation_roll_with_stale_expected_value_is_rejected(Bool, Bool, Bool) -> Unit
+
+pub fn generation_roll_with_unreleased_archive_is_rejected(Bool, Bool, Bool) -> Unit
+
+pub fn generation_roll_with_unretired_terminal_state_is_rejected(Bool, Bool, Bool) -> Unit
+
+pub fn generation_roll_without_advance_capacity_is_rejected(Bool, Bool, Bool) -> Unit
+
+pub fn held_empty_encounter_receipt_cannot_retire(Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn held_encounter_recovery_cannot_be_released(Bool, Bool, Bool) -> Unit
+
+pub fn held_encounter_retention_is_never_released(Bool, Int, Int) -> Unit
+
+pub fn held_terminal_encounter_cannot_be_cleaned(Bool, Int, Int) -> Unit
 
 pub fn hp_after_encounter_damage(Int, Int, was_hit~ : Bool) -> Int
 
@@ -206,6 +280,8 @@ pub fn new_observer_signature_requires_empty_plan_slot(Bool, Bool, Bool) -> Unit
 
 pub fn next_signing_anchor_head_with_wrong_parent_is_a_fork(Int, Bool) -> Unit
 
+pub fn non_assetless_encounter_receipt_cannot_retire(Bool, Bool, Bool, Bool, Bool) -> Unit
+
 pub fn noncanonical_open_world_wire_is_rejected(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn open_revocation_rejects_asset_use(Bool, Bool, Int, Bool) -> Unit
@@ -270,6 +346,8 @@ pub fn oversized_threshold_has_no_participant_quorum(FixedArray[Bool], Int) -> U
 
 pub fn owner_mismatch_rejects_transfer(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
+pub fn owner_retained_encounter_recovery_cannot_be_forgotten(Bool, Bool, Bool, Bool, Bool) -> Unit
+
 pub fn persisted_marketplace_creation_requires_every_binding(Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn persisted_open_world_missing_slot_requires_every_binding(Bool, Bool, Bool) -> Unit
@@ -296,6 +374,10 @@ pub fn raid_boss_clear_allowed(defense_phase_cleared~ : Bool, boss_hp~ : Int) ->
 
 pub fn reaction_at_or_after_resolution_is_rejected(Int, Int, Int, Int, Bool) -> Unit
 
+pub fn released_encounter_recovery_requires_every_guard(Bool, Bool, Bool, Bool) -> Unit
+
+pub fn released_encounter_retention_has_settlement_elapsed_deadline_and_no_hold(Bool, Int, Int, Bool) -> Unit
+
 pub fn replay_witness_certificate_allowed(witness_count~ : Int, max_faults~ : Int, approval_count~ : Int) -> Bool
 
 pub fn replay_witness_policy_valid(Int, Int) -> Bool
@@ -312,7 +394,15 @@ pub fn replayed_effect_allowed(source_authenticated~ : Bool, session_matches~ : 
 
 pub fn replayed_effect_requires_every_condition(Bool, Bool, Bool, Bool, Bool) -> Unit
 
+pub fn retained_empty_encounter_receipt_cannot_retire(Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn retained_encounter_recovery_cannot_be_released(Bool, Bool, Bool) -> Unit
+
+pub fn retired_empty_encounter_receipt_requires_every_guard(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
+
 pub fn reused_observer_signature_requires_exact_digest(Bool, Bool, Bool) -> Unit
+
+pub fn revealed_encounter_has_ordered_nonnegative_clock(Int, Int, Int) -> Unit
 
 pub fn revoked_asset_rejects_atomic_inventory_checkpoint(Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
@@ -322,11 +412,17 @@ pub fn same_owner_rejects_transfer(Bool, Bool, Bool, Bool, Bool, Bool) -> Unit
 
 pub fn session_mismatch_rejects_source(Bool, Bool) -> Unit
 
+pub fn settled_encounter_termination_is_rejected(Bool, Bool, Bool, Int, Int) -> Unit
+
 pub fn source_capability_matches(session_matches~ : Bool, digest_matches~ : Bool) -> Bool
 
 pub fn surviving_pvp_target_cannot_score(Int, Int, Bool, Int, Int) -> Unit
 
 pub fn telegraph_dodge_allowed(telegraph_valid~ : Bool, player_evidence_valid~ : Bool, causally_bound~ : Bool, reaction_window~ : Bool, receipt_bound~ : Bool, movement_legal~ : Bool) -> Bool
+
+pub fn terminal_encounter_cannot_be_cleaned_before_retention_deadline(Bool, Int, Int, Bool) -> Unit
+
+pub fn terminated_unsettled_encounter_allows_reading_its_existing_result(Bool, Bool, Int, Int) -> Unit
 
 pub fn transfer_transition_allowed(asset_exists~ : Bool, owner_matches~ : Bool, version_matches~ : Bool, recipient_valid~ : Bool, changes_owner~ : Bool, source_authenticated~ : Bool) -> Bool
 
@@ -340,11 +436,23 @@ pub fn uncommitted_open_world_encounter_never_verifies(Bool) -> Unit
 
 pub fn underquorum_open_world_registration_never_verifies(Bool, Bool) -> Unit
 
+pub fn unforfeited_encounter_recovery_cannot_be_released(Bool, Bool, Bool) -> Unit
+
+pub fn unindexed_empty_encounter_receipt_cannot_retire(Bool, Bool, Bool, Bool, Bool) -> Unit
+
 pub fn unopened_open_world_seed_never_verifies(Bool, Bool, Bool) -> Unit
 
 pub fn unpublished_open_world_audit_never_verifies(Bool, Bool, Bool, Bool, Bool) -> Unit
 
+pub fn unsettled_empty_encounter_receipt_cannot_retire(Bool, Bool, Bool, Bool, Bool) -> Unit
+
+pub fn unsettled_encounter_abort_with_valid_clocks_is_allowed(Bool, Int, Int) -> Unit
+
+pub fn unsettled_encounter_retention_is_never_released(Int, Int, Bool) -> Unit
+
 pub fn unsupported_open_world_wire_version_is_rejected(Bool, Bool, Bool, Bool) -> Unit
+
+pub fn unterminated_encounter_cannot_be_cleaned(Int, Int, Bool) -> Unit
 
 pub fn unverified_standard_missing_slot_never_persists(Bool, Bool) -> Unit
 
@@ -372,6 +480,9 @@ pub(all) enum AuthorityVerdict {
   Accept
   Reject
 } derive(Eq, @debug.Debug)
+pub fn AuthorityVerdict::equal(Self, Self) -> Bool
+pub fn AuthorityVerdict::not_equal(Self, Self) -> Bool
+pub fn AuthorityVerdict::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CentralReplayArtifactDecision {
   RejectReplayBoundary
@@ -381,6 +492,9 @@ pub(all) enum CentralReplayArtifactDecision {
   RejectReplayMismatch
   VerifyCentralReplay
 } derive(Eq, @debug.Debug)
+pub fn CentralReplayArtifactDecision::equal(Self, Self) -> Bool
+pub fn CentralReplayArtifactDecision::not_equal(Self, Self) -> Bool
+pub fn CentralReplayArtifactDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum CheckpointDecision {
   Pending
@@ -389,6 +503,9 @@ pub(all) enum CheckpointDecision {
   Finalized
   Rejected
 } derive(Eq, @debug.Debug)
+pub fn CheckpointDecision::equal(Self, Self) -> Bool
+pub fn CheckpointDecision::not_equal(Self, Self) -> Bool
+pub fn CheckpointDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldAuditDecision {
   PeerAccepted
@@ -397,6 +514,9 @@ pub(all) enum OpenWorldAuditDecision {
   CentralReplayRequired
   Rejected
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldAuditDecision::equal(Self, Self) -> Bool
+pub fn OpenWorldAuditDecision::not_equal(Self, Self) -> Bool
+pub fn OpenWorldAuditDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningDecision {
   SignNewObservation
@@ -404,6 +524,9 @@ pub(all) enum OpenWorldObserverSigningDecision {
   RejectConflictingObservation
   RejectInvalidObservation
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningDecision::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningDecision::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldOutcomeClass {
   Ephemeral
@@ -411,6 +534,9 @@ pub(all) enum OpenWorldOutcomeClass {
   Tradable
   HighValue
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldOutcomeClass::equal(Self, Self) -> Bool
+pub fn OpenWorldOutcomeClass::not_equal(Self, Self) -> Bool
+pub fn OpenWorldOutcomeClass::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldSealConflictDecision {
   RegistryTruncated
@@ -419,6 +545,9 @@ pub(all) enum OpenWorldSealConflictDecision {
   NoConflict
   InvalidEvidence
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldSealConflictDecision::equal(Self, Self) -> Bool
+pub fn OpenWorldSealConflictDecision::not_equal(Self, Self) -> Bool
+pub fn OpenWorldSealConflictDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldSigningAnchorHeadDecision {
   AdvanceSigningAnchorHead
@@ -429,6 +558,9 @@ pub(all) enum OpenWorldSigningAnchorHeadDecision {
   StaleSigningAnchorHead
   RejectSigningAnchorHeadBoundary
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldSigningAnchorHeadDecision::equal(Self, Self) -> Bool
+pub fn OpenWorldSigningAnchorHeadDecision::not_equal(Self, Self) -> Bool
+pub fn OpenWorldSigningAnchorHeadDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldSigningAnchorPublicationDecision {
   PublishSigningAnchor
@@ -437,6 +569,9 @@ pub(all) enum OpenWorldSigningAnchorPublicationDecision {
   RejectSigningAnchorLogManifest
   RejectSigningAnchorMembership
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldSigningAnchorPublicationDecision::equal(Self, Self) -> Bool
+pub fn OpenWorldSigningAnchorPublicationDecision::not_equal(Self, Self) -> Bool
+pub fn OpenWorldSigningAnchorPublicationDecision::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldWireAdmissionDecision {
   AdmitOpenWorldWirePayload
@@ -448,8 +583,10 @@ pub(all) enum OpenWorldWireAdmissionDecision {
   RejectOpenWorldWireProofBudget
   RejectOpenWorldWireItemBudget
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldWireAdmissionDecision::equal(Self, Self) -> Bool
+pub fn OpenWorldWireAdmissionDecision::not_equal(Self, Self) -> Bool
+pub fn OpenWorldWireAdmissionDecision::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

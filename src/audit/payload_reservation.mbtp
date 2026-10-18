@@ -1,0 +1,166 @@
+///|
+predicate player_local_payload_reservation_post(
+  used_bytes : Int,
+  used_items : Int,
+  reserved_bytes : Int,
+  reserved_items : Int,
+  incoming_bytes : Int,
+  incoming_items : Int,
+  max_bytes : Int,
+  max_items : Int,
+  headroom_bytes : Int,
+  result : Bool,
+) {
+  if used_bytes >= 0 && used_items >= 0 &&
+    reserved_bytes >= 0 && reserved_items >= 0 &&
+    incoming_bytes > 0 && incoming_items > 0 &&
+    max_bytes >= 0 && max_items >= 0 && headroom_bytes >= 0 &&
+    headroom_bytes <= max_bytes &&
+    used_bytes <= max_bytes - headroom_bytes &&
+    reserved_bytes <= max_bytes - headroom_bytes - used_bytes &&
+    incoming_bytes <= max_bytes - headroom_bytes - used_bytes - reserved_bytes &&
+    used_items <= max_items &&
+    reserved_items <= max_items - used_items &&
+    incoming_items <= max_items - used_items - reserved_items {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma admitted_player_local_payload_reservation_requires_every_guard(
+  used_bytes : Int,
+  used_items : Int,
+  reserved_bytes : Int,
+  reserved_items : Int,
+  incoming_bytes : Int,
+  incoming_items : Int,
+  max_bytes : Int,
+  max_items : Int,
+  headroom_bytes : Int,
+) where {
+  proof_require: player_local_payload_reservation_post(
+    used_bytes, used_items, reserved_bytes, reserved_items, incoming_bytes,
+    incoming_items, max_bytes, max_items, headroom_bytes, true,
+  ),
+  proof_ensure: used_bytes >= 0,
+  proof_ensure: used_items >= 0,
+  proof_ensure: reserved_bytes >= 0,
+  proof_ensure: reserved_items >= 0,
+  proof_ensure: incoming_bytes > 0,
+  proof_ensure: incoming_items > 0,
+  proof_ensure: max_bytes >= 0,
+  proof_ensure: max_items >= 0,
+  proof_ensure: headroom_bytes >= 0,
+  proof_ensure: headroom_bytes <= max_bytes,
+  proof_ensure: used_bytes <= max_bytes - headroom_bytes,
+  proof_ensure: reserved_bytes <= max_bytes - headroom_bytes - used_bytes,
+  proof_ensure: incoming_bytes <= max_bytes - headroom_bytes - used_bytes - reserved_bytes,
+  proof_ensure: used_items <= max_items,
+  proof_ensure: reserved_items <= max_items - used_items,
+  proof_ensure: incoming_items <= max_items - used_items - reserved_items,
+  proof_ensure: used_bytes + reserved_bytes + incoming_bytes <= max_bytes - headroom_bytes,
+  proof_ensure: used_items + reserved_items + incoming_items <= max_items,
+} {
+}
+
+///|
+pub lemma exhausted_player_local_payload_reservation_bytes_are_rejected(
+  used_bytes : Int,
+  used_items : Int,
+  reserved_bytes : Int,
+  reserved_items : Int,
+  incoming_bytes : Int,
+  incoming_items : Int,
+  max_bytes : Int,
+  max_items : Int,
+  headroom_bytes : Int,
+) where {
+  proof_require: max_bytes - headroom_bytes - used_bytes - reserved_bytes <= 0,
+  proof_ensure: player_local_payload_reservation_post(
+    used_bytes, used_items, reserved_bytes, reserved_items, incoming_bytes,
+    incoming_items, max_bytes, max_items, headroom_bytes, false,
+  ),
+} {
+}
+
+///|
+pub lemma exhausted_player_local_payload_reservation_items_are_rejected(
+  used_bytes : Int,
+  used_items : Int,
+  reserved_bytes : Int,
+  reserved_items : Int,
+  incoming_bytes : Int,
+  incoming_items : Int,
+  max_bytes : Int,
+  max_items : Int,
+  headroom_bytes : Int,
+) where {
+  proof_require: max_items - used_items - reserved_items <= 0,
+  proof_ensure: player_local_payload_reservation_post(
+    used_bytes, used_items, reserved_bytes, reserved_items, incoming_bytes,
+    incoming_items, max_bytes, max_items, headroom_bytes, false,
+  ),
+} {
+}
+
+///|
+pub lemma invalid_player_local_payload_reservation_headroom_is_rejected(
+  used_bytes : Int,
+  used_items : Int,
+  reserved_bytes : Int,
+  reserved_items : Int,
+  incoming_bytes : Int,
+  incoming_items : Int,
+  max_bytes : Int,
+  max_items : Int,
+  headroom_bytes : Int,
+) where {
+  proof_require: headroom_bytes > max_bytes,
+  proof_ensure: player_local_payload_reservation_post(
+    used_bytes, used_items, reserved_bytes, reserved_items, incoming_bytes,
+    incoming_items, max_bytes, max_items, headroom_bytes, false,
+  ),
+} {
+}
+
+///|
+pub lemma nonpositive_player_local_payload_reservation_bytes_are_rejected(
+  used_bytes : Int,
+  used_items : Int,
+  reserved_bytes : Int,
+  reserved_items : Int,
+  incoming_bytes : Int,
+  incoming_items : Int,
+  max_bytes : Int,
+  max_items : Int,
+  headroom_bytes : Int,
+) where {
+  proof_require: incoming_bytes <= 0,
+  proof_ensure: player_local_payload_reservation_post(
+    used_bytes, used_items, reserved_bytes, reserved_items, incoming_bytes,
+    incoming_items, max_bytes, max_items, headroom_bytes, false,
+  ),
+} {
+}
+
+///|
+pub lemma nonpositive_player_local_payload_reservation_items_are_rejected(
+  used_bytes : Int,
+  used_items : Int,
+  reserved_bytes : Int,
+  reserved_items : Int,
+  incoming_bytes : Int,
+  incoming_items : Int,
+  max_bytes : Int,
+  max_items : Int,
+  headroom_bytes : Int,
+) where {
+  proof_require: incoming_items <= 0,
+  proof_ensure: player_local_payload_reservation_post(
+    used_bytes, used_items, reserved_bytes, reserved_items, incoming_bytes,
+    incoming_items, max_bytes, max_items, headroom_bytes, false,
+  ),
+} {
+}

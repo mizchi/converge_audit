@@ -8,7 +8,25 @@ evaluation environment, not a production-security certification.
 ## Browser reference game
 
 `web/` contains **Audit Survivors**, a vertical slice that exercises the audit
-stack as a game:
+stack as a game. The default `/` now uses authorized, bounded 60-tick encounters:
+
+- one stable device key and a whole-log reservation before starting;
+- public combat preview with loot revealed only after verified settlement;
+- receipt-based market admission and authorized retention cleanup;
+- interrupted reloads never resume gameplay or invent missing inputs;
+- bounded control JSON, at most 16 uncompacted receipts, and signed inventory checkpoints;
+- archived older items fetched three receipts at a time, preserving original-receipt market checks.
+- admin-controlled generation rollover reclaims closed admission/archive slots;
+  original receipts remain in an indexed table whose total size grows with history.
+- owner-released forfeits are deleted when their generation closes, with signed-proof
+  retry after deletion and no per-ticket tombstone; see [recovery release](../../docs/encounter-recovery-release-ja.md).
+- settled [empty receipts](../../docs/encounter-empty-inventory-ja.md) can be retired
+  in batches after generation closure, retaining compact ordinal ranges and v2 inventory heads.
+
+See the [encounter UI guide](../../docs/encounter-ui-ja.md) for guarantees and
+remaining integration work, and [receipt compaction](../../docs/encounter-inventory-checkpoint-ja.md)
+for durable retry and measured costs. The previous checkpoint demo remains at
+`/legacy.html`, with its original behavior:
 
 - Vampire Survivors-style immediate movement and automatic attacks;
 - FF14/Splatoon-style circular telegraphs that expose their resolve tick;
@@ -20,12 +38,15 @@ stack as a game:
 ```sh
 # Serve the static game and Worker API together at http://127.0.0.1:8787
 pnpm dev
+# Copy the device public key from the screen, then assign a local start:
+pnpm dev:assign-start <device-public-key>
+# Refresh the screen's authorized starts.
 
 # Hot-reload browser assets only; start the API separately
 pnpm web:dev
 ```
 
-The simulation kernel is a pure integer state transition at 30 ticks per
+The following describes the legacy demo. Its simulation kernel is a pure integer state transition at 30 ticks per
 second. Rendering alone interpolates with `requestAnimationFrame`. The browser
 builds a MoonBit Merkle micro-checkpoint every 30 leaves and stores the leaf
 transcript plus game state at complete boundaries in IndexedDB. Reload verifies

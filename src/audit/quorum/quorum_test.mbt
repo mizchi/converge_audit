@@ -1,6 +1,6 @@
 ///|
-fn quorum_member(id : String, signer : &@bft.Signer) -> QuorumMember {
-  { member_id: id, member_key: signer.public_key() }
+fn quorum_member(id : String, signer : &@bft.Signer) -> @quorum.QuorumMember {
+  { member_id: id, member_key: signer.public_key(), }
 }
 
 ///|
@@ -9,22 +9,22 @@ test "authenticated votes are collected without application semantics" {
   let verifier = @bft.MockVerifier::new()
   let alice = @bft.MockSigner::new("alice")
   let subject = @bft.Digest("opaque-subject")
-  let collector = VoteCollector::new(
+  let collector = @quorum.VoteCollector::new(
     hasher,
     verifier,
     subject,
     "replicated-log-approval",
     [quorum_member("alice", alice)],
   )
-  let signed = sign_vote(
+  let signed = @quorum.sign_vote(
     hasher,
     alice,
     subject,
     "alice",
     "replicated-log-approval",
-    VoteChoice::ApproveChoice,
+    @quorum.VoteChoice::ApproveChoice,
   )
-  assert_eq(collector.deliver(signed), VoteDeliveryResult::VoteAccepted)
+  assert_eq(collector.deliver(signed), @quorum.VoteDeliveryResult::VoteAccepted)
   let evidence = collector.evidence()
   assert_true(evidence.approvals[0])
   assert_false(evidence.challenged)
@@ -36,7 +36,7 @@ test "conflicting authenticated votes converge to challenge" {
   let verifier = @bft.MockVerifier::new()
   let alice = @bft.MockSigner::new("alice")
   let subject = @bft.Digest("opaque-subject")
-  let collector = VoteCollector::new(
+  let collector = @quorum.VoteCollector::new(
     hasher,
     verifier,
     subject,
@@ -45,29 +45,29 @@ test "conflicting authenticated votes converge to challenge" {
   )
   ignore(
     collector.deliver(
-      sign_vote(
+      @quorum.sign_vote(
         hasher,
         alice,
         subject,
         "alice",
         "replicated-log-approval",
-        VoteChoice::ApproveChoice,
+        @quorum.VoteChoice::ApproveChoice,
       ),
     ),
   )
   match
     collector.deliver(
-      sign_vote(
+      @quorum.sign_vote(
         hasher,
         alice,
         subject,
         "alice",
         "replicated-log-approval",
-        VoteChoice::ChallengeChoice,
+        @quorum.VoteChoice::ChallengeChoice,
       ),
     ) {
     VoteRejected(alert) =>
-      assert_eq(alert.kind, VoteAlertKind::VoteEquivocation)
+      assert_eq(alert.kind, @quorum.VoteAlertKind::VoteEquivocation)
     _ => fail("expected equivocation evidence")
   }
   let evidence = collector.evidence()

@@ -1,7 +1,7 @@
 ///|
 test "observer anchor head classifier separates advance fork gap and stale" {
   assert_eq(
-    classify_open_world_signing_anchor_head(
+    @audit.classify_open_world_signing_anchor_head(
       boundary_matches=true,
       epoch_known=false,
       known_digest_matches=false,
@@ -9,10 +9,10 @@ test "observer anchor head classifier separates advance fork gap and stale" {
       incoming_epoch=11,
       parent_matches=true,
     ),
-    OpenWorldSigningAnchorHeadDecision::AdvanceSigningAnchorHead,
+    @audit.OpenWorldSigningAnchorHeadDecision::AdvanceSigningAnchorHead,
   )
   assert_eq(
-    classify_open_world_signing_anchor_head(
+    @audit.classify_open_world_signing_anchor_head(
       boundary_matches=true,
       epoch_known=true,
       known_digest_matches=true,
@@ -20,10 +20,10 @@ test "observer anchor head classifier separates advance fork gap and stale" {
       incoming_epoch=10,
       parent_matches=false,
     ),
-    OpenWorldSigningAnchorHeadDecision::DuplicateSigningAnchorHead,
+    @audit.OpenWorldSigningAnchorHeadDecision::DuplicateSigningAnchorHead,
   )
   assert_eq(
-    classify_open_world_signing_anchor_head(
+    @audit.classify_open_world_signing_anchor_head(
       boundary_matches=true,
       epoch_known=true,
       known_digest_matches=false,
@@ -31,10 +31,10 @@ test "observer anchor head classifier separates advance fork gap and stale" {
       incoming_epoch=10,
       parent_matches=true,
     ),
-    OpenWorldSigningAnchorHeadDecision::DetectSameEpochSigningAnchorFork,
+    @audit.OpenWorldSigningAnchorHeadDecision::DetectSameEpochSigningAnchorFork,
   )
   assert_eq(
-    classify_open_world_signing_anchor_head(
+    @audit.classify_open_world_signing_anchor_head(
       boundary_matches=true,
       epoch_known=false,
       known_digest_matches=false,
@@ -42,10 +42,10 @@ test "observer anchor head classifier separates advance fork gap and stale" {
       incoming_epoch=11,
       parent_matches=false,
     ),
-    OpenWorldSigningAnchorHeadDecision::DetectSigningAnchorParentFork,
+    @audit.OpenWorldSigningAnchorHeadDecision::DetectSigningAnchorParentFork,
   )
   assert_eq(
-    classify_open_world_signing_anchor_head(
+    @audit.classify_open_world_signing_anchor_head(
       boundary_matches=true,
       epoch_known=false,
       known_digest_matches=false,
@@ -53,10 +53,10 @@ test "observer anchor head classifier separates advance fork gap and stale" {
       incoming_epoch=13,
       parent_matches=false,
     ),
-    OpenWorldSigningAnchorHeadDecision::SigningAnchorHeadGap,
+    @audit.OpenWorldSigningAnchorHeadDecision::SigningAnchorHeadGap,
   )
   assert_eq(
-    classify_open_world_signing_anchor_head(
+    @audit.classify_open_world_signing_anchor_head(
       boundary_matches=true,
       epoch_known=false,
       known_digest_matches=false,
@@ -64,10 +64,10 @@ test "observer anchor head classifier separates advance fork gap and stale" {
       incoming_epoch=9,
       parent_matches=false,
     ),
-    OpenWorldSigningAnchorHeadDecision::StaleSigningAnchorHead,
+    @audit.OpenWorldSigningAnchorHeadDecision::StaleSigningAnchorHead,
   )
   assert_eq(
-    classify_open_world_signing_anchor_head(
+    @audit.classify_open_world_signing_anchor_head(
       boundary_matches=false,
       epoch_known=true,
       known_digest_matches=false,
@@ -75,6 +75,6 @@ test "observer anchor head classifier separates advance fork gap and stale" {
       incoming_epoch=10,
       parent_matches=false,
     ),
-    OpenWorldSigningAnchorHeadDecision::RejectSigningAnchorHeadBoundary,
+    @audit.OpenWorldSigningAnchorHeadDecision::RejectSigningAnchorHeadBoundary,
   )
 }

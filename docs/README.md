@@ -38,6 +38,51 @@ shortest project overview.
 - [Research and architecture survey](./research-and-architecture-ja.md)
   - Prior work, the full architecture, 1:N and N:N differences, guarantees,
     non-guarantees, and roadmap.
+- [Low-frequency arbitration and Lean model](./local-first-arbitration-lean-ja.md)
+  - Experimental optimistic arbitration, one-step fraud localization, watcher
+    assumptions, sampling limits, and the standalone Lean research package.
+- [Marketplace admission costs and log boundaries](./market-admission-cost-ja.md)
+  - Validated checkpoints as replay boundaries, item provenance and ownership,
+    bounded pending history, retention, and local verification measurements.
+- [Gameplay chronology and limits on search](./gameplay-chronology-ja.md)
+  - External commit receipts, delayed challenges, single-use attempts, limits of
+    VDFs and software-only execution restrictions, and Lean chronology proofs.
+- [Private views and bounded IndexedDB payloads](./private-views-and-bounded-storage-ja.md)
+  - Limits of preventing public-information prediction, secret-state distribution,
+    byte/item budgets, authenticated prefix deletion, and executable queue tests.
+- [One encounter from recording to authorized pruning](./encounter-lifecycle-ja.md)
+  - A bounded integrated path with delayed loot, deterministic replay, market
+    admission, real signed prune grants, Lean obligations, and local measurements.
+- [Shared replay-payload pool](./shared-payload-pool-ja.md)
+  - Global and per-queue budgets, bounded scope metadata, atomic accounting,
+    stale-generation refusal, and Chromium transaction measurements.
+- [Pre-play reservation and authenticated encounter HTTP](./encounter-http-and-reservation-ja.md)
+  - Whole-log capacity reservation, signed starts and tickets, bounded HTTP,
+    durable authorization, Lean credit invariants, and deployment boundaries.
+- [Terminating interrupted encounters](./encounter-termination-ja.md)
+  - Owner-authorized abandonment, missed-start expiry, retained terminal evidence,
+    atomic payload/credit release, and proofs against minting after termination.
+- [Bounded encounters in the default game screen](./encounter-ui-ja.md)
+  - Authorized starts, hidden-loot preview, bounded session receipts, interrupted
+    recovery, real Worker browser tests, and Lean recovery capabilities.
+- [Encounter case aggregation and retention fencing](./encounter-cases-ja.md)
+  - Existing authenticated cases block market admission and deletion until every
+    source resolution is durable; bounded bindings and atomic revision fences.
+- [Transferring replay custody to an archive](./encounter-archive-ja.md)
+  - Durable signed custody, separate local handoff and final archive release,
+    bounded SQLite storage, lost acknowledgements, and availability histories.
+- [Receipt compaction and paged inventory](./encounter-inventory-checkpoint-ja.md)
+  - Incremental signed checkpoints, bounded client history and page cache,
+    durable retry, original-receipt market admission, and measured costs.
+- [Central ledger generations and archive reuse](./encounter-generations-ja.md)
+  - Closed-epoch rollover, monotone authorization fences, retained original
+    receipts, atomic archive reclamation, and real 1,025-encounter tests.
+- [Releasing forfeited encounter recovery](./encounter-recovery-release-ja.md)
+  - Owner acknowledgment, retry after deletion, generation fences without
+    per-ticket tombstones, receipt preservation, and bounded collection work.
+- [Empty receipts and compressed inventory ranges](./encounter-empty-inventory-ja.md)
+  - Batched owner retirement, v2 checkpoints, stable ordinals, merged ranges,
+    bounded sparse pages, and recovery after originals have been deleted.
 - [Verifiable real-time game design](./telegraph-game-design-ja.md)
   - Telegraphs, dodge windows, client prediction, and mechanics that preserve
     responsiveness under audit constraints.
@@ -79,6 +124,7 @@ shortest project overview.
 | Public APIs and constructible capabilities | `src/**/pkg.generated.mbti` | `moon info` |
 | Runtime admission and refusal behavior | `src/**/*.mbt` | `moon test`, `moon check --target all` |
 | Logical predicates and invariants | `src/audit/*.mbtp`, `src/x/game_audit/audit/*.mbtp` | `just prove` |
+| Experimental arbitration mathematics (not runtime refinement) | `formal/lean/ConvergeAudit/*.lean`, `formal/lean/Tests.lean` | `just prove-lean` |
 | Finite delivery, persistence, settlement, key, and observer-signing transitions | `formal/quint/*.qnt` | `just formal-check` |
 | Production runtime requirements | `docs/game-audit-implementation-contract-ja.md` | Contract tests and fault injection |
 | Cryptography, durable persistence, and complete transcripts | Crypto adapters, mode-specific verifiers, Cloudflare DO/Queue | Integration and conformance tests; production audit still pending |
@@ -97,6 +143,7 @@ just check-audit-boundary
 just test
 just build
 just prove
+just prove-lean
 just test-audit-runtime
 just formal-check
 just quint-apalache-smoke

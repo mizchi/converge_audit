@@ -1,0 +1,55 @@
+{
+  "benchmark": "encounter-lifecycle-v1",
+  "rounds": 200,
+  "warmup": 20,
+  "environment": {
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "storage": "SQLite :memory:",
+    "networkIncluded": false,
+    "fsyncIncluded": false
+  },
+  "timings": {
+    "issue": {
+      "p50Ms": 0.04520899999999983,
+      "p95Ms": 0.09545800000000781
+    },
+    "encodeAndHashLog": {
+      "p50Ms": 0.0211659999999938,
+      "p95Ms": 0.033541999999997074
+    },
+    "commit": {
+      "p50Ms": 0.10491700000000037,
+      "p95Ms": 0.2034579999999977
+    },
+    "reveal": {
+      "p50Ms": 0.05608399999999847,
+      "p95Ms": 0.086749999999995
+    },
+    "replayAndSettle60Ticks": {
+      "p50Ms": 0.13529199999999264,
+      "p95Ms": 0.26300000000000523
+    },
+    "marketAdmission": {
+      "p50Ms": 0.09791700000002379,
+      "p95Ms": 0.23770800000002623
+    },
+    "settlementRetry": {
+      "p50Ms": 0.006500000000002615,
+      "p95Ms": 0.010457999999999856
+    },
+    "prunePermit": {
+      "p50Ms": 0.05420799999998849,
+      "p95Ms": 0.12674999999998704
+    }
+  },
+  "transport": {
+    "rawLogBytes": 661,
+    "chunkCount": 2,
+    "receiptJsonBytes": 984,
+    "listingRequestJsonBytes": 376,
+    "pruneGrantJsonBytes": 445,
+    "ledgerRowJsonBytes": 2738
+  }
+}

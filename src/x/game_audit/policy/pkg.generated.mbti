@@ -19,8 +19,10 @@ pub(all) enum GameAuditMode {
   AdversarialPvp
   OpenWorldEncounter
 } derive(Eq, @debug.Debug)
+pub fn GameAuditMode::equal(Self, Self) -> Bool
+pub fn GameAuditMode::not_equal(Self, Self) -> Bool
+pub fn GameAuditMode::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

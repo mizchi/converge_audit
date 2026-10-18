@@ -1,5 +1,5 @@
 ///|
-fn raid_rules() -> DungeonRaidRules {
+fn raid_rules() -> @replay.DungeonRaidRules {
   {
     boss_max_hp: 10,
     player_attack_damage: 6,
@@ -14,7 +14,7 @@ fn raid_player_attack(
   player_id : String,
   tick : Int,
   counter : Int,
-) -> DungeonPlayerAttackEvidence raise Error {
+) -> @replay.DungeonPlayerAttackEvidence raise Error {
   let adapter = @bft.AuditAdapter::new(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
@@ -29,12 +29,12 @@ fn raid_player_attack(
   assert_true(adapter.register_peer(@types.PeerId("alice"), alice.public_key()))
   assert_true(adapter.register_peer(@types.PeerId("bob"), bob.public_key()))
   let signer : &@bft.Signer = if player_id == "alice" { alice } else { bob }
-  let intent = DungeonPlayerAttackIntent::{
+  let intent = @replay.DungeonPlayerAttackIntent::{
     encounter_id: "boss-1",
     player_id,
     tick,
   }
-  let input_event = make_dungeon_player_attack_event(
+  let input_event = @replay.make_dungeon_player_attack_event(
     peer=@types.PeerId(player_id),
     counter~,
     lamport=counter * 2,
@@ -42,11 +42,11 @@ fn raid_player_attack(
     intent~,
   )
   let input = accept_encounter_event(adapter, signer, input_event, [])
-  let observed = DungeonPlayerAttackReceipt::{
+  let observed = @replay.DungeonPlayerAttackReceipt::{
     input_digest: input.digest(),
     received_tick: tick + 1,
   }
-  let receipt_event = make_dungeon_player_attack_receipt_event(
+  let receipt_event = @replay.make_dungeon_player_attack_receipt_event(
     peer=@types.PeerId("game-server"),
     counter=counter + 100,
     lamport=counter * 2 + 1,
@@ -56,12 +56,12 @@ fn raid_player_attack(
   let receipt = accept_encounter_event(adapter, authority, receipt_event, [
     input.digest(),
   ])
-  { input, receipt, intent, observed }
+  { input, receipt, intent, observed, }
 }
 
 ///|
 fn raid_checkpoint(
-  candidate : DungeonRaidCandidate,
+  candidate : @replay.DungeonRaidCandidate,
 ) -> @checkpoint.VerifiedCheckpoint raise Error {
   let hasher = @bft.FnvHasher::new()
   let authority = @bft.MockSigner::new("game-server")
@@ -99,7 +99,7 @@ test "raid phase replays boss HP and player cooldown before checkpoint finality"
   let first = raid_player_attack("alice", 20, 0)
   let second = raid_player_attack("alice", 22, 1)
   match
-    prepare_dungeon_raid(
+    @replay.prepare_dungeon_raid(
       @bft.FnvHasher::new(),
       session_id="encounter-session",
       authority_key=@bft.PublicKey("game-server"),
@@ -115,7 +115,8 @@ test "raid phase replays boss HP and player cooldown before checkpoint finality"
       assert_true(candidate.cleared())
       assert_eq(candidate.accepted_player_attack_count(), 2)
       assert_eq(candidate.cooldown_violator_ids(), [])
-      match finalize_dungeon_raid(candidate, raid_checkpoint(candidate)) {
+      match
+        @replay.finalize_dungeon_raid(candidate, raid_checkpoint(candidate)) {
         RaidFinalized(resolution) => {
           assert_eq(resolution.boss_hp(), 0)
           assert_true(resolution.cleared())
@@ -140,7 +141,7 @@ test "raid cooldown violation cannot create boss damage but remains auditable" {
   let first = raid_player_attack("alice", 20, 0)
   let too_soon = raid_player_attack("alice", 21, 1)
   match
-    prepare_dungeon_raid(
+    @replay.prepare_dungeon_raid(
       @bft.FnvHasher::new(),
       session_id="encounter-session",
       authority_key=@bft.PublicKey("game-server"),

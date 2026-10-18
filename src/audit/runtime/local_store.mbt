@@ -280,7 +280,7 @@ pub fn open_player_local_audit_store(
     events_value: [],
     equivocations_value: [],
     checkpoints_value: [],
-    head_value: { boundary, epoch: -1, checkpoint_digest: genesis_digest },
+    head_value: { boundary, epoch: -1, checkpoint_digest: genesis_digest, },
     retention_anchor_value: {
       boundary,
       epoch: -1,
@@ -327,7 +327,7 @@ pub fn PlayerLocalAuditStore::admit_event(
           return LocalEventRefused(LocalEventDigestCollision)
         }
       }
-      self.equivocations_value.push({ accepted, conflicting: event })
+      self.equivocations_value.push({ accepted, conflicting: event, })
       self.storage_revision_value += 1
       return LocalEventEquivocation
     }

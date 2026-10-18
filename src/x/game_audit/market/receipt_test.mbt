@@ -6,13 +6,15 @@ fn receipt(
   quantity? : Int = 1,
   source_event? : @bft.Digest = @bft.Digest("unauthenticated-source"),
   output_index? : Int = 0,
-) -> ItemReceipt {
-  { asset_id, recipient_id, item_type, quantity, source_event, output_index }
+) -> @market.ItemReceipt {
+  { asset_id, recipient_id, item_type, quantity, source_event, output_index, }
 }
 
 ///|
-fn batch_or_fail(receipts : Array[ItemReceipt]) -> ReceiptBatch raise Error {
-  match build_receipt_batch(@bft.FnvHasher::new(), receipts) {
+fn batch_or_fail(
+  receipts : Array[@market.ItemReceipt],
+) -> @market.ReceiptBatch raise Error {
+  match @market.build_receipt_batch(@bft.FnvHasher::new(), receipts) {
     Built(batch) => batch
     BatchRejected(_) => fail("expected valid receipt batch")
   }
@@ -20,9 +22,9 @@ fn batch_or_fail(receipts : Array[ItemReceipt]) -> ReceiptBatch raise Error {
 
 ///|
 fn proof_or_fail(
-  batch : ReceiptBatch,
+  batch : @market.ReceiptBatch,
   asset_id : String,
-) -> ItemReceiptProof raise Error {
+) -> @market.ItemReceiptProof raise Error {
   match batch.proof_for(asset_id) {
     Some(proof) => proof
     None => fail("expected item receipt proof")
@@ -38,7 +40,7 @@ fn replayed_receipt(
   output_index? : Int = 0,
   session_id? : String = "dungeon-42",
   counter? : Int = 0,
-) -> (ItemReceipt, @replay.ReplayedAssetEffect) raise Error {
+) -> (@market.ItemReceipt, @replay.ReplayedAssetEffect) raise Error {
   let effect = @replay.AssetEffect::Create(
     asset_id~,
     recipient_id~,
@@ -76,7 +78,7 @@ fn replayed_receipt(
     Refused(_) => fail("expected replayed receipt effect")
   }
   (
-    ItemReceipt::{
+    @market.ItemReceipt::{
       asset_id,
       recipient_id,
       item_type,
@@ -90,7 +92,7 @@ fn replayed_receipt(
 
 ///|
 fn finalized_for(
-  batch : ReceiptBatch,
+  batch : @market.ReceiptBatch,
   manifest_override? : @bft.Digest? = None,
 ) -> @attestation.FinalizedCheckpoint raise Error {
   let hasher = @bft.FnvHasher::new()
@@ -125,7 +127,7 @@ fn finalized_for(
     hasher,
     verifier,
     prepared,
-    [{ id: "checkpoint-auditor", key: @bft.PublicKey("checkpoint-auditor") }],
+    [{ id: "checkpoint-auditor", key: @bft.PublicKey("checkpoint-auditor"), }],
   )
   let auditor = @bft.MockSigner::new("checkpoint-auditor")
   match
@@ -153,7 +155,7 @@ test "listing requires an exact replayed effect and kernel manifest" {
   let (item, replayed) = replayed_receipt()
   let batch = batch_or_fail([item])
   assert_true(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized_for(batch),
       proof_or_fail(batch, "authenticated-asset"),
@@ -164,7 +166,7 @@ test "listing requires an exact replayed effect and kernel manifest" {
   )
   let (_, wrong_effect) = replayed_receipt(asset_id="unrelated", counter=1)
   assert_false(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized_for(batch),
       proof_or_fail(batch, "authenticated-asset"),
@@ -175,7 +177,7 @@ test "listing requires an exact replayed effect and kernel manifest" {
   )
   let (_, foreign) = replayed_receipt(session_id="other-dungeon")
   assert_false(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized_for(batch),
       proof_or_fail(batch, "authenticated-asset"),
@@ -185,7 +187,7 @@ test "listing requires an exact replayed effect and kernel manifest" {
     ),
   )
   assert_false(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized_for(batch, manifest_override=Some(@bft.Digest("other-kernel"))),
       proof_or_fail(batch, "authenticated-asset"),
@@ -218,7 +220,7 @@ test "finalized checkpoint Merkle proof authorizes the recorded owner" {
   let finalized = finalized_for(batch)
   let proof = proof_or_fail(batch, "asset-2")
   assert_true(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized,
       proof,
@@ -237,7 +239,7 @@ test "wrong owner, rejected ancestry, and receipt tampering are denied" {
   let finalized = finalized_for(batch)
   let proof = proof_or_fail(batch, "asset-1")
   assert_false(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized,
       proof,
@@ -247,7 +249,7 @@ test "wrong owner, rejected ancestry, and receipt tampering are denied" {
     ),
   )
   assert_false(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized,
       proof,
@@ -256,12 +258,12 @@ test "wrong owner, rejected ancestry, and receipt tampering are denied" {
       rejected_ancestor=true,
     ),
   )
-  let tampered : ItemReceiptProof = {
-    receipt: { ..proof.receipt, quantity: 99 },
+  let tampered : @market.ItemReceiptProof = {
+    receipt: { ..proof.receipt, quantity: 99, },
     merkle_proof: proof.merkle_proof,
   }
   assert_false(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized,
       tampered,
@@ -279,7 +281,7 @@ test "proof from another finalized checkpoint is denied" {
   let original = batch_or_fail([item])
   let other = batch_or_fail([receipt(asset_id="other-asset")])
   assert_false(
-    market_accepts_listing(
+    @market.market_accepts_listing(
       hasher,
       finalized_for(other),
       proof_or_fail(original, "asset-1"),
@@ -301,7 +303,7 @@ test "invalid receipts are rejected before building a root" {
     receipt(output_index=-1),
   ]
   for item in invalid {
-    match build_receipt_batch(hasher, [item]) {
+    match @market.build_receipt_batch(hasher, [item]) {
       Built(_) => fail("invalid receipt unexpectedly entered a batch")
       BatchRejected(InvalidReceipt(_, _)) => ()
       BatchRejected(_) => fail("unexpected receipt validation error")
@@ -313,14 +315,15 @@ test "invalid receipts are rejected before building a root" {
 test "duplicate asset ids and source output coordinates are rejected" {
   let hasher = @bft.FnvHasher::new()
   match
-    build_receipt_batch(hasher, [
+    @market.build_receipt_batch(hasher, [
       receipt(),
       receipt(asset_id="asset-1", output_index=1),
     ]) {
     BatchRejected(DuplicateAssetId("asset-1")) => ()
     _ => fail("duplicate asset id unexpectedly accepted")
   }
-  match build_receipt_batch(hasher, [receipt(), receipt(asset_id="asset-2")]) {
+  match
+    @market.build_receipt_batch(hasher, [receipt(), receipt(asset_id="asset-2")]) {
     BatchRejected(DuplicateSourceOutput(1)) => ()
     _ => fail("duplicate source output unexpectedly accepted")
   }
@@ -330,7 +333,10 @@ test "duplicate asset ids and source output coordinates are rejected" {
 test "receipt serialization separates field boundaries" {
   let left = receipt(asset_id="a:b", recipient_id="c")
   let right = receipt(asset_id="a", recipient_id="b:c")
-  assert_not_eq(serialize_item_receipt(left), serialize_item_receipt(right))
+  assert_not_eq(
+    @market.serialize_item_receipt(left),
+    @market.serialize_item_receipt(right),
+  )
 }
 
 ///|

@@ -1,7 +1,7 @@
 ///|
 test "registered slot beyond the sealed count proves truncation" {
   assert_eq(
-    classify_open_world_seal_conflict(
+    @audit.classify_open_world_seal_conflict(
       encounter_boundary_matches=true,
       registration_index=4,
       registered_count=4,
@@ -11,14 +11,14 @@ test "registered slot beyond the sealed count proves truncation" {
       conflicting_inclusion_matches=false,
       sealed_digest_matches=false,
     ),
-    OpenWorldSealConflictDecision::RegistryTruncated,
+    @audit.OpenWorldSealConflictDecision::RegistryTruncated,
   )
 }
 
 ///|
 test "a different included digest at the same slot proves substitution" {
   assert_eq(
-    classify_open_world_seal_conflict(
+    @audit.classify_open_world_seal_conflict(
       encounter_boundary_matches=true,
       registration_index=2,
       registered_count=4,
@@ -28,7 +28,7 @@ test "a different included digest at the same slot proves substitution" {
       conflicting_inclusion_matches=true,
       sealed_digest_matches=false,
     ),
-    OpenWorldSealConflictDecision::SlotSubstituted,
+    @audit.OpenWorldSealConflictDecision::SlotSubstituted,
   )
 }
 
@@ -36,7 +36,7 @@ test "a different included digest at the same slot proves substitution" {
 test "wrong boundaries missing proofs and matching leaves never accuse" {
   for
     decision in [
-      classify_open_world_seal_conflict(
+      @audit.classify_open_world_seal_conflict(
         encounter_boundary_matches=false,
         registration_index=2,
         registered_count=4,
@@ -46,7 +46,7 @@ test "wrong boundaries missing proofs and matching leaves never accuse" {
         conflicting_inclusion_matches=true,
         sealed_digest_matches=false,
       ),
-      classify_open_world_seal_conflict(
+      @audit.classify_open_world_seal_conflict(
         encounter_boundary_matches=true,
         registration_index=2,
         registered_count=4,
@@ -56,7 +56,7 @@ test "wrong boundaries missing proofs and matching leaves never accuse" {
         conflicting_inclusion_matches=false,
         sealed_digest_matches=false,
       ),
-      classify_open_world_seal_conflict(
+      @audit.classify_open_world_seal_conflict(
         encounter_boundary_matches=true,
         registration_index=2,
         registered_count=4,
@@ -67,10 +67,10 @@ test "wrong boundaries missing proofs and matching leaves never accuse" {
         sealed_digest_matches=false,
       ),
     ] {
-    assert_eq(decision, OpenWorldSealConflictDecision::InvalidEvidence)
+    assert_eq(decision, @audit.OpenWorldSealConflictDecision::InvalidEvidence)
   }
   assert_eq(
-    classify_open_world_seal_conflict(
+    @audit.classify_open_world_seal_conflict(
       encounter_boundary_matches=true,
       registration_index=2,
       registered_count=4,
@@ -80,7 +80,7 @@ test "wrong boundaries missing proofs and matching leaves never accuse" {
       conflicting_inclusion_matches=true,
       sealed_digest_matches=true,
     ),
-    OpenWorldSealConflictDecision::NoConflict,
+    @audit.OpenWorldSealConflictDecision::NoConflict,
   )
 }
 
@@ -88,7 +88,7 @@ test "wrong boundaries missing proofs and matching leaves never accuse" {
 test "negative indices and counts fail closed" {
   for
     decision in [
-      classify_open_world_seal_conflict(
+      @audit.classify_open_world_seal_conflict(
         encounter_boundary_matches=true,
         registration_index=-1,
         registered_count=4,
@@ -98,7 +98,7 @@ test "negative indices and counts fail closed" {
         conflicting_inclusion_matches=false,
         sealed_digest_matches=false,
       ),
-      classify_open_world_seal_conflict(
+      @audit.classify_open_world_seal_conflict(
         encounter_boundary_matches=true,
         registration_index=0,
         registered_count=-1,
@@ -109,14 +109,14 @@ test "negative indices and counts fail closed" {
         sealed_digest_matches=false,
       ),
     ] {
-    assert_eq(decision, OpenWorldSealConflictDecision::InvalidEvidence)
+    assert_eq(decision, @audit.OpenWorldSealConflictDecision::InvalidEvidence)
   }
 }
 
 ///|
 test "an authenticated empty in-range slot proves omission" {
   assert_eq(
-    classify_open_world_seal_conflict(
+    @audit.classify_open_world_seal_conflict(
       encounter_boundary_matches=true,
       registration_index=2,
       registered_count=4,
@@ -126,7 +126,7 @@ test "an authenticated empty in-range slot proves omission" {
       conflicting_inclusion_matches=false,
       sealed_digest_matches=false,
     ),
-    OpenWorldSealConflictDecision::SlotMissing,
+    @audit.OpenWorldSealConflictDecision::SlotMissing,
   )
 }
 
@@ -134,7 +134,7 @@ test "an authenticated empty in-range slot proves omission" {
 test "invalid or ambiguous absence evidence cannot accuse" {
   for
     decision in [
-      classify_open_world_seal_conflict(
+      @audit.classify_open_world_seal_conflict(
         encounter_boundary_matches=true,
         registration_index=2,
         registered_count=4,
@@ -144,7 +144,7 @@ test "invalid or ambiguous absence evidence cannot accuse" {
         conflicting_inclusion_matches=false,
         sealed_digest_matches=false,
       ),
-      classify_open_world_seal_conflict(
+      @audit.classify_open_world_seal_conflict(
         encounter_boundary_matches=true,
         registration_index=2,
         registered_count=4,
@@ -155,28 +155,28 @@ test "invalid or ambiguous absence evidence cannot accuse" {
         sealed_digest_matches=false,
       ),
     ] {
-    assert_eq(decision, OpenWorldSealConflictDecision::InvalidEvidence)
+    assert_eq(decision, @audit.OpenWorldSealConflictDecision::InvalidEvidence)
   }
 }
 
 ///|
 test "missing-slot persistence requires both verifiers and exact binding" {
   assert_true(
-    open_world_missing_slot_persist_allowed(
+    @audit.open_world_missing_slot_persist_allowed(
       conflict_capability_issued=true,
       standard_non_membership_verified=true,
       exact_transcript_binding=true,
     ),
   )
   assert_false(
-    open_world_missing_slot_persist_allowed(
+    @audit.open_world_missing_slot_persist_allowed(
       conflict_capability_issued=true,
       standard_non_membership_verified=false,
       exact_transcript_binding=true,
     ),
   )
   assert_false(
-    open_world_missing_slot_persist_allowed(
+    @audit.open_world_missing_slot_persist_allowed(
       conflict_capability_issued=false,
       standard_non_membership_verified=true,
       exact_transcript_binding=true,

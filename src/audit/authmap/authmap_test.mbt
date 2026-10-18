@@ -1,6 +1,6 @@
 ///|
-fn map_with(entries : Array[(String, String)]) -> AuthenticatedMap {
-  let map = AuthenticatedMap::new(@bft.FnvHasher::new())
+fn map_with(entries : Array[(String, String)]) -> @authmap.AuthenticatedMap {
+  let map = @authmap.AuthenticatedMap::new(@bft.FnvHasher::new())
   for entry in entries {
     ignore(map.put(entry.0, entry.1))
   }
@@ -9,9 +9,9 @@ fn map_with(entries : Array[(String, String)]) -> AuthenticatedMap {
 
 ///|
 fn proof_or_fail(
-  map : AuthenticatedMap,
+  map : @authmap.AuthenticatedMap,
   key : String,
-) -> AuthMapProof raise Error {
+) -> @authmap.AuthMapProof raise Error {
   match map.proof(key) {
     Some(proof) => proof
     None => fail("expected authenticated-map proof")
@@ -29,11 +29,11 @@ test "same entries converge to one root regardless of insertion order" {
 
 ///|
 test "insert update unchanged and remove have explicit outcomes" {
-  let empty = AuthenticatedMap::new(@bft.FnvHasher::new())
+  let empty = @authmap.AuthenticatedMap::new(@bft.FnvHasher::new())
   let empty_root = empty.root()
-  assert_eq(empty.put("asset", "alice"), AuthMapMutation::Inserted)
-  assert_eq(empty.put("asset", "alice"), AuthMapMutation::Unchanged)
-  assert_eq(empty.put("asset", "bob"), AuthMapMutation::Updated)
+  assert_eq(empty.put("asset", "alice"), @authmap.AuthMapMutation::Inserted)
+  assert_eq(empty.put("asset", "alice"), @authmap.AuthMapMutation::Unchanged)
+  assert_eq(empty.put("asset", "bob"), @authmap.AuthMapMutation::Updated)
   assert_eq(empty.get("asset"), Some("bob"))
   assert_true(empty.remove("asset"))
   assert_false(empty.remove("asset"))
@@ -54,7 +54,11 @@ test "membership proofs verify for every key" {
   let map = map_with(entries)
   for entry in entries {
     assert_true(
-      verify_membership(hasher, map.root(), proof_or_fail(map, entry.0)),
+      @authmap.verify_membership(
+        hasher,
+        map.root(),
+        proof_or_fail(map, entry.0),
+      ),
     )
   }
   assert_eq(map.proof("missing"), None)
@@ -69,7 +73,7 @@ test "membership hash plan preserves the leaf to root dependency chain" {
     ("asset-c", "carol"),
   ])
   let proof = proof_or_fail(map, "asset-c")
-  let plan = membership_verification_plan(hasher, proof)
+  let plan = @authmap.membership_verification_plan(hasher, proof)
   assert_eq(plan.checks.length(), proof.path.length() + 2)
   assert_eq(plan.root_check_index, plan.checks.length() - 1)
   assert_eq(plan.checks[0].dependency_check_indices, [])
@@ -84,13 +88,20 @@ test "proof key value root sibling and count tampering are rejected" {
   let hasher = @bft.FnvHasher::new()
   let map = map_with([("a", "1"), ("b", "2"), ("c", "3"), ("d", "4")])
   let proof = proof_or_fail(map, "c")
-  assert_false(verify_membership(hasher, map.root(), { ..proof, key: "other" }))
   assert_false(
-    verify_membership(hasher, map.root(), { ..proof, value: "tampered" }),
+    @authmap.verify_membership(hasher, map.root(), { ..proof, key: "other", }),
   )
-  assert_false(verify_membership(hasher, @bft.Digest("other-root"), proof))
   assert_false(
-    verify_membership(hasher, map.root(), {
+    @authmap.verify_membership(hasher, map.root(), {
+      ..proof,
+      value: "tampered",
+    }),
+  )
+  assert_false(
+    @authmap.verify_membership(hasher, @bft.Digest("other-root"), proof),
+  )
+  assert_false(
+    @authmap.verify_membership(hasher, map.root(), {
       ..proof,
       entry_count: proof.entry_count + 1,
     }),
@@ -102,20 +113,23 @@ test "proof key value root sibling and count tampering are rejected" {
       let changed = candidate.path.copy()
       changed[0] = match changed[0] {
         DescendedLeft(parent_key, parent_value, _) =>
-          AuthMapStep::DescendedRight(
+          @authmap.AuthMapStep::DescendedRight(
             parent_key,
             parent_value,
             @bft.Digest("fake-sibling"),
           )
         DescendedRight(parent_key, parent_value, _) =>
-          AuthMapStep::DescendedLeft(
+          @authmap.AuthMapStep::DescendedLeft(
             parent_key,
             parent_value,
             @bft.Digest("fake-sibling"),
           )
       }
       assert_false(
-        verify_membership(hasher, map.root(), { ..candidate, path: changed }),
+        @authmap.verify_membership(hasher, map.root(), {
+          ..candidate,
+          path: changed,
+        }),
       )
       checked_path_tamper = true
     }
@@ -164,9 +178,9 @@ test "forked maps isolate later mutations" {
 
 ///|
 fn absence_proof_or_fail(
-  map : AuthenticatedMap,
+  map : @authmap.AuthenticatedMap,
   key : String,
-) -> AuthMapAbsenceProof raise Error {
+) -> @authmap.AuthMapAbsenceProof raise Error {
   match map.absence_proof(key) {
     Some(proof) => proof
     None => fail("expected authenticated-map non-membership proof")
@@ -176,9 +190,9 @@ fn absence_proof_or_fail(
 ///|
 test "non-membership proofs verify for empty and populated maps" {
   let hasher = @bft.FnvHasher::new()
-  let empty = AuthenticatedMap::new(hasher)
+  let empty = @authmap.AuthenticatedMap::new(hasher)
   assert_true(
-    verify_non_membership(
+    @authmap.verify_non_membership(
       hasher,
       empty.root(),
       absence_proof_or_fail(empty, "missing"),
@@ -187,7 +201,7 @@ test "non-membership proofs verify for empty and populated maps" {
   let populated = map_with([("a", "1"), ("c", "3"), ("e", "5"), ("g", "7")])
   for missing in ["0", "b", "d", "f", "z"] {
     assert_true(
-      verify_non_membership(
+      @authmap.verify_non_membership(
         hasher,
         populated.root(),
         absence_proof_or_fail(populated, missing),
@@ -199,30 +213,32 @@ test "non-membership proofs verify for empty and populated maps" {
 
 ///|
 test "non-membership ordered-search validity is independent of hashing" {
-  let empty = AuthenticatedMap::new(@bft.FnvHasher::new())
+  let empty = @authmap.AuthenticatedMap::new(@bft.FnvHasher::new())
   assert_true(
-    absence_proof_search_valid(absence_proof_or_fail(empty, "missing")),
+    @authmap.absence_proof_search_valid(absence_proof_or_fail(empty, "missing")),
   )
   let populated = map_with([("a", "1"), ("c", "3"), ("e", "5"), ("g", "7")])
   let proof = absence_proof_or_fail(populated, "d")
-  assert_true(absence_proof_search_valid(proof))
-  assert_false(absence_proof_search_valid({ ..proof, key: "c" }))
-  assert_false(absence_proof_search_valid({ ..proof, path: [] }))
+  assert_true(@authmap.absence_proof_search_valid(proof))
+  assert_false(@authmap.absence_proof_search_valid({ ..proof, key: "c", }))
+  assert_false(@authmap.absence_proof_search_valid({ ..proof, path: [], }))
 }
 
 ///|
 test "empty-map non-membership hash plan preserves the empty to root chain" {
   let hasher = @bft.FnvHasher::new()
-  let map = AuthenticatedMap::new(hasher)
+  let map = @authmap.AuthenticatedMap::new(hasher)
   let proof = absence_proof_or_fail(map, "missing")
-  let plan = non_membership_verification_plan(hasher, proof)
+  let plan = @authmap.non_membership_verification_plan(hasher, proof)
   assert_eq(plan.checks.length(), 2)
   assert_eq(plan.root_check_index, 1)
-  assert_eq(plan.checks[0].statement_segments, [serialize_authmap_empty()])
+  assert_eq(plan.checks[0].statement_segments, [
+    @authmap.serialize_authmap_empty(),
+  ])
   assert_eq(plan.checks[0].dependency_check_indices, [])
   assert_eq(
     plan.checks[0].expected_digest,
-    hasher.hash_string(serialize_authmap_empty()),
+    hasher.hash_string(@authmap.serialize_authmap_empty()),
   )
   assert_eq(plan.checks[1].dependency_check_indices, [0])
   assert_eq(plan.checks[plan.root_check_index].expected_digest, map.root())
@@ -233,7 +249,7 @@ test "populated non-membership hash plan preserves the empty to root chain" {
   let hasher = @bft.FnvHasher::new()
   let map = map_with([("a", "1"), ("c", "3"), ("e", "5"), ("g", "7")])
   let proof = absence_proof_or_fail(map, "d")
-  let plan = non_membership_verification_plan(hasher, proof)
+  let plan = @authmap.non_membership_verification_plan(hasher, proof)
   assert_eq(plan.checks.length(), proof.path.length() + 2)
   assert_eq(plan.root_check_index, plan.checks.length() - 1)
   assert_eq(plan.checks[0].dependency_check_indices, [])
@@ -248,7 +264,7 @@ test "non-membership hash plan binds count and authenticated path material" {
   let hasher = @bft.FnvHasher::new()
   let map = map_with([("a", "1"), ("c", "3"), ("e", "5"), ("g", "7")])
   let proof = absence_proof_or_fail(map, "d")
-  let changed_count = non_membership_verification_plan(hasher, {
+  let changed_count = @authmap.non_membership_verification_plan(hasher, {
     ..proof,
     entry_count: proof.entry_count + 1,
   })
@@ -263,7 +279,7 @@ test "non-membership hash plan binds count and authenticated path material" {
     DescendedRight(parent_key, parent_value, _) =>
       DescendedRight(parent_key, parent_value, @bft.Digest("fake-sibling"))
   }
-  let changed_material = non_membership_verification_plan(hasher, {
+  let changed_material = @authmap.non_membership_verification_plan(hasher, {
     ..proof,
     path: changed_path,
   })
@@ -278,10 +294,14 @@ test "non-membership proof root key count and path tampering are rejected" {
   let hasher = @bft.FnvHasher::new()
   let map = map_with([("a", "1"), ("c", "3"), ("e", "5"), ("g", "7")])
   let proof = absence_proof_or_fail(map, "d")
-  assert_false(verify_non_membership(hasher, @bft.Digest("wrong-root"), proof))
-  assert_false(verify_non_membership(hasher, map.root(), { ..proof, key: "c" }))
   assert_false(
-    verify_non_membership(hasher, map.root(), {
+    @authmap.verify_non_membership(hasher, @bft.Digest("wrong-root"), proof),
+  )
+  assert_false(
+    @authmap.verify_non_membership(hasher, map.root(), { ..proof, key: "c", }),
+  )
+  assert_false(
+    @authmap.verify_non_membership(hasher, map.root(), {
       ..proof,
       entry_count: proof.entry_count + 1,
     }),
@@ -289,6 +309,9 @@ test "non-membership proof root key count and path tampering are rejected" {
   let shortened = proof.path.copy()
   ignore(shortened.pop())
   assert_false(
-    verify_non_membership(hasher, map.root(), { ..proof, path: shortened }),
+    @authmap.verify_non_membership(hasher, map.root(), {
+      ..proof,
+      path: shortened,
+    }),
   )
 }

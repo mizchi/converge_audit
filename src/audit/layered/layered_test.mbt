@@ -16,9 +16,11 @@ fn test_policy() -> @audit.VerifiedCheckpointPolicy {
 }
 
 ///|
-fn test_builder(max_pending_events? : Int = 16) -> LayeredCheckpointBuilder {
+fn test_builder(
+  max_pending_events? : Int = 16,
+) -> @layered.LayeredCheckpointBuilder {
   match
-    LayeredCheckpointBuilder::open(
+    @layered.LayeredCheckpointBuilder::open(
       @bft.FnvHasher::new(),
       test_policy(),
       scope_id="scope-a",
@@ -32,7 +34,9 @@ fn test_builder(max_pending_events? : Int = 16) -> LayeredCheckpointBuilder {
 }
 
 ///|
-fn refused(result : AdvanceWatermarkResult) -> AdvanceWatermarkError {
+fn refused(
+  result : @layered.AdvanceWatermarkResult,
+) -> @layered.AdvanceWatermarkError {
   match result {
     WatermarkRefused(error) => error
     WatermarkAdvanced(_) => abort("watermark must be refused")
@@ -40,7 +44,9 @@ fn refused(result : AdvanceWatermarkResult) -> AdvanceWatermarkError {
 }
 
 ///|
-fn open_refusal(result : LayeredBuilderOpenResult) -> LayeredBuilderOpenError {
+fn open_refusal(
+  result : @layered.LayeredBuilderOpenResult,
+) -> @layered.LayeredBuilderOpenError {
   match result {
     LayeredBuilderRefused(error) => error
     LayeredBuilderReady(_) => abort("builder must be refused")
@@ -48,7 +54,9 @@ fn open_refusal(result : LayeredBuilderOpenResult) -> LayeredBuilderOpenError {
 }
 
 ///|
-fn advanced(result : AdvanceWatermarkResult) -> LayeredCheckpointEmission {
+fn advanced(
+  result : @layered.AdvanceWatermarkResult,
+) -> @layered.LayeredCheckpointEmission {
   match result {
     WatermarkAdvanced(emission) => emission
     WatermarkRefused(_) => abort("watermark must advance")
@@ -96,7 +104,7 @@ test "layered checkpoint root ignores arrival order and exact retries" {
     None => abort("event proof must exist")
   }
   assert_true(
-    verify_micro_checkpoint_event(
+    @layered.verify_micro_checkpoint_event(
       @bft.FnvHasher::new(),
       first_sealed.checkpoint(),
       "event-a",
@@ -104,7 +112,7 @@ test "layered checkpoint root ignores arrival order and exact retries" {
     ),
   )
   assert_false(
-    verify_micro_checkpoint_event(
+    @layered.verify_micro_checkpoint_event(
       @bft.FnvHasher::new(),
       first_sealed.checkpoint(),
       "event-tampered",
@@ -147,7 +155,7 @@ test "macro checkpoint force-closes a partial micro window and chains epochs" {
     None => abort("first micro proof must exist")
   }
   assert_true(
-    verify_macro_checkpoint_micro(
+    @layered.verify_macro_checkpoint_micro(
       @bft.FnvHasher::new(),
       first_checkpoint,
       micro_zero,
@@ -159,7 +167,7 @@ test "macro checkpoint force-closes a partial micro window and chains epochs" {
     None => abort("layered event proof must exist")
   }
   assert_true(
-    verify_macro_checkpoint_event(
+    @layered.verify_macro_checkpoint_event(
       @bft.FnvHasher::new(),
       first_checkpoint,
       "event-a",
@@ -167,7 +175,7 @@ test "macro checkpoint force-closes a partial micro window and chains epochs" {
     ),
   )
   assert_false(
-    verify_macro_checkpoint_event(
+    @layered.verify_macro_checkpoint_event(
       @bft.FnvHasher::new(),
       first_checkpoint,
       "event-tampered",
@@ -216,7 +224,7 @@ test "catchup budget refusal is atomic and retryable" {
 test "builder and event admission fail closed at declared budgets" {
   assert_eq(
     open_refusal(
-      LayeredCheckpointBuilder::open(
+      @layered.LayeredCheckpointBuilder::open(
         @bft.FnvHasher::new(),
         test_policy(),
         scope_id="",
@@ -229,7 +237,7 @@ test "builder and event admission fail closed at declared budgets" {
   )
   assert_eq(
     open_refusal(
-      LayeredCheckpointBuilder::open(
+      @layered.LayeredCheckpointBuilder::open(
         @bft.FnvHasher::new(),
         test_policy(),
         scope_id="scope-a",

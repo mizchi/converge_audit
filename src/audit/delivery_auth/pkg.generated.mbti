@@ -27,8 +27,11 @@ pub struct AuthenticatedCheckpointDelivery {
   approval_count_value : Int
 } derive(Eq, @debug.Debug)
 pub fn AuthenticatedCheckpointDelivery::approval_count(Self) -> Int
+pub fn AuthenticatedCheckpointDelivery::equal(Self, Self) -> Bool
+pub fn AuthenticatedCheckpointDelivery::not_equal(Self, Self) -> Bool
 pub fn AuthenticatedCheckpointDelivery::producer_id(Self) -> String
 pub fn AuthenticatedCheckpointDelivery::statement(Self) -> CheckpointDeliveryStatement
+pub fn AuthenticatedCheckpointDelivery::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CheckpointDeliveryStatement {
   boundary : @runtime.AuditBoundary
@@ -38,6 +41,9 @@ pub(all) struct CheckpointDeliveryStatement {
   checkpoint_digest : @converge_audit.Digest
   canonical_envelope : String
 } derive(Eq, @debug.Debug)
+pub fn CheckpointDeliveryStatement::equal(Self, Self) -> Bool
+pub fn CheckpointDeliveryStatement::not_equal(Self, Self) -> Bool
+pub fn CheckpointDeliveryStatement::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DeliveryAuthenticationPolicy {
   producer_id : String
@@ -45,6 +51,9 @@ pub(all) struct DeliveryAuthenticationPolicy {
   witnesses : Array[DeliveryWitness]
   required_approvals : Int
 } derive(Eq, @debug.Debug)
+pub fn DeliveryAuthenticationPolicy::equal(Self, Self) -> Bool
+pub fn DeliveryAuthenticationPolicy::not_equal(Self, Self) -> Bool
+pub fn DeliveryAuthenticationPolicy::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DeliveryAuthenticationRefusal {
   DeliveryInvalidStatement
@@ -60,16 +69,25 @@ pub(all) enum DeliveryAuthenticationRefusal {
   DeliveryDuplicateWitness
   DeliveryUnderQuorum(Int, Int)
 } derive(Eq, @debug.Debug)
+pub fn DeliveryAuthenticationRefusal::equal(Self, Self) -> Bool
+pub fn DeliveryAuthenticationRefusal::not_equal(Self, Self) -> Bool
+pub fn DeliveryAuthenticationRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DeliveryAuthenticationResult {
   DeliveryAuthenticated(AuthenticatedCheckpointDelivery)
   DeliveryAuthenticationRefused(DeliveryAuthenticationRefusal)
 } derive(Eq, @debug.Debug)
+pub fn DeliveryAuthenticationResult::equal(Self, Self) -> Bool
+pub fn DeliveryAuthenticationResult::not_equal(Self, Self) -> Bool
+pub fn DeliveryAuthenticationResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DeliveryWitness {
   witness_id : String
   witness_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn DeliveryWitness::equal(Self, Self) -> Bool
+pub fn DeliveryWitness::not_equal(Self, Self) -> Bool
+pub fn DeliveryWitness::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignedCheckpointDelivery {
   statement : CheckpointDeliveryStatement
@@ -78,6 +96,9 @@ pub(all) struct SignedCheckpointDelivery {
   producer_id : String
   producer_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn SignedCheckpointDelivery::equal(Self, Self) -> Bool
+pub fn SignedCheckpointDelivery::not_equal(Self, Self) -> Bool
+pub fn SignedCheckpointDelivery::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignedCheckpointDeliveryApproval {
   statement_digest : @converge_audit.Digest
@@ -86,8 +107,10 @@ pub(all) struct SignedCheckpointDeliveryApproval {
   signature : @converge_audit.Signature
   witness_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn SignedCheckpointDeliveryApproval::equal(Self, Self) -> Bool
+pub fn SignedCheckpointDeliveryApproval::not_equal(Self, Self) -> Bool
+pub fn SignedCheckpointDeliveryApproval::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

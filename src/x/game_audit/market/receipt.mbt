@@ -67,7 +67,7 @@ pub fn serialize_item_receipt(receipt : ItemReceipt) -> String {
 
 ///|
 fn source_output_key(receipt : ItemReceipt) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, receipt.source_event.0)
   append_field(buffer, receipt.output_index.to_string())
   buffer.to_string()

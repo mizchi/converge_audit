@@ -90,7 +90,7 @@ fn benchmark_finalized(
     hasher,
     verifier,
     prepared,
-    [{ id: "checkpoint-auditor", key: @bft.PublicKey("checkpoint-auditor") }],
+    [{ id: "checkpoint-auditor", key: @bft.PublicKey("checkpoint-auditor"), }],
   )
   let auditor = @bft.MockSigner::new("checkpoint-auditor")
   match
@@ -124,7 +124,7 @@ test "bench: verify 1000 marketplace listings in 1024 receipts" (b : @bench.T) {
   let hasher = @bft.FnvHasher::new()
   let (source, replayed) = benchmark_replayed_effect()
   let receipts = benchmark_receipts(1024)
-  receipts[777] = { ..receipts[777], source_event: source.digest() }
+  receipts[777] = { ..receipts[777], source_event: source.digest(), }
   let batch = match build_receipt_batch(hasher, receipts) {
     Built(batch) => batch
     BatchRejected(_) => abort("benchmark receipt batch rejected")

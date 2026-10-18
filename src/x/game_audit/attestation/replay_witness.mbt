@@ -10,7 +10,7 @@ pub fn replay_witness_session_manifest(
 ) -> @bft.Digest {
   let identities : Array[@witness_manifest.ReplayWitnessIdentity] = []
   for witness in witnesses {
-    identities.push({ id: witness.id, key: witness.key })
+    identities.push({ id: witness.id, key: witness.key, })
   }
   @witness_manifest.replay_witness_session_manifest(
     hasher,

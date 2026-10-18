@@ -12,6 +12,16 @@ pub fn adapt_checkpoint(&CheckpointAdapter) -> CheckpointCommitment
 
 // Types and methods
 pub(all) struct AuditDigest(String) derive(Compare, Eq, Hash, @debug.Debug)
+pub fn AuditDigest::compare(Self, Self) -> Int
+pub fn AuditDigest::equal(Self, Self) -> Bool
+pub fn AuditDigest::hash(Self) -> Int
+pub fn AuditDigest::hash_combine(Self, Hasher) -> Unit
+pub fn AuditDigest::not_equal(Self, Self) -> Bool
+pub fn AuditDigest::op_ge(Self, Self) -> Bool
+pub fn AuditDigest::op_gt(Self, Self) -> Bool
+pub fn AuditDigest::op_le(Self, Self) -> Bool
+pub fn AuditDigest::op_lt(Self, Self) -> Bool
+pub fn AuditDigest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct CheckpointCommitment {
   scope_id : String
@@ -23,6 +33,9 @@ pub(all) struct CheckpointCommitment {
   effect_root : AuditDigest
   sealed_state_commitment : AuditDigest?
 } derive(Eq, @debug.Debug)
+pub fn CheckpointCommitment::equal(Self, Self) -> Bool
+pub fn CheckpointCommitment::not_equal(Self, Self) -> Bool
+pub fn CheckpointCommitment::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
@@ -30,4 +43,3 @@ pub(all) struct CheckpointCommitment {
 pub(open) trait CheckpointAdapter {
   fn checkpoint_commitment(Self) -> CheckpointCommitment
 }
-

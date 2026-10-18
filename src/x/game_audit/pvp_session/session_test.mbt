@@ -84,8 +84,8 @@ fn pvp_session_fixture() -> PvpSessionFixture raise Error {
     let id = "witness-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
     signers.push(signer)
-    participants.push({ id, key: signer.public_key() })
-    identities.push({ id, key: signer.public_key() })
+    participants.push({ id, key: signer.public_key(), })
+    identities.push({ id, key: signer.public_key(), })
   }
   let candidate = match
     @replay.prepare_pvp_epoch(
@@ -94,8 +94,8 @@ fn pvp_session_fixture() -> PvpSessionFixture raise Error {
       referee_key=referee.public_key(),
       config~,
       teams=[
-        { team_id: "blue", initial_score: 0 },
-        { team_id: "orange", initial_score: 0 },
+        { team_id: "blue", initial_score: 0, },
+        { team_id: "orange", initial_score: 0, },
       ],
       players=[
         {
@@ -113,7 +113,7 @@ fn pvp_session_fixture() -> PvpSessionFixture raise Error {
           initial_hp: 10,
         },
       ],
-      transcript=[{ input, receipt, intent, observed }],
+      transcript=[{ input, receipt, intent, observed, }],
       witnesses=identities,
       max_faults=1,
     ) {
@@ -156,7 +156,7 @@ fn pvp_session_fixture() -> PvpSessionFixture raise Error {
 test "N:N witnesses sign only after exact PvP replay and reach n-f certificate" {
   let fixture = pvp_session_fixture()
   let session = match
-    prepare_pvp_replay_witness_session(
+    @pvp_session.prepare_pvp_replay_witness_session(
       fixture.hasher,
       fixture.verifier,
       fixture.prepared,
@@ -171,7 +171,7 @@ test "N:N witnesses sign only after exact PvP replay and reach n-f certificate" 
   assert_eq(session.required_approvals(), 3)
   for index in 0..<3 {
     let signed = match
-      sign_pvp_replay_witness(
+      @pvp_session.sign_pvp_replay_witness(
         fixture.hasher,
         fixture.signers[index],
         fixture.prepared,
@@ -205,7 +205,7 @@ test "PvP replay witness signing cannot cross checkpoint or referee" {
     event_root: @bft.Digest("other-events"),
   })
   assert_eq(
-    sign_pvp_replay_witness(
+    @pvp_session.sign_pvp_replay_witness(
       fixture.hasher,
       fixture.signers[0],
       other,
@@ -214,10 +214,10 @@ test "PvP replay witness signing cannot cross checkpoint or referee" {
       witness_id=fixture.participants[0].id,
       choice=@attestation.AttestationChoice::Approve,
     ),
-    PvpReplayWitnessSigningResult::PvpReplayWitnessCheckpointMismatch,
+    @pvp_session.PvpReplayWitnessSigningResult::PvpReplayWitnessCheckpointMismatch,
   )
   assert_eq(
-    sign_pvp_replay_witness(
+    @pvp_session.sign_pvp_replay_witness(
       fixture.hasher,
       fixture.signers[0],
       fixture.prepared,
@@ -226,6 +226,6 @@ test "PvP replay witness signing cannot cross checkpoint or referee" {
       witness_id=fixture.participants[0].id,
       choice=@attestation.AttestationChoice::Approve,
     ),
-    PvpReplayWitnessSigningResult::PvpReplayWitnessRefereeMismatch,
+    @pvp_session.PvpReplayWitnessSigningResult::PvpReplayWitnessRefereeMismatch,
   )
 }

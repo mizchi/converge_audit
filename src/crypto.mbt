@@ -21,7 +21,7 @@ pub(all) struct MockSigner {
 ///|
 /// Create a new MockSigner with a given peer name.
 pub fn MockSigner::new(peer_name : String) -> MockSigner {
-  MockSigner::{ secret: "secret_" + peer_name, key: PublicKey(peer_name) }
+  MockSigner::{ secret: "secret_" + peer_name, key: PublicKey(peer_name), }
 }
 
 ///|
@@ -44,7 +44,7 @@ pub(all) struct MockVerifier {
 ///|
 /// Create a new MockVerifier.
 pub fn MockVerifier::new() -> MockVerifier {
-  MockVerifier::{ secrets: {} }
+  MockVerifier::{ secrets: {}, }
 }
 
 ///|

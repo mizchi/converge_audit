@@ -1,4 +1,4 @@
-import { DEFAULT_GAME_RULES, ITEM_TYPES } from "./content";
+import { DEFAULT_GAME_RULES, ITEM_TYPES } from "./content.ts";
 import type {
   AdvanceGameResult,
   ApplyItemVerificationResult,
@@ -12,7 +12,7 @@ import type {
   ItemVerificationReceipt,
   ListingEligibility,
   StepEffect,
-} from "./contracts";
+} from "./contracts.ts";
 
 export type {
   Axis,
@@ -22,7 +22,7 @@ export type {
   ItemVerificationReceipt,
   ListingEligibility,
   StepEffect,
-} from "./contracts";
+} from "./contracts.ts";
 
 export interface CreateGameInput {
   seed: number;

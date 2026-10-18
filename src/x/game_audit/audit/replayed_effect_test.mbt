@@ -1,7 +1,7 @@
 ///|
 test "replayed effect requires every trust-boundary condition" {
   assert_true(
-    replayed_effect_allowed(
+    @audit.replayed_effect_allowed(
       source_authenticated=true,
       session_matches=true,
       effect_valid=true,
@@ -10,35 +10,35 @@ test "replayed effect requires every trust-boundary condition" {
     ),
   )
   let rejected = [
-    replayed_effect_allowed(
+    @audit.replayed_effect_allowed(
       source_authenticated=false,
       session_matches=true,
       effect_valid=true,
       manifest_present=true,
       kernel_accepted=true,
     ),
-    replayed_effect_allowed(
+    @audit.replayed_effect_allowed(
       source_authenticated=true,
       session_matches=false,
       effect_valid=true,
       manifest_present=true,
       kernel_accepted=true,
     ),
-    replayed_effect_allowed(
+    @audit.replayed_effect_allowed(
       source_authenticated=true,
       session_matches=true,
       effect_valid=false,
       manifest_present=true,
       kernel_accepted=true,
     ),
-    replayed_effect_allowed(
+    @audit.replayed_effect_allowed(
       source_authenticated=true,
       session_matches=true,
       effect_valid=true,
       manifest_present=false,
       kernel_accepted=true,
     ),
-    replayed_effect_allowed(
+    @audit.replayed_effect_allowed(
       source_authenticated=true,
       session_matches=true,
       effect_valid=true,

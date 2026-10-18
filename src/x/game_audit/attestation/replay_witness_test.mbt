@@ -1,14 +1,14 @@
 ///|
 fn replay_witness_roster(
   size : Int,
-) -> (Array[@bft.MockSigner], Array[Participant]) {
+) -> (Array[@bft.MockSigner], Array[@attestation.Participant]) {
   let signers : Array[@bft.MockSigner] = []
-  let roster : Array[Participant] = []
+  let roster : Array[@attestation.Participant] = []
   for index in 0..<size {
     let id = "witness-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
     signers.push(signer)
-    roster.push({ id, key: signer.public_key() })
+    roster.push({ id, key: signer.public_key(), })
   }
   (signers, roster)
 }
@@ -17,11 +17,11 @@ fn replay_witness_roster(
 fn replay_witness_prepared(
   hasher : &@bft.Hasher,
   referee : &@bft.Signer,
-  roster : Array[Participant],
+  roster : Array[@attestation.Participant],
   max_faults : Int,
   event_root? : String = "pvp-events",
 ) -> @checkpoint.PreparedCheckpoint {
-  let manifest = replay_witness_session_manifest(
+  let manifest = @attestation.replay_witness_session_manifest(
     hasher,
     game_manifest_digest=@bft.Digest("pvp-kernel-v1"),
     referee_key=referee.public_key(),
@@ -61,11 +61,11 @@ fn replay_witness_collector_or_fail(
   verifier : &@bft.Verifier,
   prepared : @checkpoint.PreparedCheckpoint,
   referee : &@bft.Signer,
-  roster : Array[Participant],
+  roster : Array[@attestation.Participant],
   max_faults : Int,
-) -> ReplayWitnessCollector raise Error {
+) -> @attestation.ReplayWitnessCollector raise Error {
   match
-    ReplayWitnessCollector::new(
+    @attestation.ReplayWitnessCollector::new(
       hasher,
       verifier,
       prepared,
@@ -85,7 +85,7 @@ test "replay witness manifest binds policy and is roster-order independent" {
   let referee = @bft.MockSigner::new("referee")
   let (_, roster) = replay_witness_roster(4)
   let reversed = [roster[3], roster[2], roster[1], roster[0]]
-  let manifest = replay_witness_session_manifest(
+  let manifest = @attestation.replay_witness_session_manifest(
     hasher,
     game_manifest_digest=@bft.Digest("pvp-kernel-v1"),
     referee_key=referee.public_key(),
@@ -94,7 +94,7 @@ test "replay witness manifest binds policy and is roster-order independent" {
   )
   assert_eq(
     manifest,
-    replay_witness_session_manifest(
+    @attestation.replay_witness_session_manifest(
       hasher,
       game_manifest_digest=@bft.Digest("pvp-kernel-v1"),
       referee_key=referee.public_key(),
@@ -104,7 +104,7 @@ test "replay witness manifest binds policy and is roster-order independent" {
   )
   assert_not_eq(
     manifest,
-    replay_witness_session_manifest(
+    @attestation.replay_witness_session_manifest(
       hasher,
       game_manifest_digest=@bft.Digest("pvp-kernel-v1"),
       referee_key=referee.public_key(),
@@ -124,17 +124,17 @@ test "checkpoint approvals cannot be replayed as witness signatures" {
   let witness_collector = replay_witness_collector_or_fail(
     hasher, verifier, prepared, referee, roster, 1,
   )
-  let checkpoint_collector = EvidenceCollector::new(
+  let checkpoint_collector = @attestation.EvidenceCollector::new(
     hasher, verifier, prepared, roster,
   )
-  let approval = sign_attestation(
+  let approval = @attestation.sign_attestation(
     hasher,
     signers[0],
     prepared,
     roster[0].id,
     Approve,
   )
-  let replay_witness = sign_replay_witness_attestation(
+  let replay_witness = @attestation.sign_replay_witness_attestation(
     hasher,
     signers[0],
     prepared,
@@ -168,7 +168,7 @@ test "n minus f replay witnesses certify despite one Byzantine challenge" {
   for index in 0..<3 {
     assert_eq(
       witnesses.deliver(
-        sign_replay_witness_attestation(
+        @attestation.sign_replay_witness_attestation(
           hasher,
           signers[index],
           prepared,
@@ -176,12 +176,12 @@ test "n minus f replay witnesses certify despite one Byzantine challenge" {
           Approve,
         ),
       ),
-      EvidenceDeliveryResult::Accepted,
+      @attestation.EvidenceDeliveryResult::Accepted,
     )
   }
   ignore(
     witnesses.deliver(
-      sign_replay_witness_attestation(
+      @attestation.sign_replay_witness_attestation(
         hasher,
         signers[3],
         prepared,
@@ -218,7 +218,7 @@ test "witness certificate finalizes only its exact authority checkpoint" {
   for index in 0..<3 {
     ignore(
       witnesses.deliver(
-        sign_replay_witness_attestation(
+        @attestation.sign_replay_witness_attestation(
           hasher,
           signers[index],
           prepared,
@@ -232,14 +232,15 @@ test "witness certificate finalizes only its exact authority checkpoint" {
     WitnessCertified(value) => value
     _ => fail("expected replay witness certificate")
   }
-  match finalize_witnessed_checkpoint(verified, certificate) {
+  match @attestation.finalize_witnessed_checkpoint(verified, certificate) {
     Ready(finalized) => assert_eq(finalized.digest(), prepared.digest())
     _ => fail("exact witness capability did not finalize checkpoint")
   }
   let impostor_verified = open_replay_witness_checkpoint(
     hasher, verifier, impostor, prepared,
   )
-  match finalize_witnessed_checkpoint(impostor_verified, certificate) {
+  match
+    @attestation.finalize_witnessed_checkpoint(impostor_verified, certificate) {
     CheckpointMismatch => ()
     _ => fail("witness certificate crossed referee identity")
   }
@@ -253,7 +254,8 @@ test "witness certificate finalizes only its exact authority checkpoint" {
   let other_verified = open_replay_witness_checkpoint(
     hasher, verifier, referee, other,
   )
-  match finalize_witnessed_checkpoint(other_verified, certificate) {
+  match
+    @attestation.finalize_witnessed_checkpoint(other_verified, certificate) {
     CheckpointMismatch => ()
     _ => fail("witness certificate crossed checkpoint identity")
   }
@@ -275,7 +277,7 @@ test "under-quorum and invalid witness policies fail closed" {
   for index in 0..<2 {
     ignore(
       witnesses.deliver(
-        sign_replay_witness_attestation(
+        @attestation.sign_replay_witness_attestation(
           hasher,
           signers[index],
           prepared,
@@ -287,12 +289,12 @@ test "under-quorum and invalid witness policies fail closed" {
   }
   assert_eq(
     witnesses.certify(verified),
-    ReplayWitnessCertificationResult::WitnessQuorumPending(2, 3),
+    @attestation.ReplayWitnessCertificationResult::WitnessQuorumPending(2, 3),
   )
   let (_, too_small) = replay_witness_roster(3)
   let invalid_prepared = replay_witness_prepared(hasher, referee, too_small, 1)
   match
-    ReplayWitnessCollector::new(
+    @attestation.ReplayWitnessCollector::new(
       hasher,
       verifier,
       invalid_prepared,
@@ -314,7 +316,7 @@ test "witness collector binds the committed manifest and independent referee" {
   let (_, roster) = replay_witness_roster(4)
   let valid_prepared = replay_witness_prepared(hasher, referee, roster, 1)
   match
-    ReplayWitnessCollector::new(
+    @attestation.ReplayWitnessCollector::new(
       hasher,
       verifier,
       valid_prepared,
@@ -327,7 +329,7 @@ test "witness collector binds the committed manifest and independent referee" {
     _ => fail("empty game manifest was accepted")
   }
   match
-    ReplayWitnessCollector::new(
+    @attestation.ReplayWitnessCollector::new(
       hasher,
       verifier,
       valid_prepared,
@@ -344,7 +346,7 @@ test "witness collector binds the committed manifest and independent referee" {
     manifest_digest: @bft.Digest("uncommitted-witness-policy"),
   })
   match
-    ReplayWitnessCollector::new(
+    @attestation.ReplayWitnessCollector::new(
       hasher,
       verifier,
       wrong_manifest,
@@ -357,12 +359,12 @@ test "witness collector binds the committed manifest and independent referee" {
     _ => fail("uncommitted witness policy was accepted")
   }
   let overlapping = roster.copy()
-  overlapping[0] = { id: overlapping[0].id, key: referee.public_key() }
+  overlapping[0] = { id: overlapping[0].id, key: referee.public_key(), }
   let overlap_prepared = replay_witness_prepared(
     hasher, referee, overlapping, 1,
   )
   match
-    ReplayWitnessCollector::new(
+    @attestation.ReplayWitnessCollector::new(
       hasher,
       verifier,
       overlap_prepared,
@@ -393,7 +395,7 @@ test "witness certificate cannot cross checkpoint or referee identity" {
   for index in 0..<3 {
     ignore(
       witnesses.deliver(
-        sign_replay_witness_attestation(
+        @attestation.sign_replay_witness_attestation(
           hasher,
           signers[index],
           prepared,
@@ -412,9 +414,14 @@ test "witness certificate cannot cross checkpoint or referee identity" {
   )
   assert_eq(
     witnesses.certify(impostor_verified),
-    ReplayWitnessCertificationResult::WitnessRefereeMismatch,
+    @attestation.ReplayWitnessCertificationResult::WitnessRefereeMismatch,
   )
-  let same_checkpoint = EvidenceCollector::new(hasher, verifier, prepared, [])
+  let same_checkpoint = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    prepared,
+    [],
+  )
   match
     same_checkpoint.finalize(
       impostor_verified,
@@ -435,7 +442,12 @@ test "witness certificate cannot cross checkpoint or referee identity" {
   let other_verified = open_replay_witness_checkpoint(
     hasher, verifier, referee, other,
   )
-  let other_collector = EvidenceCollector::new(hasher, verifier, other, [])
+  let other_collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    other,
+    [],
+  )
   match
     other_collector.finalize(
       other_verified,
@@ -465,7 +477,7 @@ test "witness certificate resolves a challenged participant checkpoint" {
   for index in 0..<3 {
     ignore(
       witnesses.deliver(
-        sign_replay_witness_attestation(
+        @attestation.sign_replay_witness_attestation(
           hasher,
           signers[index],
           prepared,
@@ -479,12 +491,21 @@ test "witness certificate resolves a challenged participant checkpoint" {
     WitnessCertified(value) => value
     _ => fail("expected replay witness certificate")
   }
-  let participants = EvidenceCollector::new(hasher, verifier, prepared, [
-    { id: "challenger", key: challenger.public_key() },
-  ])
+  let participants = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    prepared,
+    [{ id: "challenger", key: challenger.public_key(), }],
+  )
   ignore(
     participants.deliver(
-      sign_attestation(hasher, challenger, prepared, "challenger", Challenge),
+      @attestation.sign_attestation(
+        hasher,
+        challenger,
+        prepared,
+        "challenger",
+        Challenge,
+      ),
     ),
   )
   match

@@ -1,0 +1,10 @@
+name = "converge_audit_research"
+version = "0.1.0"
+defaultTargets = ["ConvergeAudit", "Tests"]
+moreLeanArgs = ["-DwarningAsError=true", "-DautoImplicit=false"]
+
+[[lean_lib]]
+name = "ConvergeAudit"
+
+[[lean_lib]]
+name = "Tests"

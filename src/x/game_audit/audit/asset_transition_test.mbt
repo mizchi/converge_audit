@@ -1,7 +1,7 @@
 ///|
 test "asset transfer requires every authorization condition" {
   assert_true(
-    transfer_transition_allowed(
+    @audit.transfer_transition_allowed(
       asset_exists=true,
       owner_matches=true,
       version_matches=true,
@@ -11,7 +11,7 @@ test "asset transfer requires every authorization condition" {
     ),
   )
   assert_false(
-    transfer_transition_allowed(
+    @audit.transfer_transition_allowed(
       asset_exists=false,
       owner_matches=true,
       version_matches=true,
@@ -21,7 +21,7 @@ test "asset transfer requires every authorization condition" {
     ),
   )
   assert_false(
-    transfer_transition_allowed(
+    @audit.transfer_transition_allowed(
       asset_exists=true,
       owner_matches=false,
       version_matches=true,
@@ -31,7 +31,7 @@ test "asset transfer requires every authorization condition" {
     ),
   )
   assert_false(
-    transfer_transition_allowed(
+    @audit.transfer_transition_allowed(
       asset_exists=true,
       owner_matches=true,
       version_matches=false,
@@ -41,7 +41,7 @@ test "asset transfer requires every authorization condition" {
     ),
   )
   assert_false(
-    transfer_transition_allowed(
+    @audit.transfer_transition_allowed(
       asset_exists=true,
       owner_matches=true,
       version_matches=true,
@@ -51,7 +51,7 @@ test "asset transfer requires every authorization condition" {
     ),
   )
   assert_false(
-    transfer_transition_allowed(
+    @audit.transfer_transition_allowed(
       asset_exists=true,
       owner_matches=true,
       version_matches=true,
@@ -61,7 +61,7 @@ test "asset transfer requires every authorization condition" {
     ),
   )
   assert_false(
-    transfer_transition_allowed(
+    @audit.transfer_transition_allowed(
       asset_exists=true,
       owner_matches=true,
       version_matches=true,

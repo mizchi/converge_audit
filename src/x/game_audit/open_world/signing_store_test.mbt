@@ -1,24 +1,24 @@
 ///|
 test "in-memory signing store reserves one digest with compare-and-set semantics" {
   let hasher = @bft.FnvHasher::new()
-  let store = OpenWorldInMemoryObserverSigningStore::new(hasher)
+  let store = @open_world.OpenWorldInMemoryObserverSigningStore::new(hasher)
   let initial_root = store.root()
   assert_eq(
     store.reserve("plan-slot", @bft.Digest("encounter-a")),
-    OpenWorldObserverSigningReservation::SigningSlotReserved,
+    @open_world.OpenWorldObserverSigningReservation::SigningSlotReserved,
   )
   assert_eq(store.size(), 1)
   assert_not_eq(store.root(), initial_root)
   let committed_root = store.root()
   assert_eq(
     store.reserve("plan-slot", @bft.Digest("encounter-a")),
-    OpenWorldObserverSigningReservation::SigningSlotAlreadyReserved(
+    @open_world.OpenWorldObserverSigningReservation::SigningSlotAlreadyReserved(
       @bft.Digest("encounter-a"),
     ),
   )
   assert_eq(
     store.reserve("plan-slot", @bft.Digest("encounter-b")),
-    OpenWorldObserverSigningReservation::SigningSlotAlreadyReserved(
+    @open_world.OpenWorldObserverSigningReservation::SigningSlotAlreadyReserved(
       @bft.Digest("encounter-a"),
     ),
   )
@@ -30,9 +30,11 @@ test "in-memory signing store reserves one digest with compare-and-set semantics
 test "trusted anchor rejects an empty or foreign restored store" {
   let hasher = @bft.FnvHasher::new()
   let signer = @bft.MockSigner::new("anchored-observer-key")
-  let committed_store = OpenWorldInMemoryObserverSigningStore::new(hasher)
+  let committed_store = @open_world.OpenWorldInMemoryObserverSigningStore::new(
+    hasher,
+  )
   let committed = match
-    OpenWorldObserverSigningLedger::new_with_store(
+    @open_world.OpenWorldObserverSigningLedger::new_with_store(
       hasher,
       signer,
       observer_id="anchored-observer",
@@ -49,7 +51,7 @@ test "trusted anchor rejects an empty or foreign restored store" {
     ),
   )
   let anchor = committed.anchor()
-  let restored = OpenWorldObserverSigningLedger::new_with_store(
+  let restored = @open_world.OpenWorldObserverSigningLedger::new_with_store(
     hasher,
     signer,
     observer_id="anchored-observer",
@@ -60,9 +62,11 @@ test "trusted anchor rejects an empty or foreign restored store" {
     ObserverSigningLedgerReady(_) => ()
     _ => fail("expected exact trusted anchor to restore the signing ledger")
   }
-  let rolled_back = OpenWorldInMemoryObserverSigningStore::new(hasher)
+  let rolled_back = @open_world.OpenWorldInMemoryObserverSigningStore::new(
+    hasher,
+  )
   assert_true(
-    OpenWorldObserverSigningLedger::new_with_store(
+    @open_world.OpenWorldObserverSigningLedger::new_with_store(
       hasher,
       signer,
       observer_id="anchored-observer",
@@ -72,7 +76,7 @@ test "trusted anchor rejects an empty or foreign restored store" {
     is ObserverSigningStoreAnchorMismatch,
   )
   assert_true(
-    OpenWorldObserverSigningLedger::new_with_store(
+    @open_world.OpenWorldObserverSigningLedger::new_with_store(
       hasher,
       signer,
       observer_id="foreign-observer",
@@ -83,7 +87,7 @@ test "trusted anchor rejects an empty or foreign restored store" {
   )
   let foreign_signer = @bft.MockSigner::new("foreign-observer-key")
   assert_true(
-    OpenWorldObserverSigningLedger::new_with_store(
+    @open_world.OpenWorldObserverSigningLedger::new_with_store(
       hasher,
       foreign_signer,
       observer_id="anchored-observer",
@@ -124,15 +128,15 @@ impl OpenWorldObserverSigningStore for UnavailableObserverSigningStore with fn r
   _self : UnavailableObserverSigningStore,
   _key : String,
   _encounter_digest : @bft.Digest,
-) -> OpenWorldObserverSigningReservation {
+) -> @open_world.OpenWorldObserverSigningReservation {
   SigningStoreUnavailable
 }
 
 ///|
 impl OpenWorldObserverSigningStore for UnavailableObserverSigningStore with fn snapshot(
   _self : UnavailableObserverSigningStore,
-) -> OpenWorldObserverSigningStoreSnapshot {
-  OpenWorldObserverSigningStoreSnapshot::{
+) -> @open_world.OpenWorldObserverSigningStoreSnapshot {
+  @open_world.OpenWorldObserverSigningStoreSnapshot::{
     root: @bft.Digest("unavailable-store"),
     size: 0,
   }
@@ -153,9 +157,9 @@ test "store failure occurs before any observer signature is emitted" {
     key: @bft.PublicKey("counting-observer"),
     call_count: 0,
   }
-  let store = UnavailableObserverSigningStore::{  }
+  let store = UnavailableObserverSigningStore::{ }
   let ledger = match
-    OpenWorldObserverSigningLedger::new_with_store(
+    @open_world.OpenWorldObserverSigningLedger::new_with_store(
       hasher,
       signer,
       observer_id="counting-observer",
@@ -170,7 +174,7 @@ test "store failure occurs before any observer signature is emitted" {
       registration_index=1,
       encounter_digest=@bft.Digest("encounter-one"),
     ),
-    OpenWorldObserverSigningResult::ObserverSigningRefused(
+    @open_world.OpenWorldObserverSigningResult::ObserverSigningRefused(
       ObserverSigningStoreUnavailable,
     ),
   )
@@ -188,9 +192,9 @@ test "shared signing store prevents two ledger instances from equivocating" {
     key: @bft.PublicKey("shared-observer-key"),
     call_count: 0,
   }
-  let store = OpenWorldInMemoryObserverSigningStore::new(hasher)
+  let store = @open_world.OpenWorldInMemoryObserverSigningStore::new(hasher)
   let first = match
-    OpenWorldObserverSigningLedger::new_with_store(
+    @open_world.OpenWorldObserverSigningLedger::new_with_store(
       hasher,
       first_signer,
       observer_id="shared-observer",
@@ -200,7 +204,7 @@ test "shared signing store prevents two ledger instances from equivocating" {
     _ => fail("expected first ledger over shared store")
   }
   let second = match
-    OpenWorldObserverSigningLedger::new_with_store(
+    @open_world.OpenWorldObserverSigningLedger::new_with_store(
       hasher,
       second_signer,
       observer_id="shared-observer",
@@ -225,7 +229,7 @@ test "shared signing store prevents two ledger instances from equivocating" {
       registration_index=3,
       encounter_digest=@bft.Digest("encounter-b"),
     ),
-    OpenWorldObserverSigningResult::ObserverSigningRefused(
+    @open_world.OpenWorldObserverSigningResult::ObserverSigningRefused(
       ConflictingObserverRegistration(@bft.Digest("encounter-a")),
     ),
   )

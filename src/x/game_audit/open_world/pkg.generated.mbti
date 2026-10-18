@@ -79,6 +79,9 @@ pub(all) enum OpenWorldAuditEpochRefusal {
   InvalidEligibleRegistryRoot
   InvalidRegisteredCount
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldAuditEpochRefusal::equal(Self, Self) -> Bool
+pub fn OpenWorldAuditEpochRefusal::not_equal(Self, Self) -> Bool
+pub fn OpenWorldAuditEpochRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldAuditEpochRevealResult {
   AuditEpochRevealed(RevealedOpenWorldAuditEpoch)
@@ -90,11 +93,17 @@ pub(all) struct OpenWorldAuditTransparencyEnvelope {
   audit_membership_proof : @authmap.AuthMapProof
   seal_membership_proof : @authmap.AuthMapProof
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldAuditTransparencyEnvelope::equal(Self, Self) -> Bool
+pub fn OpenWorldAuditTransparencyEnvelope::not_equal(Self, Self) -> Bool
+pub fn OpenWorldAuditTransparencyEnvelope::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldAuditTransparencyOpenResult {
   AuditTransparencyOpened(PublishedOpenWorldAuditTransparency)
   AuditTransparencyRefused(OpenWorldAuditTransparencyRefusal)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldAuditTransparencyOpenResult::equal(Self, Self) -> Bool
+pub fn OpenWorldAuditTransparencyOpenResult::not_equal(Self, Self) -> Bool
+pub fn OpenWorldAuditTransparencyOpenResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldAuditTransparencyRefusal {
   AuditTransparencyCheckpointRefused(@checkpoint.CheckpointVerification)
@@ -106,6 +115,9 @@ pub(all) enum OpenWorldAuditTransparencyRefusal {
   AuditTransparencyPlanMembershipInvalid
   AuditTransparencySealMembershipInvalid
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldAuditTransparencyRefusal::equal(Self, Self) -> Bool
+pub fn OpenWorldAuditTransparencyRefusal::not_equal(Self, Self) -> Bool
+pub fn OpenWorldAuditTransparencyRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldEncounterGateResult {
   EncounterPeerFinalized(@attestation.FinalizedCheckpoint)
@@ -124,6 +136,7 @@ pub(all) enum OpenWorldEncounterGateResult {
 pub struct OpenWorldInMemoryObserverSigningAnchorGapTransport {
   by_cursor : Map[String, Array[OpenWorldObserverSigningAnchorEnvelope]]
 }
+pub fn OpenWorldInMemoryObserverSigningAnchorGapTransport::fetch(Self, OpenWorldObserverSigningAnchorGapRequest) -> OpenWorldObserverSigningAnchorGapFetchResult
 pub fn OpenWorldInMemoryObserverSigningAnchorGapTransport::new(Array[OpenWorldObserverSigningAnchorEnvelope]) -> Self
 pub impl OpenWorldObserverSigningAnchorGapTransport for OpenWorldInMemoryObserverSigningAnchorGapTransport
 
@@ -132,8 +145,11 @@ pub struct OpenWorldInMemoryObserverSigningStore {
   commitment : @authmap.AuthenticatedMap
 }
 pub fn OpenWorldInMemoryObserverSigningStore::new(&@converge_audit.Hasher) -> Self
+pub fn OpenWorldInMemoryObserverSigningStore::proof(Self, String) -> @authmap.AuthMapProof?
+pub fn OpenWorldInMemoryObserverSigningStore::reserve(Self, String, @converge_audit.Digest) -> OpenWorldObserverSigningReservation
 pub fn OpenWorldInMemoryObserverSigningStore::root(Self) -> @converge_audit.Digest
 pub fn OpenWorldInMemoryObserverSigningStore::size(Self) -> Int
+pub fn OpenWorldInMemoryObserverSigningStore::snapshot(Self) -> OpenWorldObserverSigningStoreSnapshot
 pub impl OpenWorldObserverSigningStore for OpenWorldInMemoryObserverSigningStore
 
 pub(all) struct OpenWorldObservationAlert {
@@ -142,6 +158,9 @@ pub(all) struct OpenWorldObservationAlert {
   digest : @converge_audit.Digest
   detail : String
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObservationAlert::equal(Self, Self) -> Bool
+pub fn OpenWorldObservationAlert::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObservationAlert::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObservationAlertKind {
   InvalidObserverRoster
@@ -153,12 +172,18 @@ pub(all) enum OpenWorldObservationAlertKind {
   WrongObservationRegistrationIndex
   WrongObservationEncounterDigest
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObservationAlertKind::equal(Self, Self) -> Bool
+pub fn OpenWorldObservationAlertKind::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObservationAlertKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObservationDeliveryResult {
   ObservationAccepted
   ObservationDuplicate
   ObservationRejected(OpenWorldObservationAlert)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObservationDeliveryResult::equal(Self, Self) -> Bool
+pub fn OpenWorldObservationDeliveryResult::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObservationDeliveryResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldObserverSigningAnchor {
   observer_id : String
@@ -166,22 +191,34 @@ pub(all) struct OpenWorldObserverSigningAnchor {
   root : @converge_audit.Digest
   size : Int
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchor::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchor::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchor::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldObserverSigningAnchorEnvelope {
   signed_checkpoint : @checkpoint.SignedCheckpoint
   anchor : OpenWorldObserverSigningAnchor
   membership_proof : @authmap.AuthMapProof
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorEnvelope::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorEnvelope::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorEnvelope::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningAnchorEnvelopeOpenResult {
   ObserverSigningAnchorEnvelopeOpened(PublishedOpenWorldObserverSigningAnchor)
   ObserverSigningAnchorEnvelopeRefused(OpenWorldObserverSigningAnchorEnvelopeRefusal)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorEnvelopeOpenResult::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorEnvelopeOpenResult::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorEnvelopeOpenResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningAnchorEnvelopeRefusal {
   ObserverSigningAnchorEnvelopeCheckpointRefused(@checkpoint.CheckpointVerification)
   ObserverSigningAnchorEnvelopePublicationRefused(OpenWorldObserverSigningAnchorPublicationRefusal)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorEnvelopeRefusal::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorEnvelopeRefusal::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorEnvelopeRefusal::to_repr(Self) -> @debug.Repr
 
 pub struct OpenWorldObserverSigningAnchorFork {
   kind : OpenWorldObserverSigningAnchorForkKind
@@ -197,15 +234,21 @@ pub fn OpenWorldObserverSigningAnchorFork::accepted_checkpoint_digest(Self) -> @
 pub fn OpenWorldObserverSigningAnchorFork::accepted_epoch(Self) -> Int
 pub fn OpenWorldObserverSigningAnchorFork::conflicting_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn OpenWorldObserverSigningAnchorFork::conflicting_previous_checkpoint_digest(Self) -> @converge_audit.Digest
+pub fn OpenWorldObserverSigningAnchorFork::equal(Self, Self) -> Bool
 pub fn OpenWorldObserverSigningAnchorFork::kind(Self) -> OpenWorldObserverSigningAnchorForkKind
 pub fn OpenWorldObserverSigningAnchorFork::log_session_id(Self) -> String
+pub fn OpenWorldObserverSigningAnchorFork::not_equal(Self, Self) -> Bool
 pub fn OpenWorldObserverSigningAnchorFork::observed_epoch(Self) -> Int
 pub fn OpenWorldObserverSigningAnchorFork::publisher_key(Self) -> @converge_audit.PublicKey
+pub fn OpenWorldObserverSigningAnchorFork::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningAnchorForkKind {
   SameEpochSigningAnchorCheckpoint
   WrongParentSigningAnchorCheckpoint
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorForkKind::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorForkKind::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorForkKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningAnchorGapFetchResult {
   ObserverSigningAnchorGapFetched(OpenWorldObserverSigningAnchorGapResponse)
@@ -213,6 +256,9 @@ pub(all) enum OpenWorldObserverSigningAnchorGapFetchResult {
   ObserverSigningAnchorGapSourceAmbiguous(Int)
   ObserverSigningAnchorGapRequestInvalid
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorGapFetchResult::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorGapFetchResult::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorGapFetchResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningAnchorGapRecoveryResult {
   ObserverSigningAnchorGapRecoveryAdvanced(Int, Bool)
@@ -224,6 +270,9 @@ pub(all) enum OpenWorldObserverSigningAnchorGapRecoveryResult {
   ObserverSigningAnchorGapRecoveryMalformedResponse
   ObserverSigningAnchorGapRecoveryEnvelopeRefused(Int, OpenWorldObserverSigningAnchorEnvelopeRefusal)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorGapRecoveryResult::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorGapRecoveryResult::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorGapRecoveryResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldObserverSigningAnchorGapRequest {
   log_session_id : String
@@ -233,10 +282,16 @@ pub(all) struct OpenWorldObserverSigningAnchorGapRequest {
   target_epoch : Int
   max_items : Int
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorGapRequest::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorGapRequest::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorGapRequest::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldObserverSigningAnchorGapResponse {
   envelopes : Array[OpenWorldObserverSigningAnchorEnvelope]
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorGapResponse::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorGapResponse::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorGapResponse::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningAnchorHeadBatchDelivery {
   SigningAnchorHeadBatchAdvanced(Int)
@@ -246,6 +301,9 @@ pub(all) enum OpenWorldObserverSigningAnchorHeadBatchDelivery {
   SigningAnchorHeadBatchStale(Int, Int)
   SigningAnchorHeadBatchBoundaryMismatch(Int)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorHeadBatchDelivery::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorHeadBatchDelivery::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorHeadBatchDelivery::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningAnchorHeadDelivery {
   SigningAnchorHeadAdvanced
@@ -255,6 +313,9 @@ pub(all) enum OpenWorldObserverSigningAnchorHeadDelivery {
   SigningAnchorHeadStale
   SigningAnchorHeadBoundaryMismatch
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorHeadDelivery::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorHeadDelivery::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorHeadDelivery::to_repr(Self) -> @debug.Repr
 
 pub struct OpenWorldObserverSigningAnchorHeadTracker {
   log_session_id : String
@@ -279,11 +340,17 @@ pub(all) enum OpenWorldObserverSigningAnchorPublicationRefusal {
   ObserverSigningAnchorLogManifestMismatch
   ObserverSigningAnchorMembershipProofInvalid
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorPublicationRefusal::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorPublicationRefusal::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorPublicationRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningAnchorPublicationResult {
   ObserverSigningAnchorPublished(PublishedOpenWorldObserverSigningAnchor)
   ObserverSigningAnchorPublicationRefused(OpenWorldObserverSigningAnchorPublicationRefusal)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningAnchorPublicationResult::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorPublicationResult::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningAnchorPublicationResult::to_repr(Self) -> @debug.Repr
 
 pub struct OpenWorldObserverSigningLedger {
   hasher : &@converge_audit.Hasher
@@ -314,18 +381,27 @@ pub(all) enum OpenWorldObserverSigningRefusal {
   ConflictingObserverRegistration(@converge_audit.Digest)
   ObserverSigningStoreUnavailable
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningRefusal::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningRefusal::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningReservation {
   SigningSlotReserved
   SigningSlotAlreadyReserved(@converge_audit.Digest)
   SigningStoreUnavailable
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningReservation::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningReservation::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningReservation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldObserverSigningResult {
   ObserverObservationSigned(SignedOpenWorldRegistrationObservation)
   ObserverObservationReused(SignedOpenWorldRegistrationObservation)
   ObserverSigningRefused(OpenWorldObserverSigningRefusal)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningResult::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningResult::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningResult::to_repr(Self) -> @debug.Repr
 
 type OpenWorldObserverSigningStorage
 
@@ -333,6 +409,9 @@ pub(all) struct OpenWorldObserverSigningStoreSnapshot {
   root : @converge_audit.Digest
   size : Int
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldObserverSigningStoreSnapshot::equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningStoreSnapshot::not_equal(Self, Self) -> Bool
+pub fn OpenWorldObserverSigningStoreSnapshot::to_repr(Self) -> @debug.Repr
 
 pub struct OpenWorldRegistrationCertificate {
   audit_checkpoint_digest : @converge_audit.Digest
@@ -346,16 +425,22 @@ pub struct OpenWorldRegistrationCertificate {
 pub fn OpenWorldRegistrationCertificate::approval_count(Self) -> Int
 pub fn OpenWorldRegistrationCertificate::audit_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn OpenWorldRegistrationCertificate::encounter_digest(Self) -> @converge_audit.Digest
+pub fn OpenWorldRegistrationCertificate::equal(Self, Self) -> Bool
 pub fn OpenWorldRegistrationCertificate::max_faults(Self) -> Int
+pub fn OpenWorldRegistrationCertificate::not_equal(Self, Self) -> Bool
 pub fn OpenWorldRegistrationCertificate::observer_count(Self) -> Int
 pub fn OpenWorldRegistrationCertificate::observer_manifest_digest(Self) -> @converge_audit.Digest
 pub fn OpenWorldRegistrationCertificate::registration_index(Self) -> Int
 pub fn OpenWorldRegistrationCertificate::required_approvals(Self) -> Int
+pub fn OpenWorldRegistrationCertificate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldRegistrationCertificationResult {
   RegistrationObserved(OpenWorldRegistrationCertificate)
   RegistrationObservationPending(Int, Int)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldRegistrationCertificationResult::equal(Self, Self) -> Bool
+pub fn OpenWorldRegistrationCertificationResult::not_equal(Self, Self) -> Bool
+pub fn OpenWorldRegistrationCertificationResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldRegistrationObservation {
   audit_checkpoint_digest : @converge_audit.Digest
@@ -363,6 +448,9 @@ pub(all) struct OpenWorldRegistrationObservation {
   registration_index : Int
   encounter_digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldRegistrationObservation::equal(Self, Self) -> Bool
+pub fn OpenWorldRegistrationObservation::not_equal(Self, Self) -> Bool
+pub fn OpenWorldRegistrationObservation::to_repr(Self) -> @debug.Repr
 
 pub struct OpenWorldRegistrationObserverCollector {
   hasher : &@converge_audit.Hasher
@@ -424,11 +512,17 @@ pub(all) enum OpenWorldSealConflictKind {
   SubstitutedSlot
   MissingSlot
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldSealConflictKind::equal(Self, Self) -> Bool
+pub fn OpenWorldSealConflictKind::not_equal(Self, Self) -> Bool
+pub fn OpenWorldSealConflictKind::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldSealConflictSource {
   AuthoritySignedEncounter
   ObserverQuorum
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldSealConflictSource::equal(Self, Self) -> Bool
+pub fn OpenWorldSealConflictSource::not_equal(Self, Self) -> Bool
+pub fn OpenWorldSealConflictSource::to_repr(Self) -> @debug.Repr
 
 pub struct PublishedOpenWorldAuditTransparency {
   publication_checkpoint_digest : @converge_audit.Digest
@@ -441,12 +535,15 @@ pub struct PublishedOpenWorldAuditTransparency {
   seal_checkpoint_digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
 pub fn PublishedOpenWorldAuditTransparency::audit_checkpoint_digest(Self) -> @converge_audit.Digest
+pub fn PublishedOpenWorldAuditTransparency::equal(Self, Self) -> Bool
 pub fn PublishedOpenWorldAuditTransparency::log_epoch(Self) -> Int
 pub fn PublishedOpenWorldAuditTransparency::log_session_id(Self) -> String
+pub fn PublishedOpenWorldAuditTransparency::not_equal(Self, Self) -> Bool
 pub fn PublishedOpenWorldAuditTransparency::previous_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn PublishedOpenWorldAuditTransparency::publication_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn PublishedOpenWorldAuditTransparency::publisher_key(Self) -> @converge_audit.PublicKey
 pub fn PublishedOpenWorldAuditTransparency::seal_checkpoint_digest(Self) -> @converge_audit.Digest
+pub fn PublishedOpenWorldAuditTransparency::to_repr(Self) -> @debug.Repr
 pub fn PublishedOpenWorldAuditTransparency::world_id(Self) -> String
 
 pub struct PublishedOpenWorldObserverSigningAnchor {
@@ -458,11 +555,14 @@ pub struct PublishedOpenWorldObserverSigningAnchor {
   log_epoch : Int
 } derive(Eq, @debug.Debug)
 pub fn PublishedOpenWorldObserverSigningAnchor::anchor(Self) -> OpenWorldObserverSigningAnchor
+pub fn PublishedOpenWorldObserverSigningAnchor::equal(Self, Self) -> Bool
 pub fn PublishedOpenWorldObserverSigningAnchor::log_epoch(Self) -> Int
 pub fn PublishedOpenWorldObserverSigningAnchor::log_session_id(Self) -> String
+pub fn PublishedOpenWorldObserverSigningAnchor::not_equal(Self, Self) -> Bool
 pub fn PublishedOpenWorldObserverSigningAnchor::previous_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn PublishedOpenWorldObserverSigningAnchor::publication_checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn PublishedOpenWorldObserverSigningAnchor::publisher_key(Self) -> @converge_audit.PublicKey
+pub fn PublishedOpenWorldObserverSigningAnchor::to_repr(Self) -> @debug.Repr
 
 pub struct RevealedOpenWorldAuditEpoch {
   hasher : &@converge_audit.Hasher
@@ -494,6 +594,9 @@ pub(all) struct SignedOpenWorldRegistrationObservation {
   signature : @converge_audit.Signature
   signer_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn SignedOpenWorldRegistrationObservation::equal(Self, Self) -> Bool
+pub fn SignedOpenWorldRegistrationObservation::not_equal(Self, Self) -> Bool
+pub fn SignedOpenWorldRegistrationObservation::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
@@ -507,4 +610,3 @@ pub(open) trait OpenWorldObserverSigningStore {
   fn snapshot(Self) -> OpenWorldObserverSigningStoreSnapshot
   fn proof(Self, String) -> @authmap.AuthMapProof?
 }
-

@@ -3,8 +3,13 @@ fn observer_signing_ledger(
   hasher : &@bft.Hasher,
   signer : &@bft.Signer,
   observer_id? : String = "observer-1",
-) -> OpenWorldObserverSigningLedger raise Error {
-  match OpenWorldObserverSigningLedger::new(hasher, signer, observer_id~) {
+) -> @open_world.OpenWorldObserverSigningLedger raise Error {
+  match
+    @open_world.OpenWorldObserverSigningLedger::new(
+      hasher,
+      signer,
+      observer_id~,
+    ) {
     ObserverSigningLedgerReady(ledger) => ledger
     _ => fail("expected valid observer signing ledger")
   }
@@ -45,7 +50,7 @@ test "observer signing ledger reuses exact retry and rejects conflicting digest"
       registration_index=4,
       encounter_digest=@bft.Digest("encounter-b"),
     ),
-    OpenWorldObserverSigningResult::ObserverSigningRefused(
+    @open_world.OpenWorldObserverSigningResult::ObserverSigningRefused(
       ConflictingObserverRegistration(@bft.Digest("encounter-a")),
     ),
   )
@@ -93,11 +98,15 @@ test "invalid observer identity and signing targets fail closed" {
   let empty_key = @bft.MockSigner::new("")
   let signer = @bft.MockSigner::new("observer-key-1")
   assert_true(
-    OpenWorldObserverSigningLedger::new(hasher, signer, observer_id="")
+    @open_world.OpenWorldObserverSigningLedger::new(
+      hasher,
+      signer,
+      observer_id="",
+    )
     is InvalidObserverSigningIdentity,
   )
   assert_true(
-    OpenWorldObserverSigningLedger::new(
+    @open_world.OpenWorldObserverSigningLedger::new(
       hasher,
       empty_key,
       observer_id="observer-1",
@@ -118,7 +127,7 @@ test "invalid observer identity and signing targets fail closed" {
         registration_index=slot,
         encounter_digest=digest,
       ),
-      OpenWorldObserverSigningResult::ObserverSigningRefused(
+      @open_world.OpenWorldObserverSigningResult::ObserverSigningRefused(
         InvalidObserverSigningTarget,
       ),
     )

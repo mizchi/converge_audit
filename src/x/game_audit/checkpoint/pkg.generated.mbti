@@ -36,7 +36,11 @@ pub(all) struct Checkpoint {
   asset_delta_root : @converge_audit.Digest
   hidden_state_commitment : @converge_audit.Digest?
 } derive(Eq, @debug.Debug)
+pub fn Checkpoint::checkpoint_commitment(Self) -> @commitment.CheckpointCommitment
+pub fn Checkpoint::equal(Self, Self) -> Bool
 pub fn Checkpoint::matches_layered_macro(Self, @layered.MacroCheckpoint) -> Bool
+pub fn Checkpoint::not_equal(Self, Self) -> Bool
+pub fn Checkpoint::to_repr(Self) -> @debug.Repr
 pub impl @commitment.CheckpointAdapter for Checkpoint
 
 pub(all) enum CheckpointOpenResult {
@@ -50,7 +54,10 @@ pub(all) enum CheckpointVerification {
   HashMismatch
   InvalidSignature
 } derive(Eq, @debug.Debug)
+pub fn CheckpointVerification::equal(Self, Self) -> Bool
 pub fn CheckpointVerification::is_verified(Self) -> Bool
+pub fn CheckpointVerification::not_equal(Self, Self) -> Bool
+pub fn CheckpointVerification::to_repr(Self) -> @debug.Repr
 
 pub struct PreparedCheckpoint {
   checkpoint : Checkpoint
@@ -65,6 +72,9 @@ pub(all) struct SignedCheckpoint {
   signature : @converge_audit.Signature
   authority_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn SignedCheckpoint::equal(Self, Self) -> Bool
+pub fn SignedCheckpoint::not_equal(Self, Self) -> Bool
+pub fn SignedCheckpoint::to_repr(Self) -> @debug.Repr
 
 pub struct VerifiedCheckpoint {
   signed : SignedCheckpoint
@@ -76,4 +86,3 @@ pub fn VerifiedCheckpoint::digest(Self) -> @converge_audit.Digest
 // Type aliases
 
 // Traits
-

@@ -25,11 +25,17 @@ pub(all) struct MerkleProof {
   leaf_count : Int
   path : Array[MerkleStep]
 } derive(Eq, @debug.Debug)
+pub fn MerkleProof::equal(Self, Self) -> Bool
+pub fn MerkleProof::not_equal(Self, Self) -> Bool
+pub fn MerkleProof::to_repr(Self) -> @debug.Repr
 
 pub(all) enum MerkleStep {
   SiblingLeft(@converge_audit.Digest)
   SiblingRight(@converge_audit.Digest)
 } derive(Eq, @debug.Debug)
+pub fn MerkleStep::equal(Self, Self) -> Bool
+pub fn MerkleStep::not_equal(Self, Self) -> Bool
+pub fn MerkleStep::to_repr(Self) -> @debug.Repr
 
 pub struct MerkleTree {
   leaf_hashes : Array[@converge_audit.Digest]
@@ -44,4 +50,3 @@ pub fn MerkleTree::root(Self) -> @converge_audit.Digest
 // Type aliases
 
 // Traits
-

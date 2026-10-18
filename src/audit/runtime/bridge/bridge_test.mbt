@@ -1,10 +1,10 @@
 ///|
 test "runtime bridge exposes the generic checkpoint and peer contracts" {
   assert_eq(
-    audit_classify_checkpoint_head(true, false, false, 7, 8, true),
+    @bridge.audit_classify_checkpoint_head(true, false, false, 7, 8, true),
     "advance",
   )
-  let selected = audit_select_peer_delivery_batch(
+  let selected = @bridge.audit_select_peer_delivery_batch(
     ["peer-1"],
     [true],
     [false],
@@ -25,13 +25,13 @@ test "runtime bridge exposes the generic checkpoint and peer contracts" {
 ///|
 test "runtime bridge opens closure and prepares an atomic seal" {
   assert_eq(
-    audit_open_checkpoint_closure(
+    @bridge.audit_open_checkpoint_closure(
       1, "checkpoint-v1", "manifest-1", "scope-1", "unit-1", 0, "roster-0", "frontier-0",
       "certificate-0", true, true, true,
     ),
     "ready",
   )
-  let prepared = audit_prepare_atomic_checkpoint_seal(
+  let prepared = @bridge.audit_prepare_atomic_checkpoint_seal(
     1,
     "checkpoint-v1",
     "manifest-1",
@@ -73,7 +73,7 @@ test "runtime bridge ACK remains exactly bound to its outbox entry" {
     decision : String,
     authentication_succeeded : Bool,
   ) {
-    audit_acknowledge_checkpoint_outbox(
+    @bridge.audit_acknowledge_checkpoint_outbox(
       1, "checkpoint-v1", "manifest-1", "scope-1", "unit-1", "receiver-1", 0, "checkpoint-0",
       "canonical-envelope-0", 0, 1, "checkpoint-v1", "manifest-1", "scope-1", "unit-1",
       receiver_id, 0, "checkpoint-0", decision, authentication_succeeded,
@@ -96,7 +96,7 @@ test "runtime bridge ACK remains exactly bound to its outbox entry" {
 
 ///|
 test "runtime bridge persists peer backoff and prioritizes authenticated forks" {
-  let failed = audit_record_peer_delivery_failure(
+  let failed = @bridge.audit_record_peer_delivery_failure(
     "peer-1", true, false, 0, 0, 0, 100, 1, 10, 100,
   )
   guard @json.parse(failed) is Object(failed_fields) &&
@@ -105,14 +105,14 @@ test "runtime bridge persists peer backoff and prioritizes authenticated forks" 
     route["next_retry_at_ms"] is Number(110.0, ..) else {
     fail("expected persisted peer backoff")
   }
-  let succeeded = audit_record_peer_delivery_success(
+  let succeeded = @bridge.audit_record_peer_delivery_success(
     "peer-1", true, false, 1, 110, 1, 2,
   )
   guard @json.parse(succeeded) is Object(success_fields) &&
     success_fields["decision"] is String("updated") else {
     fail("expected success reset")
   }
-  let selected = audit_select_peer_checkpoint_response(
+  let selected = @bridge.audit_select_peer_checkpoint_response(
     ["peer-1", "peer-2"],
     ["expected", "fork"],
     [true, true],

@@ -88,7 +88,7 @@ fn quorum_append_field(buffer : StringBuilder, value : String) -> Unit {
 /// Stable serialization retained from the original attestation-v2 wire
 /// contract so extracting this mechanism does not invalidate signatures.
 pub fn serialize_vote_statement(statement : VoteStatement) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   quorum_append_field(buffer, "attestation-v2")
   quorum_append_field(buffer, statement.subject_digest.0)
   quorum_append_field(buffer, statement.member_id)
@@ -111,7 +111,7 @@ pub fn sign_vote(
   domain : String,
   choice : VoteChoice,
 ) -> SignedVote {
-  let statement = VoteStatement::{ subject_digest, member_id, domain, choice }
+  let statement = VoteStatement::{ subject_digest, member_id, domain, choice, }
   let digest = hasher.hash_string(serialize_vote_statement(statement))
   {
     statement,
@@ -283,5 +283,5 @@ pub fn VoteCollector::evidence(self : VoteCollector) -> QuorumEvidence {
       challenged = true
     }
   }
-  { approvals: FixedArray::from_array(approvals[:]), challenged }
+  { approvals: FixedArray::from_array(approvals[:]), challenged, }
 }

@@ -1,5 +1,5 @@
 ///|
-fn local_store_boundary() -> AuditBoundary {
+fn local_store_boundary() -> @runtime.AuditBoundary {
   {
     protocol_version: 1,
     purpose: "checkpoint-v1",
@@ -10,9 +10,9 @@ fn local_store_boundary() -> AuditBoundary {
 }
 
 ///|
-fn ready_local_store() -> PlayerLocalAuditStore {
+fn ready_local_store() -> @runtime.PlayerLocalAuditStore {
   match
-    open_player_local_audit_store(
+    @runtime.open_player_local_audit_store(
       boundary=local_store_boundary(),
       genesis_digest=@commitment.AuditDigest("genesis"),
       outbox_capacity=8,
@@ -23,7 +23,10 @@ fn ready_local_store() -> PlayerLocalAuditStore {
 }
 
 ///|
-fn local_event(counter : Int, digest : String) -> PlayerLocalAuditEvent {
+fn local_event(
+  counter : Int,
+  digest : String,
+) -> @runtime.PlayerLocalAuditEvent {
   {
     boundary: local_store_boundary(),
     author_id: "alice",
@@ -35,14 +38,14 @@ fn local_event(counter : Int, digest : String) -> PlayerLocalAuditEvent {
 }
 
 ///|
-fn local_closure() -> TrustedEpochClosure {
+fn local_closure() -> @runtime.TrustedEpochClosure {
   local_closure_at(0)
 }
 
 ///|
-fn local_closure_at(epoch : Int) -> TrustedEpochClosure {
+fn local_closure_at(epoch : Int) -> @runtime.TrustedEpochClosure {
   match
-    open_trusted_epoch_closure(
+    @runtime.open_trusted_epoch_closure(
       {
         boundary: local_store_boundary(),
         epoch,
@@ -60,7 +63,7 @@ fn local_closure_at(epoch : Int) -> TrustedEpochClosure {
 }
 
 ///|
-fn local_draft() -> CheckpointSealDraft {
+fn local_draft() -> @runtime.CheckpointSealDraft {
   local_draft_at(0, "genesis", "checkpoint-0")
 }
 
@@ -69,7 +72,7 @@ fn local_draft_at(
   epoch : Int,
   previous_checkpoint : String,
   checkpoint_digest : String,
-) -> CheckpointSealDraft {
+) -> @runtime.CheckpointSealDraft {
   {
     boundary: local_store_boundary(),
     epoch,
@@ -105,7 +108,7 @@ test "player-local store preserves events conflicts seal and outbox across resta
   inspect(store.checkpoint_count(), content="1")
   inspect(store.head().epoch, content="0")
   inspect(store.outbox_entries().length(), content="2")
-  match restore_player_local_audit_store(store.durable_image()) {
+  match @runtime.restore_player_local_audit_store(store.durable_image()) {
     PlayerLocalAuditStoreReady(restored) => {
       inspect(restored.event_count(), content="1")
       inspect(restored.equivocation_count(), content="1")
@@ -120,7 +123,7 @@ test "player-local store preserves events conflicts seal and outbox across resta
       }
       debug_inspect(claimed.state(), content="OutboxInFlight(130)")
       let ack = match
-        open_authenticated_checkpoint_ack(
+        @runtime.open_authenticated_checkpoint_ack(
           {
             boundary: claimed.boundary(),
             authority_id: claimed.destination_id(),
@@ -144,7 +147,7 @@ test "player-local store preserves events conflicts seal and outbox across resta
         acknowledged_image.outbox[0].state,
         content="OutboxAcknowledgedState",
       )
-      match restore_player_local_audit_store(acknowledged_image) {
+      match @runtime.restore_player_local_audit_store(acknowledged_image) {
         PlayerLocalAuditStoreReady(after_ack_restart) =>
           debug_inspect(
             after_ack_restart.outbox_entries()[0].state(),
@@ -153,7 +156,7 @@ test "player-local store preserves events conflicts seal and outbox across resta
         _ => abort("acknowledged outbox did not survive restart")
       }
       match
-        restore_player_local_audit_store({
+        @runtime.restore_player_local_audit_store({
           ..acknowledged_image,
           ack_history: [],
         }) {
@@ -192,7 +195,7 @@ test "player-local seal CAS failure leaves every relation unchanged" {
 ///|
 test "acknowledged outbox history does not consume delivery capacity" {
   let store = match
-    open_player_local_audit_store(
+    @runtime.open_player_local_audit_store(
       boundary=local_store_boundary(),
       genesis_digest=@commitment.AuditDigest("genesis"),
       outbox_capacity=1,
@@ -212,7 +215,7 @@ test "acknowledged outbox history does not consume delivery capacity" {
     _ => abort("expected the first delivery claim")
   }
   let ack = match
-    open_authenticated_checkpoint_ack(
+    @runtime.open_authenticated_checkpoint_ack(
       {
         boundary: claimed.boundary(),
         authority_id: claimed.destination_id(),
@@ -278,7 +281,7 @@ test "player-local restore keeps valid evidence holds and rejects orphan holds" 
   }
   debug_inspect(store.commit_seal(plan), content="PlayerLocalSealCommitted")
   let image = store.durable_image()
-  let hold = PlayerLocalEvidenceHold::{
+  let hold = @runtime.PlayerLocalEvidenceHold::{
     boundary: local_store_boundary(),
     hold_id: "challenge-0",
     epoch: 0,
@@ -287,14 +290,14 @@ test "player-local restore keeps valid evidence holds and rejects orphan holds" 
     reference_digest: @commitment.AuditDigest("challenge-reference-0"),
     state: EvidenceHoldActive,
   }
-  let cursor = PlayerLocalEvidenceInboxCursor::{
+  let cursor = @runtime.PlayerLocalEvidenceInboxCursor::{
     boundary: local_store_boundary(),
     source_id: "authority-a",
     sequence: 0,
     message_digest: @commitment.AuditDigest("message-digest-0"),
   }
   match
-    restore_player_local_audit_store({
+    @runtime.restore_player_local_audit_store({
       ..image,
       evidence_holds: [hold],
       evidence_inbox_cursors: [cursor],
@@ -309,7 +312,7 @@ test "player-local restore keeps valid evidence holds and rejects orphan holds" 
     _ => abort("valid evidence hold did not survive restart")
   }
   match
-    restore_player_local_audit_store({
+    @runtime.restore_player_local_audit_store({
       ..image,
       evidence_holds: [
         {
@@ -323,9 +326,9 @@ test "player-local restore keeps valid evidence holds and rejects orphan holds" 
     _ => abort("orphan evidence hold must not restore")
   }
   match
-    restore_player_local_audit_store({
+    @runtime.restore_player_local_audit_store({
       ..image,
-      evidence_inbox_cursors: [{ ..cursor, sequence: -1 }],
+      evidence_inbox_cursors: [{ ..cursor, sequence: -1, }],
     }) {
     PlayerLocalAuditStoreRefused(reason) =>
       debug_inspect(reason, content="LocalStoreInvalidImage")
@@ -336,7 +339,7 @@ test "player-local restore keeps valid evidence holds and rejects orphan holds" 
 ///|
 test "player-local restore validates durable evidence poll fencing state" {
   let image = ready_local_store().durable_image()
-  let job = PlayerLocalEvidencePollJob::{
+  let job = @runtime.PlayerLocalEvidencePollJob::{
     boundary: local_store_boundary(),
     source_id: "authority-a",
     endpoint: "https://authority.example/evidence/poll",
@@ -348,7 +351,10 @@ test "player-local restore validates durable evidence poll fencing state" {
     state: EvidencePollInFlight(200),
   }
   match
-    restore_player_local_audit_store({ ..image, evidence_poll_jobs: [job] }) {
+    @runtime.restore_player_local_audit_store({
+      ..image,
+      evidence_poll_jobs: [job],
+    }) {
     PlayerLocalAuditStoreReady(restored) =>
       debug_inspect(
         restored.durable_image().evidence_poll_jobs,
@@ -377,16 +383,19 @@ test "player-local restore validates durable evidence poll fencing state" {
     _ => abort("valid evidence poll job did not survive restart")
   }
   match
-    restore_player_local_audit_store({
+    @runtime.restore_player_local_audit_store({
       ..image,
-      evidence_poll_jobs: [{ ..job, attempt_count: 0 }],
+      evidence_poll_jobs: [{ ..job, attempt_count: 0, }],
     }) {
     PlayerLocalAuditStoreRefused(reason) =>
       debug_inspect(reason, content="LocalStoreInvalidImage")
     _ => abort("unfenced in-flight poll job must not restore")
   }
   match
-    restore_player_local_audit_store({ ..image, evidence_poll_jobs: [job, job] }) {
+    @runtime.restore_player_local_audit_store({
+      ..image,
+      evidence_poll_jobs: [job, job],
+    }) {
     PlayerLocalAuditStoreRefused(reason) =>
       debug_inspect(reason, content="LocalStoreInvalidImage")
     _ => abort("duplicate poll source must not restore")
@@ -412,7 +421,7 @@ test "player-local store refuses a canonical collision on a known fork digest" {
     content="LocalEventRefused(LocalEventDigestCollision)",
   )
   inspect(store.equivocation_count(), content="1")
-  match restore_player_local_audit_store(store.durable_image()) {
+  match @runtime.restore_player_local_audit_store(store.durable_image()) {
     PlayerLocalAuditStoreReady(_) => ()
     _ => abort("a refused digest collision must leave a restorable image")
   }
@@ -430,7 +439,7 @@ test "player-local restore rejects a head without its atomic seal footprint" {
       checkpoint_digest: @commitment.AuditDigest("orphan"),
     },
   }
-  match restore_player_local_audit_store(broken) {
+  match @runtime.restore_player_local_audit_store(broken) {
     PlayerLocalAuditStoreRefused(reason) =>
       debug_inspect(reason, content="LocalStoreInvalidImage")
     PlayerLocalAuditStoreReady(_) => abort("orphan head must be rejected")
@@ -452,7 +461,7 @@ test "player-local restore accepts a chain suffix after durable prefix pruning" 
     _ => abort("expected first claim")
   }
   let ack = match
-    open_authenticated_checkpoint_ack(
+    @runtime.open_authenticated_checkpoint_ack(
       {
         boundary: claimed.boundary(),
         authority_id: claimed.destination_id(),
@@ -492,7 +501,7 @@ test "player-local restore accepts a chain suffix after durable prefix pruning" 
     ack_history: [],
     storage_revision: image.storage_revision + 1,
   }
-  match restore_player_local_audit_store(pruned) {
+  match @runtime.restore_player_local_audit_store(pruned) {
     PlayerLocalAuditStoreReady(restored) => {
       inspect(restored.checkpoint_count(), content="1")
       inspect(restored.head().epoch, content="1")

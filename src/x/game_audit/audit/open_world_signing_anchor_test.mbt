@@ -1,48 +1,48 @@
 ///|
 test "observer signing anchor publication requires every trust condition" {
   assert_eq(
-    classify_open_world_signing_anchor_publication(
+    @audit.classify_open_world_signing_anchor_publication(
       anchor_valid=true,
       log_session_matches=true,
       log_manifest_matches=true,
       membership_proof_valid=true,
     ),
-    OpenWorldSigningAnchorPublicationDecision::PublishSigningAnchor,
+    @audit.OpenWorldSigningAnchorPublicationDecision::PublishSigningAnchor,
   )
   assert_eq(
-    classify_open_world_signing_anchor_publication(
+    @audit.classify_open_world_signing_anchor_publication(
       anchor_valid=false,
       log_session_matches=true,
       log_manifest_matches=true,
       membership_proof_valid=true,
     ),
-    OpenWorldSigningAnchorPublicationDecision::RejectInvalidSigningAnchor,
+    @audit.OpenWorldSigningAnchorPublicationDecision::RejectInvalidSigningAnchor,
   )
   assert_eq(
-    classify_open_world_signing_anchor_publication(
+    @audit.classify_open_world_signing_anchor_publication(
       anchor_valid=true,
       log_session_matches=false,
       log_manifest_matches=true,
       membership_proof_valid=true,
     ),
-    OpenWorldSigningAnchorPublicationDecision::RejectSigningAnchorLogSession,
+    @audit.OpenWorldSigningAnchorPublicationDecision::RejectSigningAnchorLogSession,
   )
   assert_eq(
-    classify_open_world_signing_anchor_publication(
+    @audit.classify_open_world_signing_anchor_publication(
       anchor_valid=true,
       log_session_matches=true,
       log_manifest_matches=false,
       membership_proof_valid=true,
     ),
-    OpenWorldSigningAnchorPublicationDecision::RejectSigningAnchorLogManifest,
+    @audit.OpenWorldSigningAnchorPublicationDecision::RejectSigningAnchorLogManifest,
   )
   assert_eq(
-    classify_open_world_signing_anchor_publication(
+    @audit.classify_open_world_signing_anchor_publication(
       anchor_valid=true,
       log_session_matches=true,
       log_manifest_matches=true,
       membership_proof_valid=false,
     ),
-    OpenWorldSigningAnchorPublicationDecision::RejectSigningAnchorMembership,
+    @audit.OpenWorldSigningAnchorPublicationDecision::RejectSigningAnchorMembership,
   )
 }

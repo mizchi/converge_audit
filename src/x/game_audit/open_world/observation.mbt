@@ -14,7 +14,7 @@ pub fn open_world_observer_manifest(
       right.key.0.compare(left.key.0)
     }
   })
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-registration-observers-v1")
   append_field(buffer, max_faults.to_string())
   append_field(buffer, sorted.length().to_string())
@@ -30,7 +30,7 @@ pub fn open_world_observer_manifest(
 pub fn serialize_open_world_registration_observation(
   observation : OpenWorldRegistrationObservation,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-registration-observation-v1")
   append_field(buffer, observation.audit_checkpoint_digest.0)
   append_field(buffer, observation.observer_id)
@@ -45,7 +45,7 @@ pub fn open_world_observer_signing_key(
   audit_checkpoint_digest : @bft.Digest,
   registration_index : Int,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-observer-signing-key-v1")
   append_field(buffer, audit_checkpoint_digest.0)
   append_field(buffer, registration_index.to_string())

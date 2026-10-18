@@ -2,8 +2,11 @@ import {
   "mizchi/converge_audit/audit" @checkpoint_audit,
   "mizchi/converge_audit/audit/commitment",
   "mizchi/converge_audit/audit/runtime" @audit_runtime,
-  "moonbitlang/core/json",
 }
+
+import {
+  "moonbitlang/core/json",
+} for "test"
 
 supported_targets = "+js+wasm+wasm-gc"
 
@@ -13,6 +16,10 @@ options(
       "exports": [
         "audit_classify_checkpoint_head",
         "audit_player_local_checkpoint_prunable",
+        "audit_player_local_payload_admission_allowed",
+        "audit_player_local_payload_prunable",
+        "audit_player_local_payload_reservation_allowed",
+        "audit_player_local_payload_scope_registration_allowed",
         "audit_player_local_evidence_hold_admission_allowed",
         "audit_player_local_evidence_hold_resolution_allowed",
         "audit_player_local_evidence_inbox_advance_allowed",
@@ -33,6 +40,10 @@ options(
       "exports": [
         "audit_classify_checkpoint_head",
         "audit_player_local_checkpoint_prunable",
+        "audit_player_local_payload_admission_allowed",
+        "audit_player_local_payload_prunable",
+        "audit_player_local_payload_reservation_allowed",
+        "audit_player_local_payload_scope_registration_allowed",
         "audit_player_local_evidence_hold_admission_allowed",
         "audit_player_local_evidence_hold_resolution_allowed",
         "audit_player_local_evidence_inbox_advance_allowed",

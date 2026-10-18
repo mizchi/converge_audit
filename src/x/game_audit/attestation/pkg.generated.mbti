@@ -30,16 +30,25 @@ pub(all) struct Attestation {
   purpose : AttestationPurpose
   choice : AttestationChoice
 } derive(Eq, @debug.Debug)
+pub fn Attestation::equal(Self, Self) -> Bool
+pub fn Attestation::not_equal(Self, Self) -> Bool
+pub fn Attestation::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AttestationChoice {
   Approve
   Challenge
 } derive(Eq, @debug.Debug)
+pub fn AttestationChoice::equal(Self, Self) -> Bool
+pub fn AttestationChoice::not_equal(Self, Self) -> Bool
+pub fn AttestationChoice::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AttestationPurpose {
   CheckpointApproval
   ReplayWitness
 } derive(Eq, @debug.Debug)
+pub fn AttestationPurpose::equal(Self, Self) -> Bool
+pub fn AttestationPurpose::not_equal(Self, Self) -> Bool
+pub fn AttestationPurpose::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AuditEvidence {
   approvals : FixedArray[Bool]
@@ -58,6 +67,9 @@ pub(all) struct EvidenceAlert {
   digest : @converge_audit.Digest
   detail : String
 } derive(Eq, @debug.Debug)
+pub fn EvidenceAlert::equal(Self, Self) -> Bool
+pub fn EvidenceAlert::not_equal(Self, Self) -> Bool
+pub fn EvidenceAlert::to_repr(Self) -> @debug.Repr
 
 pub(all) enum EvidenceAlertKind {
   InvalidRoster
@@ -69,6 +81,9 @@ pub(all) enum EvidenceAlertKind {
   WrongPurpose
   Equivocation
 } derive(Eq, @debug.Debug)
+pub fn EvidenceAlertKind::equal(Self, Self) -> Bool
+pub fn EvidenceAlertKind::not_equal(Self, Self) -> Bool
+pub fn EvidenceAlertKind::to_repr(Self) -> @debug.Repr
 
 pub struct EvidenceCollector {
   inner : @quorum.VoteCollector
@@ -86,6 +101,9 @@ pub(all) enum EvidenceDeliveryResult {
   Duplicate
   Rejected(EvidenceAlert)
 } derive(Eq, @debug.Debug)
+pub fn EvidenceDeliveryResult::equal(Self, Self) -> Bool
+pub fn EvidenceDeliveryResult::not_equal(Self, Self) -> Bool
+pub fn EvidenceDeliveryResult::to_repr(Self) -> @debug.Repr
 
 pub struct FinalizedCheckpoint {
   verified : @checkpoint.VerifiedCheckpoint
@@ -97,6 +115,9 @@ pub(all) struct Participant {
   id : String
   key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn Participant::equal(Self, Self) -> Bool
+pub fn Participant::not_equal(Self, Self) -> Bool
+pub fn Participant::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ReplayWitnessCertificationResult {
   WitnessCertified(WitnessReplayCertificate)
@@ -104,6 +125,9 @@ pub(all) enum ReplayWitnessCertificationResult {
   WitnessRefereeMismatch
   WitnessQuorumPending(Int, Int)
 } derive(Eq, @debug.Debug)
+pub fn ReplayWitnessCertificationResult::equal(Self, Self) -> Bool
+pub fn ReplayWitnessCertificationResult::not_equal(Self, Self) -> Bool
+pub fn ReplayWitnessCertificationResult::to_repr(Self) -> @debug.Repr
 
 pub struct ReplayWitnessCollector {
   evidence : EvidenceCollector
@@ -132,6 +156,9 @@ pub(all) struct SignedAttestation {
   signature : @converge_audit.Signature
   signer_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn SignedAttestation::equal(Self, Self) -> Bool
+pub fn SignedAttestation::not_equal(Self, Self) -> Bool
+pub fn SignedAttestation::to_repr(Self) -> @debug.Repr
 
 pub struct WitnessReplayCertificate {
   checkpoint_digest : @converge_audit.Digest
@@ -142,12 +169,14 @@ pub struct WitnessReplayCertificate {
 } derive(Eq, @debug.Debug)
 pub fn WitnessReplayCertificate::approval_count(Self) -> Int
 pub fn WitnessReplayCertificate::checkpoint_digest(Self) -> @converge_audit.Digest
+pub fn WitnessReplayCertificate::equal(Self, Self) -> Bool
 pub fn WitnessReplayCertificate::max_faults(Self) -> Int
+pub fn WitnessReplayCertificate::not_equal(Self, Self) -> Bool
 pub fn WitnessReplayCertificate::referee_key(Self) -> @converge_audit.PublicKey
 pub fn WitnessReplayCertificate::required_approvals(Self) -> Int
+pub fn WitnessReplayCertificate::to_repr(Self) -> @debug.Repr
 pub fn WitnessReplayCertificate::witness_count(Self) -> Int
 
 // Type aliases
 
 // Traits
-

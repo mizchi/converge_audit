@@ -64,6 +64,9 @@ pub(all) struct AssetLineageAnchor {
   lineage_root : @converge_audit.Digest
   origin_receipt_digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn AssetLineageAnchor::equal(Self, Self) -> Bool
+pub fn AssetLineageAnchor::not_equal(Self, Self) -> Bool
+pub fn AssetLineageAnchor::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AssetLineageRefusal {
   InvalidAssetLineageLimit
@@ -79,11 +82,17 @@ pub(all) enum AssetLineageRefusal {
   AssetLineageAuthenticationRefused(Int)
   AssetLineageCurrentRecordMismatch
 } derive(Eq, @debug.Debug)
+pub fn AssetLineageRefusal::equal(Self, Self) -> Bool
+pub fn AssetLineageRefusal::not_equal(Self, Self) -> Bool
+pub fn AssetLineageRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AssetLineageSlice {
   anchor : AssetLineageAnchor
   transfers : Array[AuthenticatedAssetLineageTransfer]
 } derive(Eq, @debug.Debug)
+pub fn AssetLineageSlice::equal(Self, Self) -> Bool
+pub fn AssetLineageSlice::not_equal(Self, Self) -> Bool
+pub fn AssetLineageSlice::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AssetLineageTransferAuthorization {
   session_id : String
@@ -91,6 +100,9 @@ pub(all) struct AssetLineageTransferAuthorization {
   sender_key : @converge_audit.PublicKey
   recipient_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn AssetLineageTransferAuthorization::equal(Self, Self) -> Bool
+pub fn AssetLineageTransferAuthorization::not_equal(Self, Self) -> Bool
+pub fn AssetLineageTransferAuthorization::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AssetLineageTransition {
   asset_id : String
@@ -102,17 +114,26 @@ pub(all) struct AssetLineageTransition {
   source_event : @converge_audit.Digest
   previous_lineage_root : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn AssetLineageTransition::equal(Self, Self) -> Bool
+pub fn AssetLineageTransition::not_equal(Self, Self) -> Bool
+pub fn AssetLineageTransition::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AssetLineageVerificationResult {
   AssetLineageVerified(VerifiedAssetLineageSlice)
   AssetLineageRefused(AssetLineageRefusal)
 } derive(Eq, @debug.Debug)
+pub fn AssetLineageVerificationResult::equal(Self, Self) -> Bool
+pub fn AssetLineageVerificationResult::not_equal(Self, Self) -> Bool
+pub fn AssetLineageVerificationResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AssetOwnerKeyBinding {
   session_id : String
   owner_id : String
   owner_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn AssetOwnerKeyBinding::equal(Self, Self) -> Bool
+pub fn AssetOwnerKeyBinding::not_equal(Self, Self) -> Bool
+pub fn AssetOwnerKeyBinding::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AssetRecord {
   asset_id : String
@@ -126,6 +147,9 @@ pub(all) struct AssetRecord {
   last_event : @converge_audit.Digest
   lineage_root : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn AssetRecord::equal(Self, Self) -> Bool
+pub fn AssetRecord::not_equal(Self, Self) -> Bool
+pub fn AssetRecord::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AssetTransfer {
   asset_id : String
@@ -134,12 +158,18 @@ pub(all) struct AssetTransfer {
   expected_version : Int
   source_event : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn AssetTransfer::equal(Self, Self) -> Bool
+pub fn AssetTransfer::not_equal(Self, Self) -> Bool
+pub fn AssetTransfer::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AuthenticatedAssetLineageTransfer {
   signed_transfer : SignedAssetLineageTransfer
   sender_binding : SignedAssetOwnerKeyBinding
   recipient_binding : SignedAssetOwnerKeyBinding
 } derive(Eq, @debug.Debug)
+pub fn AuthenticatedAssetLineageTransfer::equal(Self, Self) -> Bool
+pub fn AuthenticatedAssetLineageTransfer::not_equal(Self, Self) -> Bool
+pub fn AuthenticatedAssetLineageTransfer::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InventoryCommitResult {
   Committed
@@ -152,6 +182,9 @@ pub(all) enum InventoryCommitResult {
   AssetDeltaRootMismatch
   PublicStateRootMismatch
 } derive(Eq, @debug.Debug)
+pub fn InventoryCommitResult::equal(Self, Self) -> Bool
+pub fn InventoryCommitResult::not_equal(Self, Self) -> Bool
+pub fn InventoryCommitResult::to_repr(Self) -> @debug.Repr
 
 pub struct InventoryIndex {
   hasher : &@converge_audit.Hasher
@@ -178,6 +211,9 @@ pub(all) struct InventoryOriginVerificationPlan {
   lineage_statement : String
   lineage_root : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn InventoryOriginVerificationPlan::equal(Self, Self) -> Bool
+pub fn InventoryOriginVerificationPlan::not_equal(Self, Self) -> Bool
+pub fn InventoryOriginVerificationPlan::to_repr(Self) -> @debug.Repr
 
 pub struct InventoryPlan {
   base_root : @converge_audit.Digest
@@ -199,6 +235,9 @@ pub(all) enum InventoryPlanError {
   ReplayManifestConflict
   InvalidTransfer(Int, TransferValidation)
 } derive(Eq, @debug.Debug)
+pub fn InventoryPlanError::equal(Self, Self) -> Bool
+pub fn InventoryPlanError::not_equal(Self, Self) -> Bool
+pub fn InventoryPlanError::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InventoryPlanResult {
   Planned(InventoryPlan)
@@ -209,6 +248,9 @@ pub(all) struct InventoryProof {
   record : AssetRecord
   map_proof : @authmap.AuthMapProof
 } derive(Eq, @debug.Debug)
+pub fn InventoryProof::equal(Self, Self) -> Bool
+pub fn InventoryProof::not_equal(Self, Self) -> Bool
+pub fn InventoryProof::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignedAssetLineageTransfer {
   authorization : AssetLineageTransferAuthorization
@@ -216,6 +258,9 @@ pub(all) struct SignedAssetLineageTransfer {
   sender_signature : @converge_audit.Signature
   recipient_signature : @converge_audit.Signature
 } derive(Eq, @debug.Debug)
+pub fn SignedAssetLineageTransfer::equal(Self, Self) -> Bool
+pub fn SignedAssetLineageTransfer::not_equal(Self, Self) -> Bool
+pub fn SignedAssetLineageTransfer::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SignedAssetOwnerKeyBinding {
   binding : AssetOwnerKeyBinding
@@ -223,6 +268,9 @@ pub(all) struct SignedAssetOwnerKeyBinding {
   signature : @converge_audit.Signature
   authority_key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn SignedAssetOwnerKeyBinding::equal(Self, Self) -> Bool
+pub fn SignedAssetOwnerKeyBinding::not_equal(Self, Self) -> Bool
+pub fn SignedAssetOwnerKeyBinding::to_repr(Self) -> @debug.Repr
 
 pub(all) enum TransferValidation {
   UnknownAsset
@@ -232,6 +280,9 @@ pub(all) enum TransferValidation {
   SameOwner
   UnreplayedSourceEvent
 } derive(Eq, @debug.Debug)
+pub fn TransferValidation::equal(Self, Self) -> Bool
+pub fn TransferValidation::not_equal(Self, Self) -> Bool
+pub fn TransferValidation::to_repr(Self) -> @debug.Repr
 
 pub struct VerifiedAssetLineageSlice {
   initial_anchor : AssetLineageAnchor
@@ -239,8 +290,11 @@ pub struct VerifiedAssetLineageSlice {
   transitions : Array[AssetLineageTransition]
 } derive(Eq, @debug.Debug)
 pub fn VerifiedAssetLineageSlice::contains_event(Self, @converge_audit.Digest) -> Bool
+pub fn VerifiedAssetLineageSlice::equal(Self, Self) -> Bool
 pub fn VerifiedAssetLineageSlice::final_anchor(Self) -> AssetLineageAnchor
 pub fn VerifiedAssetLineageSlice::initial_anchor(Self) -> AssetLineageAnchor
+pub fn VerifiedAssetLineageSlice::not_equal(Self, Self) -> Bool
+pub fn VerifiedAssetLineageSlice::to_repr(Self) -> @debug.Repr
 pub fn VerifiedAssetLineageSlice::transfer_count(Self) -> Int
 pub fn VerifiedAssetLineageSlice::transfer_events(Self) -> Array[@converge_audit.Digest]
 pub fn VerifiedAssetLineageSlice::transitions(Self) -> Array[AssetLineageTransition]
@@ -248,4 +302,3 @@ pub fn VerifiedAssetLineageSlice::transitions(Self) -> Array[AssetLineageTransit
 // Type aliases
 
 // Traits
-

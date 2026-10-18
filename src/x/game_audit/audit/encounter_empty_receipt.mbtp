@@ -1,0 +1,129 @@
+///|
+predicate encounter_empty_receipt_retire_allowed_post(
+  settled : Bool,
+  assetless_receipt : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  old_generation : Bool,
+  index_matches : Bool,
+  result : Bool,
+) {
+  if settled && assetless_receipt && retention_released && hold_clear &&
+    old_generation && index_matches {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma retired_empty_encounter_receipt_requires_every_guard(
+  settled : Bool,
+  assetless_receipt : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  old_generation : Bool,
+  index_matches : Bool,
+) where {
+  proof_require: encounter_empty_receipt_retire_allowed_post(
+    settled, assetless_receipt, retention_released, hold_clear, old_generation,
+    index_matches, true,
+  ),
+  proof_ensure: settled == true,
+  proof_ensure: assetless_receipt == true,
+  proof_ensure: retention_released == true,
+  proof_ensure: hold_clear == true,
+  proof_ensure: old_generation == true,
+  proof_ensure: index_matches == true,
+} {
+}
+
+///|
+pub lemma unsettled_empty_encounter_receipt_cannot_retire(
+  assetless_receipt : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  old_generation : Bool,
+  index_matches : Bool,
+) where {
+  proof_ensure: encounter_empty_receipt_retire_allowed_post(
+    false, assetless_receipt, retention_released, hold_clear, old_generation,
+    index_matches, false,
+  ),
+} {
+}
+
+///|
+pub lemma non_assetless_encounter_receipt_cannot_retire(
+  settled : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  old_generation : Bool,
+  index_matches : Bool,
+) where {
+  proof_ensure: encounter_empty_receipt_retire_allowed_post(
+    settled, false, retention_released, hold_clear, old_generation,
+    index_matches, false,
+  ),
+} {
+}
+
+///|
+pub lemma retained_empty_encounter_receipt_cannot_retire(
+  settled : Bool,
+  assetless_receipt : Bool,
+  hold_clear : Bool,
+  old_generation : Bool,
+  index_matches : Bool,
+) where {
+  proof_ensure: encounter_empty_receipt_retire_allowed_post(
+    settled, assetless_receipt, false, hold_clear, old_generation,
+    index_matches, false,
+  ),
+} {
+}
+
+///|
+pub lemma held_empty_encounter_receipt_cannot_retire(
+  settled : Bool,
+  assetless_receipt : Bool,
+  retention_released : Bool,
+  old_generation : Bool,
+  index_matches : Bool,
+) where {
+  proof_ensure: encounter_empty_receipt_retire_allowed_post(
+    settled, assetless_receipt, retention_released, false, old_generation,
+    index_matches, false,
+  ),
+} {
+}
+
+///|
+pub lemma current_generation_empty_encounter_receipt_cannot_retire(
+  settled : Bool,
+  assetless_receipt : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  index_matches : Bool,
+) where {
+  proof_ensure: encounter_empty_receipt_retire_allowed_post(
+    settled, assetless_receipt, retention_released, hold_clear, false,
+    index_matches, false,
+  ),
+} {
+}
+
+///|
+pub lemma unindexed_empty_encounter_receipt_cannot_retire(
+  settled : Bool,
+  assetless_receipt : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  old_generation : Bool,
+) where {
+  proof_ensure: encounter_empty_receipt_retire_allowed_post(
+    settled, assetless_receipt, retention_released, hold_clear, old_generation,
+    false, false,
+  ),
+} {
+}

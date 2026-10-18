@@ -1,7 +1,7 @@
 ///|
 test "telegraphed dodge gate requires every trust boundary" {
   assert_true(
-    telegraph_dodge_allowed(
+    @audit.telegraph_dodge_allowed(
       telegraph_valid=true,
       player_evidence_valid=true,
       causally_bound=true,
@@ -20,7 +20,7 @@ test "telegraphed dodge gate requires every trust boundary" {
   ]
   for conditions in rejected {
     assert_false(
-      telegraph_dodge_allowed(
+      @audit.telegraph_dodge_allowed(
         telegraph_valid=conditions.0,
         player_evidence_valid=conditions.1,
         causally_bound=conditions.2,
@@ -34,13 +34,13 @@ test "telegraphed dodge gate requires every trust boundary" {
 
 ///|
 test "integer tick helpers enforce reaction and receipt boundaries" {
-  assert_true(dodge_reaction_window_allowed(10, 16, 2, 12))
-  assert_true(dodge_reaction_window_allowed(10, 16, 2, 15))
-  assert_false(dodge_reaction_window_allowed(10, 16, 2, 11))
-  assert_false(dodge_reaction_window_allowed(10, 16, 2, 16))
-  assert_false(dodge_reaction_window_allowed(10, 16, -1, 12))
-  assert_true(dodge_receipt_bound_allowed(13, 15, 2))
-  assert_false(dodge_receipt_bound_allowed(13, 12, 2))
-  assert_false(dodge_receipt_bound_allowed(13, 16, 2))
-  assert_false(dodge_receipt_bound_allowed(13, 13, -1))
+  assert_true(@audit.dodge_reaction_window_allowed(10, 16, 2, 12))
+  assert_true(@audit.dodge_reaction_window_allowed(10, 16, 2, 15))
+  assert_false(@audit.dodge_reaction_window_allowed(10, 16, 2, 11))
+  assert_false(@audit.dodge_reaction_window_allowed(10, 16, 2, 16))
+  assert_false(@audit.dodge_reaction_window_allowed(10, 16, -1, 12))
+  assert_true(@audit.dodge_receipt_bound_allowed(13, 15, 2))
+  assert_false(@audit.dodge_receipt_bound_allowed(13, 12, 2))
+  assert_false(@audit.dodge_receipt_bound_allowed(13, 16, 2))
+  assert_false(@audit.dodge_receipt_bound_allowed(13, 13, -1))
 }

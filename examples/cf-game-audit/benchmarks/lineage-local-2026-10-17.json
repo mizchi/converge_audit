@@ -1,0 +1,344 @@
+{
+  "benchmark": "inventory-lineage-local-generated-js",
+  "measurement_date": "2026-10-17",
+  "environment": {
+    "machine": "Apple M5",
+    "os": "macOS 26.6.2 arm64",
+    "runtime": "Node v24.21.0",
+    "moon": "0.1.20260920 (914d7da 2026-09-20)",
+    "target": "js release",
+    "network": "none"
+  },
+  "source": {
+    "base_commit": "30d9ff2a8edae271938ccb03d50f2e2745fbed72",
+    "working_tree_dirty": true,
+    "note": "Uncommitted MoonBit toolchain compatibility changes are present. This is not a clean-commit benchmark.",
+    "script": "examples/cf-game-audit/scripts/bench-lineage.ts",
+    "build_command": "moon build --target js --release",
+    "benchmark_command": "AUDIT_LINEAGE_BENCH_ITERATIONS=10 pnpm --dir examples/cf-game-audit exec tsx scripts/bench-lineage.ts"
+  },
+  "measurement_scope": {
+    "warmup": "One fixture per transfer count; both verification phases warmed before measured iterations.",
+    "verification_ms": "MoonBit decode, experimental crypto, certificate and semantic verification; generated JS.",
+    "standard_total_verification_ms": "Additional independent standard WebCrypto and semantic plan verification, executed after MoonBit verification.",
+    "mean_combined_verification": "Sum of the two phase means; no combined percentile was measured.",
+    "generation_ms": "Fixture generation, separately timed and excluded from verification.",
+    "excluded": [
+      "HTTP",
+      "database",
+      "gameplay replay"
+    ],
+    "limitations": "Small fixed synthetic fixture; 10 iterations; not production capacity or a comparison against a controlled historical baseline."
+  },
+  "iterations": 10,
+  "results": [
+    {
+      "transfer_count": 1,
+      "bundle_bytes": 4313,
+      "bytes_per_transfer": 4313,
+      "generation_ms": {
+        "count": 10,
+        "mean_ms": 81.641,
+        "p50_ms": 81.467,
+        "p95_ms": 84.863,
+        "p99_ms": 84.863,
+        "max_ms": 84.863
+      },
+      "verification_ms": {
+        "count": 10,
+        "mean_ms": 24.982,
+        "p50_ms": 24.62,
+        "p95_ms": 26.04,
+        "p99_ms": 26.04,
+        "max_ms": 26.04
+      },
+      "standard_authentication_ms": {
+        "count": 10,
+        "mean_ms": 0.161,
+        "p50_ms": 0.151,
+        "p95_ms": 0.201,
+        "p99_ms": 0.201,
+        "max_ms": 0.201
+      },
+      "standard_checkpoint_certificate_ms": {
+        "count": 10,
+        "mean_ms": 0.253,
+        "p50_ms": 0.233,
+        "p95_ms": 0.404,
+        "p99_ms": 0.404,
+        "max_ms": 0.404
+      },
+      "standard_checkpoint_semantics_ms": {
+        "count": 10,
+        "mean_ms": 0.029,
+        "p50_ms": 0.028,
+        "p95_ms": 0.042,
+        "p99_ms": 0.042,
+        "max_ms": 0.042
+      },
+      "standard_inventory_origins_ms": {
+        "count": 10,
+        "mean_ms": 0.034,
+        "p50_ms": 0.034,
+        "p95_ms": 0.042,
+        "p99_ms": 0.042,
+        "max_ms": 0.042
+      },
+      "standard_inventory_membership_plan_ms": {
+        "count": 10,
+        "mean_ms": 0.049,
+        "p50_ms": 0.051,
+        "p95_ms": 0.065,
+        "p99_ms": 0.065,
+        "max_ms": 0.065
+      },
+      "standard_lineage_plan_ms": {
+        "count": 10,
+        "mean_ms": 0.025,
+        "p50_ms": 0.023,
+        "p95_ms": 0.036,
+        "p99_ms": 0.036,
+        "max_ms": 0.036
+      },
+      "standard_total_verification_ms": {
+        "count": 10,
+        "mean_ms": 0.554,
+        "p50_ms": 0.516,
+        "p95_ms": 0.73,
+        "p99_ms": 0.73,
+        "max_ms": 0.73
+      }
+    },
+    {
+      "transfer_count": 8,
+      "bundle_bytes": 12727,
+      "bytes_per_transfer": 1590.875,
+      "generation_ms": {
+        "count": 10,
+        "mean_ms": 331.432,
+        "p50_ms": 326.905,
+        "p95_ms": 356.045,
+        "p99_ms": 356.045,
+        "max_ms": 356.045
+      },
+      "verification_ms": {
+        "count": 10,
+        "mean_ms": 83.828,
+        "p50_ms": 83.577,
+        "p95_ms": 85.536,
+        "p99_ms": 85.536,
+        "max_ms": 85.536
+      },
+      "standard_authentication_ms": {
+        "count": 10,
+        "mean_ms": 0.574,
+        "p50_ms": 0.571,
+        "p95_ms": 0.723,
+        "p99_ms": 0.723,
+        "max_ms": 0.723
+      },
+      "standard_checkpoint_certificate_ms": {
+        "count": 10,
+        "mean_ms": 0.263,
+        "p50_ms": 0.249,
+        "p95_ms": 0.344,
+        "p99_ms": 0.344,
+        "max_ms": 0.344
+      },
+      "standard_checkpoint_semantics_ms": {
+        "count": 10,
+        "mean_ms": 0.026,
+        "p50_ms": 0.02,
+        "p95_ms": 0.044,
+        "p99_ms": 0.044,
+        "max_ms": 0.044
+      },
+      "standard_inventory_origins_ms": {
+        "count": 10,
+        "mean_ms": 0.033,
+        "p50_ms": 0.032,
+        "p95_ms": 0.045,
+        "p99_ms": 0.045,
+        "max_ms": 0.045
+      },
+      "standard_inventory_membership_plan_ms": {
+        "count": 10,
+        "mean_ms": 0.046,
+        "p50_ms": 0.046,
+        "p95_ms": 0.055,
+        "p99_ms": 0.055,
+        "max_ms": 0.055
+      },
+      "standard_lineage_plan_ms": {
+        "count": 10,
+        "mean_ms": 0.059,
+        "p50_ms": 0.053,
+        "p95_ms": 0.083,
+        "p99_ms": 0.083,
+        "max_ms": 0.083
+      },
+      "standard_total_verification_ms": {
+        "count": 10,
+        "mean_ms": 1.004,
+        "p50_ms": 0.998,
+        "p95_ms": 1.114,
+        "p99_ms": 1.114,
+        "max_ms": 1.114
+      }
+    },
+    {
+      "transfer_count": 32,
+      "bundle_bytes": 41670,
+      "bytes_per_transfer": 1302.188,
+      "generation_ms": {
+        "count": 10,
+        "mean_ms": 1152.692,
+        "p50_ms": 1150.078,
+        "p95_ms": 1173.366,
+        "p99_ms": 1173.366,
+        "max_ms": 1173.366
+      },
+      "verification_ms": {
+        "count": 10,
+        "mean_ms": 281.566,
+        "p50_ms": 278.537,
+        "p95_ms": 298.622,
+        "p99_ms": 298.622,
+        "max_ms": 298.622
+      },
+      "standard_authentication_ms": {
+        "count": 10,
+        "mean_ms": 1.901,
+        "p50_ms": 1.741,
+        "p95_ms": 2.685,
+        "p99_ms": 2.685,
+        "max_ms": 2.685
+      },
+      "standard_checkpoint_certificate_ms": {
+        "count": 10,
+        "mean_ms": 0.283,
+        "p50_ms": 0.26,
+        "p95_ms": 0.439,
+        "p99_ms": 0.439,
+        "max_ms": 0.439
+      },
+      "standard_checkpoint_semantics_ms": {
+        "count": 10,
+        "mean_ms": 0.025,
+        "p50_ms": 0.019,
+        "p95_ms": 0.049,
+        "p99_ms": 0.049,
+        "max_ms": 0.049
+      },
+      "standard_inventory_origins_ms": {
+        "count": 10,
+        "mean_ms": 0.031,
+        "p50_ms": 0.028,
+        "p95_ms": 0.041,
+        "p99_ms": 0.041,
+        "max_ms": 0.041
+      },
+      "standard_inventory_membership_plan_ms": {
+        "count": 10,
+        "mean_ms": 0.046,
+        "p50_ms": 0.046,
+        "p95_ms": 0.055,
+        "p99_ms": 0.055,
+        "max_ms": 0.055
+      },
+      "standard_lineage_plan_ms": {
+        "count": 10,
+        "mean_ms": 0.219,
+        "p50_ms": 0.206,
+        "p95_ms": 0.356,
+        "p99_ms": 0.356,
+        "max_ms": 0.356
+      },
+      "standard_total_verification_ms": {
+        "count": 10,
+        "mean_ms": 2.508,
+        "p50_ms": 2.303,
+        "p95_ms": 3.613,
+        "p99_ms": 3.613,
+        "max_ms": 3.613
+      }
+    },
+    {
+      "transfer_count": 64,
+      "bundle_bytes": 80326,
+      "bytes_per_transfer": 1255.094,
+      "generation_ms": {
+        "count": 10,
+        "mean_ms": 2621.72,
+        "p50_ms": 2334.013,
+        "p95_ms": 5118.059,
+        "p99_ms": 5118.059,
+        "max_ms": 5118.059
+      },
+      "verification_ms": {
+        "count": 10,
+        "mean_ms": 563.795,
+        "p50_ms": 554.408,
+        "p95_ms": 611.744,
+        "p99_ms": 611.744,
+        "max_ms": 611.744
+      },
+      "standard_authentication_ms": {
+        "count": 10,
+        "mean_ms": 3.745,
+        "p50_ms": 3.334,
+        "p95_ms": 5.149,
+        "p99_ms": 5.149,
+        "max_ms": 5.149
+      },
+      "standard_checkpoint_certificate_ms": {
+        "count": 10,
+        "mean_ms": 0.336,
+        "p50_ms": 0.271,
+        "p95_ms": 0.522,
+        "p99_ms": 0.522,
+        "max_ms": 0.522
+      },
+      "standard_checkpoint_semantics_ms": {
+        "count": 10,
+        "mean_ms": 0.028,
+        "p50_ms": 0.018,
+        "p95_ms": 0.061,
+        "p99_ms": 0.061,
+        "max_ms": 0.061
+      },
+      "standard_inventory_origins_ms": {
+        "count": 10,
+        "mean_ms": 0.029,
+        "p50_ms": 0.024,
+        "p95_ms": 0.045,
+        "p99_ms": 0.045,
+        "max_ms": 0.045
+      },
+      "standard_inventory_membership_plan_ms": {
+        "count": 10,
+        "mean_ms": 0.05,
+        "p50_ms": 0.046,
+        "p95_ms": 0.09,
+        "p99_ms": 0.09,
+        "max_ms": 0.09
+      },
+      "standard_lineage_plan_ms": {
+        "count": 10,
+        "mean_ms": 0.368,
+        "p50_ms": 0.369,
+        "p95_ms": 0.398,
+        "p99_ms": 0.398,
+        "max_ms": 0.398
+      },
+      "standard_total_verification_ms": {
+        "count": 10,
+        "mean_ms": 4.558,
+        "p50_ms": 4.071,
+        "p95_ms": 6.223,
+        "p99_ms": 6.223,
+        "max_ms": 6.223
+      }
+    }
+  ]
+}

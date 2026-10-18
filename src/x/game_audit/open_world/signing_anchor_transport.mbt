@@ -74,7 +74,7 @@ fn open_world_observer_signing_anchor_gap_cursor_key(
   epoch : Int,
   previous_checkpoint : @bft.Digest,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-observer-signing-anchor-gap-cursor-v1")
   append_field(buffer, log_session_id)
   append_field(buffer, publisher_key.0)
@@ -133,7 +133,7 @@ pub impl OpenWorldObserverSigningAnchorGapTransport for OpenWorldInMemoryObserve
         if selected.length() == 0 {
           return ObserverSigningAnchorGapUnavailable
         }
-        return ObserverSigningAnchorGapFetched({ envelopes: selected })
+        return ObserverSigningAnchorGapFetched({ envelopes: selected, })
       }
       Some(candidates) => {
         if candidates.length() > 1 {
@@ -146,7 +146,7 @@ pub impl OpenWorldObserverSigningAnchorGapTransport for OpenWorldInMemoryObserve
       }
     }
   }
-  ObserverSigningAnchorGapFetched({ envelopes: selected })
+  ObserverSigningAnchorGapFetched({ envelopes: selected, })
 }
 
 ///|

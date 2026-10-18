@@ -107,7 +107,7 @@ fn delivery_append_field(buffer : StringBuilder, value : String) -> Unit {
 pub fn serialize_checkpoint_delivery_statement(
   statement : CheckpointDeliveryStatement,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   let boundary = statement.boundary
   delivery_append_field(buffer, "checkpoint-delivery-auth-v1")
   delivery_append_field(buffer, boundary.protocol_version.to_string())
@@ -128,7 +128,7 @@ pub fn serialize_checkpoint_delivery_approval(
   statement_digest : @bft.Digest,
   witness_id : String,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   delivery_append_field(buffer, "checkpoint-delivery-approval-v1")
   delivery_append_field(buffer, statement_digest.0)
   delivery_append_field(buffer, witness_id)

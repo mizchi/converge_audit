@@ -1,7 +1,7 @@
 ///|
 test "wire admission is fail closed for every decoding boundary" {
   assert_eq(
-    classify_open_world_wire_admission(
+    @audit.classify_open_world_wire_admission(
       bytes_within_budget=true,
       canonical_encoding=true,
       supported_version=true,
@@ -10,22 +10,22 @@ test "wire admission is fail closed for every decoding boundary" {
       proof_within_budget=true,
       items_within_budget=true,
     ),
-    OpenWorldWireAdmissionDecision::AdmitOpenWorldWirePayload,
+    @audit.OpenWorldWireAdmissionDecision::AdmitOpenWorldWirePayload,
   )
   let expected = [
-    OpenWorldWireAdmissionDecision::RejectOpenWorldWireByteBudget,
-    OpenWorldWireAdmissionDecision::RejectOpenWorldWireCanonicalEncoding,
-    OpenWorldWireAdmissionDecision::RejectOpenWorldWireVersion,
-    OpenWorldWireAdmissionDecision::RejectOpenWorldWireShape,
-    OpenWorldWireAdmissionDecision::RejectOpenWorldWireTextBudget,
-    OpenWorldWireAdmissionDecision::RejectOpenWorldWireProofBudget,
-    OpenWorldWireAdmissionDecision::RejectOpenWorldWireItemBudget,
+    @audit.OpenWorldWireAdmissionDecision::RejectOpenWorldWireByteBudget,
+    @audit.OpenWorldWireAdmissionDecision::RejectOpenWorldWireCanonicalEncoding,
+    @audit.OpenWorldWireAdmissionDecision::RejectOpenWorldWireVersion,
+    @audit.OpenWorldWireAdmissionDecision::RejectOpenWorldWireShape,
+    @audit.OpenWorldWireAdmissionDecision::RejectOpenWorldWireTextBudget,
+    @audit.OpenWorldWireAdmissionDecision::RejectOpenWorldWireProofBudget,
+    @audit.OpenWorldWireAdmissionDecision::RejectOpenWorldWireItemBudget,
   ]
   for rejected_index in 0..<expected.length() {
     let flags = Array::make(7, true)
     flags[rejected_index] = false
     assert_eq(
-      classify_open_world_wire_admission(
+      @audit.classify_open_world_wire_admission(
         bytes_within_budget=flags[0],
         canonical_encoding=flags[1],
         supported_version=flags[2],

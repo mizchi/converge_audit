@@ -1,12 +1,12 @@
 ///|
 test "replay witness manifest is roster-order independent and policy-bound" {
   let hasher = @bft.FnvHasher::new()
-  let witnesses : Array[ReplayWitnessIdentity] = [
-    { id: "alice", key: @bft.PublicKey("alice-key") },
-    { id: "bob", key: @bft.PublicKey("bob-key") },
+  let witnesses : Array[@witness_manifest.ReplayWitnessIdentity] = [
+    { id: "alice", key: @bft.PublicKey("alice-key"), },
+    { id: "bob", key: @bft.PublicKey("bob-key"), },
   ]
   let reverse = [witnesses[1], witnesses[0]]
-  let left = replay_witness_session_manifest(
+  let left = @witness_manifest.replay_witness_session_manifest(
     hasher,
     game_manifest_digest=@bft.Digest("game-v1"),
     referee_key=@bft.PublicKey("referee"),
@@ -16,7 +16,7 @@ test "replay witness manifest is roster-order independent and policy-bound" {
   assert_eq(
     left,
     hasher.hash_string(
-      serialize_replay_witness_session_manifest(
+      @witness_manifest.serialize_replay_witness_session_manifest(
         game_manifest_digest=@bft.Digest("game-v1"),
         referee_key=@bft.PublicKey("referee"),
         witnesses~,
@@ -26,7 +26,7 @@ test "replay witness manifest is roster-order independent and policy-bound" {
   )
   assert_eq(
     left,
-    replay_witness_session_manifest(
+    @witness_manifest.replay_witness_session_manifest(
       hasher,
       game_manifest_digest=@bft.Digest("game-v1"),
       referee_key=@bft.PublicKey("referee"),
@@ -36,7 +36,7 @@ test "replay witness manifest is roster-order independent and policy-bound" {
   )
   assert_not_eq(
     left,
-    replay_witness_session_manifest(
+    @witness_manifest.replay_witness_session_manifest(
       hasher,
       game_manifest_digest=@bft.Digest("game-v1"),
       referee_key=@bft.PublicKey("referee"),

@@ -38,7 +38,7 @@ pub fn inventory_origin_valid(origin : InventoryOrigin) -> Bool {
 
 ///|
 pub fn serialize_item_receipt(origin : InventoryOrigin) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "item-receipt-v1")
   append_field(buffer, origin.asset_id)
   append_field(buffer, origin.recipient_id)
@@ -51,7 +51,7 @@ pub fn serialize_item_receipt(origin : InventoryOrigin) -> String {
 
 ///|
 pub fn serialize_inventory_origin_receipt(origin : InventoryOrigin) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "inventory-origin-receipt-v1")
   append_field(buffer, serialize_item_receipt(origin))
   buffer.to_string()
@@ -61,7 +61,7 @@ pub fn serialize_inventory_origin_receipt(origin : InventoryOrigin) -> String {
 pub fn serialize_inventory_origin_lineage(
   receipt_digest : @bft.Digest,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "inventory-origin-lineage-v1")
   append_field(buffer, receipt_digest.0)
   buffer.to_string()
@@ -76,5 +76,5 @@ pub fn inventory_origin_verification_plan(
   let receipt_digest = hasher.hash_string(receipt_statement)
   let lineage_statement = serialize_inventory_origin_lineage(receipt_digest)
   let lineage_root = hasher.hash_string(lineage_statement)
-  { receipt_statement, receipt_digest, lineage_statement, lineage_root }
+  { receipt_statement, receipt_digest, lineage_statement, lineage_root, }
 }

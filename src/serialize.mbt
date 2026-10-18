@@ -6,7 +6,7 @@ pub fn serialize_for_hash(
   event : @types.Event,
   dep_hashes : Array[Digest],
 ) -> String {
-  let buf = StringBuilder::new()
+  let buf = StringBuilder()
   write_text(buf, "event-v2")
   write_text(buf, session_id)
   write_event_id(buf, event.id)

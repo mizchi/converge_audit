@@ -1,5 +1,5 @@
 ///|
-fn dungeon_attack() -> TelegraphedAttack {
+fn dungeon_attack() -> @replay.TelegraphedAttack {
   {
     attack_id: "boss-cleave-1",
     visible_tick: 10,
@@ -10,7 +10,7 @@ fn dungeon_attack() -> TelegraphedAttack {
 }
 
 ///|
-fn dungeon_config() -> TelegraphDungeonConfig {
+fn dungeon_config() -> @replay.TelegraphDungeonConfig {
   {
     min_reaction_ticks: 2,
     max_backdate_ticks: 2,
@@ -22,10 +22,10 @@ fn dungeon_config() -> TelegraphDungeonConfig {
 }
 
 ///|
-fn dungeon_players() -> Array[DungeonPlayer] {
+fn dungeon_players() -> Array[@replay.DungeonPlayer] {
   [
-    { player_id: "alice", public_key: @bft.PublicKey("alice"), initial_x: 0 },
-    { player_id: "bob", public_key: @bft.PublicKey("bob"), initial_x: 0 },
+    { player_id: "alice", public_key: @bft.PublicKey("alice"), initial_x: 0, },
+    { player_id: "bob", public_key: @bft.PublicKey("bob"), initial_x: 0, },
   ]
 }
 
@@ -45,13 +45,13 @@ fn accept_dungeon_event(
 ///|
 struct DungeonSources {
   telegraph : @bft.AuthenticatedEvent
-  evidence : DodgeEvidence
+  evidence : @replay.DodgeEvidence
 }
 
 ///|
 fn dungeon_sources(
-  intent~ : DodgeIntent,
-  signed_intent? : DodgeIntent,
+  intent~ : @replay.DodgeIntent,
+  signed_intent? : @replay.DodgeIntent,
   received_tick~ : Int,
   input_counter? : Int = 0,
   receipt_counter? : Int = 1,
@@ -72,7 +72,7 @@ fn dungeon_sources(
   assert_true(adapter.register_peer(@types.PeerId("alice"), alice.public_key()))
   assert_true(adapter.register_peer(@types.PeerId("bob"), bob.public_key()))
   let attack = dungeon_attack()
-  let telegraph_event = make_dungeon_telegraph_event(
+  let telegraph_event = @replay.make_dungeon_telegraph_event(
     peer=@types.PeerId("game-server"),
     counter=0,
     lamport=1,
@@ -83,7 +83,7 @@ fn dungeon_sources(
   let declared_intent = signed_intent.unwrap_or(intent)
   let input_deps = if depend_on_telegraph { [telegraph_event.id] } else { [] }
   let input_hashes = if depend_on_telegraph { [telegraph.digest()] } else { [] }
-  let input_event = make_dungeon_dodge_event(
+  let input_event = @replay.make_dungeon_dodge_event(
     peer=@types.PeerId(input_signer),
     counter=input_counter,
     lamport=2 + input_counter,
@@ -98,8 +98,11 @@ fn dungeon_sources(
   let input = accept_dungeon_event(
     adapter, input_signer_ref, input_event, input_hashes,
   )
-  let receipt = DodgeReceipt::{ input_digest: input.digest(), received_tick }
-  let receipt_event = make_dungeon_receipt_event(
+  let receipt = @replay.DodgeReceipt::{
+    input_digest: input.digest(),
+    received_tick,
+  }
+  let receipt_event = @replay.make_dungeon_receipt_event(
     peer=@types.PeerId("game-server"),
     counter=receipt_counter,
     lamport=10 + receipt_counter,
@@ -111,12 +114,12 @@ fn dungeon_sources(
   ])
   {
     telegraph,
-    evidence: { input, receipt: receipt_source, intent, observed: receipt },
+    evidence: { input, receipt: receipt_source, intent, observed: receipt, },
   }
 }
 
 ///|
-fn alice_dodge(client_tick? : Int = 13, to_x? : Int = 5) -> DodgeIntent {
+fn alice_dodge(client_tick? : Int = 13, to_x? : Int = 5) -> @replay.DodgeIntent {
   {
     attack_id: "boss-cleave-1",
     player_id: "alice",
@@ -128,30 +131,30 @@ fn alice_dodge(client_tick? : Int = 13, to_x? : Int = 5) -> DodgeIntent {
 
 ///|
 fn bind_telegraph(
-  intent : DodgeIntent,
+  intent : @replay.DodgeIntent,
   telegraph : @bft.AuthenticatedEvent,
-) -> DodgeIntent {
-  { ..intent, telegraph_digest: telegraph.digest() }
+) -> @replay.DodgeIntent {
+  { ..intent, telegraph_digest: telegraph.digest(), }
 }
 
 ///|
 fn replay_dungeon(
   telegraph : @bft.AuthenticatedEvent,
-  evidence : Array[DodgeEvidence],
-) -> DungeonReplayResult raise Error {
+  evidence : Array[@replay.DodgeEvidence],
+) -> @replay.DungeonReplayResult raise Error {
   let hasher = @bft.FnvHasher::new()
   let config = dungeon_config()
   let players = dungeon_players()
   let checkpoint = verified_dungeon_checkpoint(
-    telegraph_dungeon_manifest(
+    @replay.telegraph_dungeon_manifest(
       hasher,
       @bft.PublicKey("game-server"),
       config,
       players,
     ),
-    dungeon_transcript_root(hasher, telegraph, evidence),
+    @replay.dungeon_transcript_root(hasher, telegraph, evidence),
   )
-  replay_checkpointed_telegraphed_attack(
+  @replay.replay_checkpointed_telegraphed_attack(
     hasher,
     session_id="dungeon-42",
     authority_key=@bft.PublicKey("game-server"),
@@ -199,7 +202,7 @@ fn verified_dungeon_checkpoint(
 test "checkpoint authority must match the dungeon authority" {
   let seed = dungeon_sources(intent=alice_dodge(), received_tick=14)
   let hasher = @bft.FnvHasher::new()
-  let manifest = telegraph_dungeon_manifest(
+  let manifest = @replay.telegraph_dungeon_manifest(
     hasher,
     @bft.PublicKey("game-server"),
     dungeon_config(),
@@ -207,11 +210,11 @@ test "checkpoint authority must match the dungeon authority" {
   )
   let checkpoint = verified_dungeon_checkpoint(
     manifest,
-    dungeon_transcript_root(hasher, seed.telegraph, []),
+    @replay.dungeon_transcript_root(hasher, seed.telegraph, []),
     signer_name="mallory",
   )
   assert_eq(
-    replay_checkpointed_telegraphed_attack(
+    @replay.replay_checkpointed_telegraphed_attack(
       hasher,
       session_id="dungeon-42",
       authority_key=@bft.PublicKey("game-server"),
@@ -222,8 +225,8 @@ test "checkpoint authority must match the dungeon authority" {
       attack=dungeon_attack(),
       dodge_evidence=[],
     ),
-    DungeonReplayResult::Refused(
-      DungeonReplayRefusal::CheckpointAuthorityMismatch,
+    @replay.DungeonReplayResult::Refused(
+      @replay.DungeonReplayRefusal::CheckpointAuthorityMismatch,
     ),
   )
 }
@@ -231,8 +234,8 @@ test "checkpoint authority must match the dungeon authority" {
 ///|
 fn replay_checkpointed_dungeon(
   telegraph : @bft.AuthenticatedEvent,
-  evidence : Array[DodgeEvidence],
-) -> DungeonReplayResult raise Error {
+  evidence : Array[@replay.DodgeEvidence],
+) -> @replay.DungeonReplayResult raise Error {
   replay_dungeon(telegraph, evidence)
 }
 
@@ -251,8 +254,8 @@ test "bounded client-time dodge survives and authorizes deterministic loot" {
         Some(effect) => {
           assert_eq(
             effect,
-            AssetEffect::Create(
-              asset_id=dungeon_loot_asset_id(
+            @replay.AssetEffect::Create(
+              asset_id=@replay.dungeon_loot_asset_id(
                 "dungeon-42", "boss-cleave-1", "alice",
               ),
               recipient_id="alice",
@@ -273,7 +276,7 @@ test "bounded client-time dodge survives and authorizes deterministic loot" {
               authority.public_key(),
             ),
           )
-          let event = make_asset_effect_event(
+          let event = @replay.make_asset_effect_event(
             peer=@types.PeerId("game-server"),
             counter=20,
             lamport=30,
@@ -283,20 +286,22 @@ test "bounded client-time dodge survives and authorizes deterministic loot" {
           let source = accept_dungeon_event(asset_adapter, authority, event, [])
           let kernel = resolution.loot_kernel()
           match
-            ReplayEngine::new(kernel, session_id="dungeon-42").replay(
+            @replay.ReplayEngine::new(kernel, session_id="dungeon-42").replay(
               source, effect,
             ) {
             Replayed(capability) => assert_eq(capability.effect(), effect)
             _ => fail("survivor loot was not replay-authorized")
           }
-          let ineligible = AssetEffect::Create(
-            asset_id=dungeon_loot_asset_id("dungeon-42", "boss-cleave-1", "bob"),
+          let ineligible = @replay.AssetEffect::Create(
+            asset_id=@replay.dungeon_loot_asset_id(
+              "dungeon-42", "boss-cleave-1", "bob",
+            ),
             recipient_id="bob",
             item_type="cleave-token",
             quantity=1,
             output_index=0,
           )
-          let ineligible_event = make_asset_effect_event(
+          let ineligible_event = @replay.make_asset_effect_event(
             peer=@types.PeerId("game-server"),
             counter=21,
             lamport=31,
@@ -310,10 +315,11 @@ test "bounded client-time dodge survives and authorizes deterministic loot" {
             [],
           )
           assert_eq(
-            ReplayEngine::new(resolution.loot_kernel(), session_id="dungeon-42").replay(
-              ineligible_source, ineligible,
-            ),
-            ReplayResult::Refused(ReplayRefusal::KernelRejected),
+            @replay.ReplayEngine::new(
+              resolution.loot_kernel(),
+              session_id="dungeon-42",
+            ).replay(ineligible_source, ineligible),
+            @replay.ReplayResult::Refused(@replay.ReplayRefusal::KernelRejected),
           )
         }
         None => fail("survivor did not receive deterministic loot")
@@ -327,8 +333,8 @@ test "bounded client-time dodge survives and authorizes deterministic loot" {
 ///|
 test "dungeon loot id is unambiguous across delimiter-shaped identifiers" {
   assert_not_eq(
-    dungeon_loot_asset_id("a:b", "c", "d"),
-    dungeon_loot_asset_id("a", "b:c", "d"),
+    @replay.dungeon_loot_asset_id("a:b", "c", "d"),
+    @replay.dungeon_loot_asset_id("a", "b:c", "d"),
   )
 }
 
@@ -351,7 +357,7 @@ test "checkpoint event root prevents omission of a conflicting input" {
   )
   let full = [left.evidence, right.evidence]
   let hasher = @bft.FnvHasher::new()
-  let manifest = telegraph_dungeon_manifest(
+  let manifest = @replay.telegraph_dungeon_manifest(
     hasher,
     @bft.PublicKey("game-server"),
     dungeon_config(),
@@ -359,10 +365,10 @@ test "checkpoint event root prevents omission of a conflicting input" {
   )
   let checkpoint = verified_dungeon_checkpoint(
     manifest,
-    dungeon_transcript_root(hasher, left.telegraph, full),
+    @replay.dungeon_transcript_root(hasher, left.telegraph, full),
   )
   assert_eq(
-    replay_checkpointed_telegraphed_attack(
+    @replay.replay_checkpointed_telegraphed_attack(
       hasher,
       session_id="dungeon-42",
       authority_key=@bft.PublicKey("game-server"),
@@ -373,12 +379,12 @@ test "checkpoint event root prevents omission of a conflicting input" {
       attack=dungeon_attack(),
       dodge_evidence=[left.evidence],
     ),
-    DungeonReplayResult::Refused(
-      DungeonReplayRefusal::CheckpointEventRootMismatch,
+    @replay.DungeonReplayResult::Refused(
+      @replay.DungeonReplayRefusal::CheckpointEventRootMismatch,
     ),
   )
   match
-    replay_checkpointed_telegraphed_attack(
+    @replay.replay_checkpointed_telegraphed_attack(
       hasher,
       session_id="dungeon-42",
       authority_key=@bft.PublicKey("game-server"),
@@ -429,11 +435,11 @@ test "dodge requires exact player signature payload movement and causality" {
   )
   let tampered = dungeon_sources(
     intent=valid_intent,
-    signed_intent={ ..valid_intent, to_x: -5 },
+    signed_intent={ ..valid_intent, to_x: -5, },
     received_tick=14,
   )
   let too_far = dungeon_sources(
-    intent={ ..valid_intent, to_x: 6 },
+    intent={ ..valid_intent, to_x: 6, },
     received_tick=14,
   )
   let no_dependency = dungeon_sources(
@@ -489,40 +495,42 @@ test "telegraph replay fails closed on an invalid encounter contract" {
   let seed = dungeon_sources(intent=alice_dodge(), received_tick=14)
   let hasher = @bft.FnvHasher::new()
   let checkpoint = verified_dungeon_checkpoint(
-    telegraph_dungeon_manifest(
+    @replay.telegraph_dungeon_manifest(
       hasher,
       @bft.PublicKey("game-server"),
       dungeon_config(),
       dungeon_players(),
     ),
-    dungeon_transcript_root(hasher, seed.telegraph, []),
+    @replay.dungeon_transcript_root(hasher, seed.telegraph, []),
   )
   assert_eq(
-    replay_checkpointed_telegraphed_attack(
+    @replay.replay_checkpointed_telegraphed_attack(
       hasher,
       session_id="dungeon-42",
       authority_key=@bft.PublicKey("game-server"),
-      config={ ..dungeon_config(), min_reaction_ticks: -1 },
+      config={ ..dungeon_config(), min_reaction_ticks: -1, },
       players=dungeon_players(),
       checkpoint~,
       telegraph_source=seed.telegraph,
       attack=dungeon_attack(),
       dodge_evidence=[],
     ),
-    DungeonReplayResult::Refused(DungeonReplayRefusal::InvalidConfiguration),
+    @replay.DungeonReplayResult::Refused(
+      @replay.DungeonReplayRefusal::InvalidConfiguration,
+    ),
   )
   let mallory_checkpoint = verified_dungeon_checkpoint(
-    telegraph_dungeon_manifest(
+    @replay.telegraph_dungeon_manifest(
       hasher,
       @bft.PublicKey("mallory"),
       dungeon_config(),
       dungeon_players(),
     ),
-    dungeon_transcript_root(hasher, seed.telegraph, []),
+    @replay.dungeon_transcript_root(hasher, seed.telegraph, []),
     signer_name="mallory",
   )
   assert_eq(
-    replay_checkpointed_telegraphed_attack(
+    @replay.replay_checkpointed_telegraphed_attack(
       hasher,
       session_id="dungeon-42",
       authority_key=@bft.PublicKey("mallory"),
@@ -533,6 +541,8 @@ test "telegraph replay fails closed on an invalid encounter contract" {
       attack=dungeon_attack(),
       dodge_evidence=[],
     ),
-    DungeonReplayResult::Refused(DungeonReplayRefusal::InvalidTelegraph),
+    @replay.DungeonReplayResult::Refused(
+      @replay.DungeonReplayRefusal::InvalidTelegraph,
+    ),
   )
 }

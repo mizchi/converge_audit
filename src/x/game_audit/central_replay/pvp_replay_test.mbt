@@ -46,8 +46,8 @@ fn pvp_central_replay_fixture() -> PvpCentralReplayFixture raise Error {
     score_per_elimination: 1,
   }
   let teams : Array[@replay.PvpTeam] = [
-    { team_id: "blue", initial_score: 0 },
-    { team_id: "orange", initial_score: 0 },
+    { team_id: "blue", initial_score: 0, },
+    { team_id: "orange", initial_score: 0, },
   ]
   let players : Array[@replay.PvpPlayer] = [
     {
@@ -102,9 +102,14 @@ fn pvp_central_replay_fixture() -> PvpCentralReplayFixture raise Error {
     let id = "witness-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
     witness_signers.push(signer)
-    witnesses.push({ id, key: signer.public_key() })
+    witnesses.push({ id, key: signer.public_key(), })
   }
-  let command = @replay.PvpCommandEvidence::{ input, receipt, intent, observed }
+  let command = @replay.PvpCommandEvidence::{
+    input,
+    receipt,
+    intent,
+    observed,
+  }
   let candidate = match
     @replay.prepare_pvp_epoch(
       hasher,
@@ -158,7 +163,7 @@ fn pvp_central_replay_fixture() -> PvpCentralReplayFixture raise Error {
       witnesses,
       max_faults: 1,
       commands: [
-        { input: signed_input, receipt: signed_receipt, intent, observed },
+        { input: signed_input, receipt: signed_receipt, intent, observed, },
       ],
       attestations,
     },
@@ -169,8 +174,8 @@ fn pvp_central_replay_fixture() -> PvpCentralReplayFixture raise Error {
 fn verify_pvp_fixture(
   fixture : PvpCentralReplayFixture,
   bundle : @wire.PvpReplayBundle,
-) -> PvpCentralReplayResult {
-  verify_pvp_replay_bundle(
+) -> @central_replay.PvpCentralReplayResult {
+  @central_replay.verify_pvp_replay_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     @wire.encode_pvp_replay_bundle(bundle),
@@ -192,12 +197,12 @@ test "central PvP worker authenticates replay and n-f witness certificate" {
       assert_eq(verified.approval_count(), 3)
       assert_eq(verified.required_approvals(), 3)
       assert_eq(verified.player_states(), [
-        { player_id: "alice", team_id: "blue", position_x: 0, hp: 10 },
-        { player_id: "bob", team_id: "orange", position_x: 2, hp: 0 },
+        { player_id: "alice", team_id: "blue", position_x: 0, hp: 10, },
+        { player_id: "bob", team_id: "orange", position_x: 2, hp: 0, },
       ])
       assert_eq(verified.team_states(), [
-        { team_id: "orange", score: 0 },
-        { team_id: "blue", score: 1 },
+        { team_id: "orange", score: 0, },
+        { team_id: "blue", score: 1, },
       ])
     }
     _ => fail("expected verified central PvP replay")
@@ -214,8 +219,8 @@ test "central PvP worker fails closed below witness quorum" {
   }
   assert_eq(
     verify_pvp_fixture(fixture, bundle),
-    PvpCentralReplayResult::PvpReplayRefused(
-      PvpCentralReplayRefusal::PvpWitnessQuorumPending(2, 3),
+    @central_replay.PvpCentralReplayResult::PvpReplayRefused(
+      @central_replay.PvpCentralReplayRefusal::PvpWitnessQuorumPending(2, 3),
     ),
   )
 }
@@ -229,7 +234,7 @@ test "central PvP worker rejects invalid event and witness signatures" {
     commands: [
       {
         ..command,
-        input: { ..command.input, signature: @bft.Signature("forged") },
+        input: { ..command.input, signature: @bft.Signature("forged"), },
       },
     ],
   }
@@ -241,7 +246,7 @@ test "central PvP worker rejects invalid event and witness signatures" {
   let invalid_attestation = @wire.PvpReplayBundle::{
     ..fixture.bundle,
     attestations: [
-      { ..attestations[0], signature: @bft.Signature("forged-witness") },
+      { ..attestations[0], signature: @bft.Signature("forged-witness"), },
       attestations[1],
       attestations[2],
     ],
@@ -256,7 +261,7 @@ test "central PvP worker rejects invalid event and witness signatures" {
 test "central PvP worker rejects a foreign expected checkpoint" {
   let fixture = pvp_central_replay_fixture()
   assert_eq(
-    verify_pvp_replay_bundle(
+    @central_replay.verify_pvp_replay_bundle(
       @bft.FnvHasher::new(),
       @bft.MockVerifier::new(),
       @wire.encode_pvp_replay_bundle(fixture.bundle),
@@ -265,8 +270,8 @@ test "central PvP worker rejects a foreign expected checkpoint" {
       expected_checkpoint_digest=@bft.Digest("other-checkpoint"),
       limits=@wire.PvpReplayWireLimits::default(),
     ),
-    PvpCentralReplayResult::PvpReplayRefused(
-      PvpCentralReplayRefusal::PvpExpectedCheckpointMismatch,
+    @central_replay.PvpCentralReplayResult::PvpReplayRefused(
+      @central_replay.PvpCentralReplayRefusal::PvpExpectedCheckpointMismatch,
     ),
   )
 }

@@ -31,23 +31,35 @@ pub(all) struct AuthMapAbsenceProof {
   entry_count : Int
   path : Array[AuthMapStep]
 } derive(Eq, @debug.Debug)
+pub fn AuthMapAbsenceProof::equal(Self, Self) -> Bool
+pub fn AuthMapAbsenceProof::not_equal(Self, Self) -> Bool
+pub fn AuthMapAbsenceProof::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AuthMapHashCheck {
   statement_segments : Array[String]
   dependency_check_indices : Array[Int]
   expected_digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn AuthMapHashCheck::equal(Self, Self) -> Bool
+pub fn AuthMapHashCheck::not_equal(Self, Self) -> Bool
+pub fn AuthMapHashCheck::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AuthMapHashVerificationPlan {
   checks : Array[AuthMapHashCheck]
   root_check_index : Int
 } derive(Eq, @debug.Debug)
+pub fn AuthMapHashVerificationPlan::equal(Self, Self) -> Bool
+pub fn AuthMapHashVerificationPlan::not_equal(Self, Self) -> Bool
+pub fn AuthMapHashVerificationPlan::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AuthMapMutation {
   Inserted
   Updated
   Unchanged
 } derive(Eq, @debug.Debug)
+pub fn AuthMapMutation::equal(Self, Self) -> Bool
+pub fn AuthMapMutation::not_equal(Self, Self) -> Bool
+pub fn AuthMapMutation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AuthMapProof {
   key : String
@@ -57,11 +69,17 @@ pub(all) struct AuthMapProof {
   entry_count : Int
   path : Array[AuthMapStep]
 } derive(Eq, @debug.Debug)
+pub fn AuthMapProof::equal(Self, Self) -> Bool
+pub fn AuthMapProof::not_equal(Self, Self) -> Bool
+pub fn AuthMapProof::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AuthMapStep {
   DescendedLeft(String, String, @converge_audit.Digest)
   DescendedRight(String, String, @converge_audit.Digest)
 } derive(Eq, @debug.Debug)
+pub fn AuthMapStep::equal(Self, Self) -> Bool
+pub fn AuthMapStep::not_equal(Self, Self) -> Bool
+pub fn AuthMapStep::to_repr(Self) -> @debug.Repr
 
 pub enum AuthNode {
   Empty
@@ -87,4 +105,3 @@ pub fn AuthenticatedMap::size(Self) -> Int
 // Type aliases
 
 // Traits
-

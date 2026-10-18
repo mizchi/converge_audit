@@ -109,7 +109,7 @@ fn decode_open_world_audit_transparency_envelope(
   let seal_membership_proof = decode_auth_map_proof(fields[2], wire_limits) catch {
     error => raise OpenWorldReplayTransparencyCodecRefused(error)
   }
-  { signed_checkpoint, audit_membership_proof, seal_membership_proof }
+  { signed_checkpoint, audit_membership_proof, seal_membership_proof, }
 }
 
 ///|
@@ -235,7 +235,7 @@ fn decode_open_world_merkle_proof(
   let leaf_count = decode_pve_wire_int(fields[1]) catch {
     error => raise OpenWorldReplayPveCodecRefused(error)
   }
-  { leaf_index, leaf_count, path }
+  { leaf_index, leaf_count, path, }
 }
 
 ///|

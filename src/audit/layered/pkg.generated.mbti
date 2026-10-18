@@ -28,6 +28,9 @@ pub(all) enum AdvanceWatermarkError {
   NegativeCheckpointWindowBudget
   CheckpointWindowBudgetExceeded(Int, Int)
 } derive(Eq, @debug.Debug)
+pub fn AdvanceWatermarkError::equal(Self, Self) -> Bool
+pub fn AdvanceWatermarkError::not_equal(Self, Self) -> Bool
+pub fn AdvanceWatermarkError::to_repr(Self) -> @debug.Repr
 
 pub enum AdvanceWatermarkResult {
   WatermarkAdvanced(LayeredCheckpointEmission)
@@ -39,6 +42,9 @@ pub(all) enum AppendAuditEventResult {
   AuditEventDuplicate
   AuditEventRefused(AuditEventAdmissionError)
 } derive(Eq, @debug.Debug)
+pub fn AppendAuditEventResult::equal(Self, Self) -> Bool
+pub fn AppendAuditEventResult::not_equal(Self, Self) -> Bool
+pub fn AppendAuditEventResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AuditEventAdmissionError {
   EventBeforeOrigin
@@ -47,11 +53,17 @@ pub(all) enum AuditEventAdmissionError {
   EmptyCanonicalEvent
   PendingEventLimitReached
 } derive(Eq, @debug.Debug)
+pub fn AuditEventAdmissionError::equal(Self, Self) -> Bool
+pub fn AuditEventAdmissionError::not_equal(Self, Self) -> Bool
+pub fn AuditEventAdmissionError::to_repr(Self) -> @debug.Repr
 
 pub(all) enum LayeredBuilderOpenError {
   EmptyScopeId
   NonPositivePendingEventLimit
 } derive(Eq, @debug.Debug)
+pub fn LayeredBuilderOpenError::equal(Self, Self) -> Bool
+pub fn LayeredBuilderOpenError::not_equal(Self, Self) -> Bool
+pub fn LayeredBuilderOpenError::to_repr(Self) -> @debug.Repr
 
 pub enum LayeredBuilderOpenResult {
   LayeredBuilderReady(LayeredCheckpointBuilder)
@@ -92,6 +104,9 @@ pub(all) struct LayeredEventProof {
   event_proof : @merkle.MerkleProof
   micro_proof : @merkle.MerkleProof
 } derive(Eq, @debug.Debug)
+pub fn LayeredEventProof::equal(Self, Self) -> Bool
+pub fn LayeredEventProof::not_equal(Self, Self) -> Bool
+pub fn LayeredEventProof::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MacroCheckpoint {
   scope_id : String
@@ -104,6 +119,9 @@ pub(all) struct MacroCheckpoint {
   micro_root : @converge_audit.Digest
   digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn MacroCheckpoint::equal(Self, Self) -> Bool
+pub fn MacroCheckpoint::not_equal(Self, Self) -> Bool
+pub fn MacroCheckpoint::to_repr(Self) -> @debug.Repr
 
 pub(all) struct MicroCheckpoint {
   scope_id : String
@@ -115,6 +133,9 @@ pub(all) struct MicroCheckpoint {
   event_root : @converge_audit.Digest
   digest : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn MicroCheckpoint::equal(Self, Self) -> Bool
+pub fn MicroCheckpoint::not_equal(Self, Self) -> Bool
+pub fn MicroCheckpoint::to_repr(Self) -> @debug.Repr
 
 type PendingAuditEvent
 
@@ -139,4 +160,3 @@ pub fn SealedMicroCheckpoint::event_proof(Self, String) -> @merkle.MerkleProof?
 // Type aliases
 
 // Traits
-

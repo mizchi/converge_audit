@@ -14,7 +14,7 @@ fn append_int_field(buffer : StringBuilder, value : Int) -> Unit {
 
 ///|
 pub fn serialize_telegraphed_attack(attack : TelegraphedAttack) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "telegraphed-attack-v1")
   append_field(buffer, attack.attack_id)
   append_int_field(buffer, attack.visible_tick)
@@ -26,7 +26,7 @@ pub fn serialize_telegraphed_attack(attack : TelegraphedAttack) -> String {
 
 ///|
 pub fn serialize_dodge_intent(intent : DodgeIntent) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "dodge-intent-v1")
   append_field(buffer, intent.attack_id)
   append_field(buffer, intent.player_id)
@@ -38,7 +38,7 @@ pub fn serialize_dodge_intent(intent : DodgeIntent) -> String {
 
 ///|
 pub fn serialize_dodge_receipt(receipt : DodgeReceipt) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "dodge-receipt-v1")
   append_field(buffer, receipt.input_digest.0)
   append_int_field(buffer, receipt.received_tick)
@@ -54,7 +54,7 @@ pub fn make_dungeon_telegraph_event(
   attack~ : TelegraphedAttack,
 ) -> @types.Event {
   {
-    id: { peer, counter },
+    id: { peer, counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(
@@ -76,7 +76,7 @@ pub fn make_dungeon_dodge_event(
   intent~ : DodgeIntent,
 ) -> @types.Event {
   {
-    id: { peer, counter },
+    id: { peer, counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(
@@ -96,7 +96,7 @@ pub fn make_dungeon_receipt_event(
   receipt~ : DodgeReceipt,
 ) -> @types.Event {
   {
-    id: { peer, counter },
+    id: { peer, counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(
@@ -283,7 +283,7 @@ pub fn telegraph_dungeon_manifest(
   config : TelegraphDungeonConfig,
   players : Array[DungeonPlayer],
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "telegraph-dungeon-kernel-v1")
   append_field(buffer, authority_key.0)
   append_int_field(buffer, config.min_reaction_ticks)
@@ -546,7 +546,7 @@ pub fn dungeon_loot_asset_id(
   attack_id : String,
   recipient_id : String,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "dungeon-loot-v1")
   append_field(buffer, session)
   append_field(buffer, attack_id)

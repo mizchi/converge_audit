@@ -142,6 +142,8 @@ import {
 } from "../../player-local-runtime/crypto-backend";
 import { createAsyncAuditDigestAdapter } from "../../player-local-runtime/merkle-digest";
 import { persistOpenWorldMissingSlotConflictIfVerified } from "./open-world-seal-conflict";
+import { EncounterHttpApi } from "./encounter-api.ts";
+import { SqliteEncounterArchive } from "../game/encounter/archive-store.ts";
 import {
   OpenWorldObserverSigningStore,
   type OpenWorldObserverSigningAnchor,
@@ -161,6 +163,9 @@ export interface Env {
   EVIDENCE_HOLD_KEY_MAX_CLOCK_SKEW_MS?: string;
   AUDIT_RUNTIME_PROFILE?: CryptoRuntimeProfile;
   AUDIT_CRYPTO_BACKEND?: string;
+  /** Persisted secret, provisioned by the host; no generated fallback. */
+  ENCOUNTER_SIGNING_SEED_HEX?: string;
+  ENCOUNTER_SIGNING_PUBLIC_KEY?: string;
 }
 
 export type { CheckpointDeliveryJob } from "./checkpoint-runtime";
@@ -569,6 +574,8 @@ const CHECKPOINT_DELIVERY_LEASE_MS = 30_000;
 const REFERENCE_GAME_VERIFICATION_WINDOW_MS = 60_000;
 const REFERENCE_GAME_VERIFICATIONS_PER_WINDOW = 30;
 const REFERENCE_GAME_PUBLIC_ACTIONS = new Set([
+  "encounter",
+  "encounter-configuration",
   "game-checkpoint-verifications",
   "game-item-verifications",
   "game-item-transfers",
@@ -581,6 +588,8 @@ const REFERENCE_GAME_PUBLIC_ACTIONS = new Set([
   "game-evidence-inbox",
 ]);
 const AUDIT_ADMIN_ACTIONS = new Set([
+  "encounter-admissions",
+  "encounter-generation",
   "asset-lineage-decisions",
   "asset-lineage-proofs",
   "inventory-checkpoints",
@@ -948,6 +957,7 @@ async function receiveCheckpointAtAuthority(
 }
 
 export class GameAuditShard extends DurableObject<Env> {
+  private encounterApi?: Promise<EncounterHttpApi>;
   private readonly auditEnv: Env;
   private readonly checkpointRuntime: CheckpointRuntimeStore;
   private readonly checkpointReceiver: CheckpointReceiverStore;
@@ -1593,6 +1603,11 @@ export class GameAuditShard extends DurableObject<Env> {
     const action = url.pathname.split("/").filter(Boolean).at(-1);
 
     switch (`${request.method} ${action}`) {
+      case "POST encounter":
+      case "POST encounter-admissions":
+      case "POST encounter-generation":
+      case "GET encounter-configuration":
+        return this.handleEncounter(request, mode, unit, action!);
       case "POST configure":
         return this.configure(request, mode, unit);
       case "POST checkpoint-configure":
@@ -3316,6 +3331,44 @@ export class GameAuditShard extends DurableObject<Env> {
     });
   }
 
+  private async handleEncounter(request: Request, mode: AuditMode, unit: string, action: string): Promise<Response> {
+    const admin = action === "encounter-admissions" || action === "encounter-generation";
+    if (mode !== "pve" || new URL(request.url).pathname !== `/v1/pve/${unit}/${action}`) return jsonError("not_found", 404);
+    if (!admin) {
+      const source = request.headers.get("x-audit-source-bucket");
+      if (!source || !/^[0-9a-f]{64}$/.test(source)) return jsonError("invalid_reference_game_source", 400);
+      const admission = this.reserveReferenceGameVerification(source, Date.now());
+      if (!admission.allowed) {
+        const response = jsonError("reference_game_verification_rate_limited", 429);
+        response.headers.set("retry-after", String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))));
+        return response;
+      }
+    } else if (!authorized(request, this.auditEnv.ADMIN_TOKEN)) return jsonError("unauthorized", 401);
+    try {
+      const api = await this.getEncounterApi();
+      const response = await api.fetch(request);
+      // Custody promises and deletion rights must not leave the Worker before
+      // their archive/ledger writes have crossed the host's durability barrier.
+      await this.ctx.storage.sync();
+      return response;
+    } catch { return jsonError("encounter_service_unavailable", 503); }
+  }
+
+  private getEncounterApi(): Promise<EncounterHttpApi> {
+    return this.encounterApi ??= (async () => {
+      const seed = this.auditEnv.ENCOUNTER_SIGNING_SEED_HEX;
+      const publicKey = this.auditEnv.ENCOUNTER_SIGNING_PUBLIC_KEY;
+      if (!seed || !publicKey) throw new Error("missing encounter signer");
+      const { signer } = await createStandardWebCryptoBackend(crypto).importLegacySeed(seed, publicKey);
+      const archive = new SqliteEncounterArchive({ sql: this.ctx.storage.sql,
+        transaction: (body) => this.ctx.storage.transactionSync(body), signer,
+        trustedAuthorityKey: signer.publicKey, crypto, now: Date.now });
+      return new EncounterHttpApi({ sql: this.ctx.storage.sql, signer, crypto, archive,
+        transaction: (body) => this.ctx.storage.transactionSync(body),
+        adminToken: this.auditEnv.ADMIN_TOKEN, now: Date.now, retentionMs: 10_000 });
+    })();
+  }
+
   private reserveReferenceGameVerification(
     sourceBucket: string,
     now: number,
@@ -4675,22 +4728,27 @@ export class GameAuditShard extends DurableObject<Env> {
       return jsonResponse({ ok: false, decision: "case_boundary_mismatch" }, 403);
     }
     const creation = this.referenceGameItemReceiptAt(target.assetId);
-    if (!creation) {
+    let encounterApi: EncounterHttpApi | undefined;
+    if (!creation && target.assetId.startsWith("encounter:")) {
+      try { encounterApi = await this.getEncounterApi(); }
+      catch { return jsonError("encounter_service_unavailable", 503); }
+    }
+    const encounterContext = encounterApi?.evidenceCases.context(target.assetId, unit);
+    if (!creation && !encounterContext) {
       return jsonResponse({
         ok: true,
         decision: "asset_not_found",
         asset_id: target.assetId,
       }, 404);
     }
-    const ancestorKind = this.referenceGameAncestorKind(
-      creation,
-      target.ancestorId,
-    );
-    const boundaryMatches = target.boundary.protocol_version === 1 &&
+    const ancestorKind = creation ? this.referenceGameAncestorKind(creation, target.ancestorId) :
+      target.ancestorId === encounterContext!.receipt.receiptId ? "origin" : undefined;
+    const boundaryMatches = creation ? target.boundary.protocol_version === 1 &&
       target.boundary.purpose === "reference-game-checkpoint-v1" &&
-      target.boundary.scope_id === creation.owner_id;
-    const checkpointMatches = target.checkpointDigest ===
-        creation.checkpoint_digest && target.epoch === creation.inventory_epoch;
+      target.boundary.scope_id === creation.owner_id : encounterApi!.evidenceCases.matches(encounterContext!, target);
+    const checkpointMatches = creation ? target.checkpointDigest ===
+        creation.checkpoint_digest && target.epoch === creation.inventory_epoch :
+      target.checkpointDigest === encounterContext!.receipt.statement.root && target.epoch === 0;
     // V1 binds origin challenges to the authority-verified creation
     // checkpoint. Transfer checkpoint evidence needs its own game adapter.
     const ancestorMatches = ancestorKind === "origin" &&
@@ -4753,6 +4811,10 @@ export class GameAuditShard extends DurableObject<Env> {
       ) {
         return { decision: "cursor_conflict" as const, row: undefined };
       }
+      if (encounterContext) {
+        const bound = encounterApi!.evidenceCases.bind(encounterContext, verified.caseId);
+        if (!bound.allowed) return { decision: "encounter_refused" as const, reason: bound.reason, row: undefined };
+      }
       this.ctx.storage.sql.exec(
         `INSERT INTO reference_game_evidence_lineage_cases
          (case_id, asset_id, ancestor_id, ancestor_kind, source_id, hold_id,
@@ -4800,6 +4862,7 @@ export class GameAuditShard extends DurableObject<Env> {
         row: this.referenceGameEvidenceLineageCaseAt(verified.caseId),
       };
     });
+    if (inserted.decision === "encounter_refused") return jsonResponse({ ok: false, decision: inserted.reason }, 409);
     if (inserted.decision === "cursor_conflict") {
       return jsonResponse({
         ok: true,

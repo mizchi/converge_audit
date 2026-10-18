@@ -8,13 +8,13 @@ pub struct ExperimentalSha256Hasher {}
 
 ///|
 pub fn ExperimentalSha256Hasher::new() -> ExperimentalSha256Hasher {
-  ExperimentalSha256Hasher::{  }
+  ExperimentalSha256Hasher::{ }
 }
 
 ///|
 fn bytes_to_lower_hex(bytes : Bytes) -> String {
   let digits = "0123456789abcdef"
-  let output = StringBuilder::new()
+  let output = StringBuilder()
   for byte in bytes {
     let value = byte.to_int()
     output.write_char(
@@ -86,7 +86,7 @@ pub fn ExperimentalEd25519Signer::new(
   let public_key = @bft.PublicKey(
     bytes_to_lower_hex(private_key.public_key().to_bytes()),
   )
-  ExperimentalEd25519Signer::{ private_key, public_key }
+  ExperimentalEd25519Signer::{ private_key, public_key, }
 }
 
 ///|
@@ -125,7 +125,7 @@ pub struct ExperimentalEd25519Verifier {}
 
 ///|
 pub fn ExperimentalEd25519Verifier::new() -> ExperimentalEd25519Verifier {
-  ExperimentalEd25519Verifier::{  }
+  ExperimentalEd25519Verifier::{ }
 }
 
 ///|

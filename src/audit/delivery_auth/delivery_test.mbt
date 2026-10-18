@@ -1,5 +1,5 @@
 ///|
-fn delivery_statement() -> CheckpointDeliveryStatement {
+fn delivery_statement() -> @delivery_auth.CheckpointDeliveryStatement {
   {
     boundary: {
       protocol_version: 1,
@@ -17,8 +17,11 @@ fn delivery_statement() -> CheckpointDeliveryStatement {
 }
 
 ///|
-fn witness_entry(id : String, signer : &@bft.Signer) -> DeliveryWitness {
-  { witness_id: id, witness_key: signer.public_key() }
+fn witness_entry(
+  id : String,
+  signer : &@bft.Signer,
+) -> @delivery_auth.DeliveryWitness {
+  { witness_id: id, witness_key: signer.public_key(), }
 }
 
 ///|
@@ -35,18 +38,18 @@ test "producer signature and n-f witness quorum mint an authenticated delivery" 
   let roster = witnesses.map(fn(signer) {
     witness_entry(signer.public_key().0, signer)
   })
-  let policy = DeliveryAuthenticationPolicy::{
+  let policy = @delivery_auth.DeliveryAuthenticationPolicy::{
     producer_id: "producer-1",
     producer_key: producer.public_key(),
     witnesses: roster,
     required_approvals: 3,
   }
   let statement = delivery_statement()
-  let signed = sign_checkpoint_delivery(
+  let signed = @delivery_auth.sign_checkpoint_delivery(
     hasher, producer, "producer-1", statement,
   )
   let approvals = witnesses[:3].map(fn(signer) {
-    sign_checkpoint_delivery_approval(
+    @delivery_auth.sign_checkpoint_delivery_approval(
       hasher,
       signer,
       signer.public_key().0,
@@ -54,7 +57,7 @@ test "producer signature and n-f witness quorum mint an authenticated delivery" 
     )
   })
   match
-    open_authenticated_checkpoint_delivery(
+    @delivery_auth.open_authenticated_checkpoint_delivery(
       hasher, verifier, policy, signed, approvals,
     ) {
     DeliveryAuthenticated(capability) => {
@@ -74,7 +77,7 @@ test "under-quorum, foreign witnesses, and tampering fail closed" {
   let bob = @bft.MockSigner::new("bob")
   let carol = @bft.MockSigner::new("carol")
   let intruder = @bft.MockSigner::new("intruder")
-  let policy = DeliveryAuthenticationPolicy::{
+  let policy = @delivery_auth.DeliveryAuthenticationPolicy::{
     producer_id: "producer-1",
     producer_key: producer.public_key(),
     witnesses: [
@@ -85,45 +88,59 @@ test "under-quorum, foreign witnesses, and tampering fail closed" {
     required_approvals: 2,
   }
   let statement = delivery_statement()
-  let signed = sign_checkpoint_delivery(
+  let signed = @delivery_auth.sign_checkpoint_delivery(
     hasher, producer, "producer-1", statement,
   )
-  let alice_approval = sign_checkpoint_delivery_approval(
+  let alice_approval = @delivery_auth.sign_checkpoint_delivery_approval(
     hasher,
     alice,
     "alice",
     signed.digest,
   )
   assert_eq(
-    open_authenticated_checkpoint_delivery(hasher, verifier, policy, signed, [
-      alice_approval,
-    ]),
-    DeliveryAuthenticationResult::DeliveryAuthenticationRefused(
-      DeliveryAuthenticationRefusal::DeliveryUnderQuorum(1, 2),
+    @delivery_auth.open_authenticated_checkpoint_delivery(
+      hasher,
+      verifier,
+      policy,
+      signed,
+      [alice_approval],
+    ),
+    @delivery_auth.DeliveryAuthenticationResult::DeliveryAuthenticationRefused(
+      @delivery_auth.DeliveryAuthenticationRefusal::DeliveryUnderQuorum(1, 2),
     ),
   )
-  let foreign = sign_checkpoint_delivery_approval(
+  let foreign = @delivery_auth.sign_checkpoint_delivery_approval(
     hasher,
     intruder,
     "mallory",
     signed.digest,
   )
   assert_eq(
-    open_authenticated_checkpoint_delivery(hasher, verifier, policy, signed, [
-      alice_approval, foreign,
-    ]),
-    DeliveryAuthenticationResult::DeliveryAuthenticationRefused(
-      DeliveryAuthenticationRefusal::DeliveryUnknownWitness,
+    @delivery_auth.open_authenticated_checkpoint_delivery(
+      hasher,
+      verifier,
+      policy,
+      signed,
+      [alice_approval, foreign],
+    ),
+    @delivery_auth.DeliveryAuthenticationResult::DeliveryAuthenticationRefused(
+      @delivery_auth.DeliveryAuthenticationRefusal::DeliveryUnknownWitness,
     ),
   )
-  let tampered : SignedCheckpointDelivery = {
+  let tampered : @delivery_auth.SignedCheckpointDelivery = {
     ..signed,
-    statement: { ..statement, destination_id: "authority-2" },
+    statement: { ..statement, destination_id: "authority-2", },
   }
   assert_eq(
-    open_authenticated_checkpoint_delivery(hasher, verifier, policy, tampered, []),
-    DeliveryAuthenticationResult::DeliveryAuthenticationRefused(
-      DeliveryAuthenticationRefusal::DeliveryStatementDigestMismatch,
+    @delivery_auth.open_authenticated_checkpoint_delivery(
+      hasher,
+      verifier,
+      policy,
+      tampered,
+      [],
+    ),
+    @delivery_auth.DeliveryAuthenticationResult::DeliveryAuthenticationRefused(
+      @delivery_auth.DeliveryAuthenticationRefusal::DeliveryStatementDigestMismatch,
     ),
   )
 }

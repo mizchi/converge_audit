@@ -99,7 +99,7 @@ fn pve_replay_fixture() -> PveReplayFixture raise Error {
   let transcript = @replay.DungeonAttackTranscript::{
     attack_id: attack.attack.attack_id,
     telegraph,
-    dodge_evidence: [{ input, receipt, intent, observed }],
+    dodge_evidence: [{ input, receipt, intent, observed, }],
   }
   let candidate = match
     @replay.prepare_dungeon_encounter(
@@ -176,11 +176,11 @@ fn pve_replay_fixture() -> PveReplayFixture raise Error {
           attack_id: attack.attack.attack_id,
           telegraph: signed_telegraph,
           dodge_evidence: [
-            { input: signed_input, receipt: signed_receipt, intent, observed },
+            { input: signed_input, receipt: signed_receipt, intent, observed, },
           ],
         },
       ],
-      asset_effects: [{ source: signed_loot, effect: loot_effect }],
+      asset_effects: [{ source: signed_loot, effect: loot_effect, }],
     },
   }
 }
@@ -189,8 +189,8 @@ fn pve_replay_fixture() -> PveReplayFixture raise Error {
 fn verify_fixture(
   fixture : PveReplayFixture,
   bytes : Bytes,
-) -> PveCentralReplayResult {
-  verify_pve_replay_bundle(
+) -> @central_replay.PveCentralReplayResult {
+  @central_replay.verify_pve_replay_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     bytes,
@@ -221,11 +221,11 @@ test "central PvE worker authenticates every event and matches checkpoint" {
 ///|
 test "central PvE worker rejects a checkpoint asset root without replay evidence" {
   let fixture = pve_replay_fixture()
-  let bundle = @wire.PveReplayBundle::{ ..fixture.bundle, asset_effects: [] }
+  let bundle = @wire.PveReplayBundle::{ ..fixture.bundle, asset_effects: [], }
   assert_eq(
     verify_fixture(fixture, @wire.encode_pve_replay_bundle(bundle)),
-    PveCentralReplayResult::ReplayRefused(
-      PveCentralReplayRefusal::AssetDeltaRootMismatch,
+    @central_replay.PveCentralReplayResult::ReplayRefused(
+      @central_replay.PveCentralReplayRefusal::AssetDeltaRootMismatch,
     ),
   )
 }
@@ -247,12 +247,12 @@ test "central PvE worker rejects a loot declaration not accepted by the kernel" 
   )
   let bundle = @wire.PveReplayBundle::{
     ..fixture.bundle,
-    asset_effects: [{ ..evidence, effect: forged }],
+    asset_effects: [{ ..evidence, effect: forged, }],
   }
   assert_eq(
     verify_fixture(fixture, @wire.encode_pve_replay_bundle(bundle)),
-    PveCentralReplayResult::ReplayRefused(
-      PveCentralReplayRefusal::AssetEffectReplayRefused(
+    @central_replay.PveCentralReplayResult::ReplayRefused(
+      @central_replay.PveCentralReplayRefusal::AssetEffectReplayRefused(
         0,
         @replay.ReplayRefusal::KernelRejected,
       ),
@@ -265,7 +265,7 @@ test "central PvE worker fails closed on job boundary mismatch" {
   let fixture = pve_replay_fixture()
   let bytes = @wire.encode_pve_replay_bundle(fixture.bundle)
   assert_eq(
-    verify_pve_replay_bundle(
+    @central_replay.verify_pve_replay_bundle(
       @bft.FnvHasher::new(),
       @bft.MockVerifier::new(),
       bytes,
@@ -274,8 +274,8 @@ test "central PvE worker fails closed on job boundary mismatch" {
       expected_checkpoint_digest=@bft.Digest("different-checkpoint"),
       limits=@wire.PveReplayWireLimits::default(),
     ),
-    PveCentralReplayResult::ReplayRefused(
-      PveCentralReplayRefusal::ExpectedCheckpointMismatch,
+    @central_replay.PveCentralReplayResult::ReplayRefused(
+      @central_replay.PveCentralReplayRefusal::ExpectedCheckpointMismatch,
     ),
   )
 }
@@ -290,7 +290,7 @@ test "central PvE worker rejects a signed-event signature failure" {
   }
   let bundle = @wire.PveReplayBundle::{
     ..fixture.bundle,
-    transcripts: [{ ..transcript, telegraph: invalid_telegraph }],
+    transcripts: [{ ..transcript, telegraph: invalid_telegraph, }],
   }
   match verify_fixture(fixture, @wire.encode_pve_replay_bundle(bundle)) {
     ReplayRefused(EventAuthenticationRefused(_)) => ()
@@ -305,12 +305,14 @@ test "central PvE worker rejects duplicate event reuse" {
   let evidence = transcript.dodge_evidence[0]
   let bundle = @wire.PveReplayBundle::{
     ..fixture.bundle,
-    transcripts: [{ ..transcript, dodge_evidence: [evidence, evidence] }],
+    transcripts: [{ ..transcript, dodge_evidence: [evidence, evidence], }],
   }
   assert_eq(
     verify_fixture(fixture, @wire.encode_pve_replay_bundle(bundle)),
-    PveCentralReplayResult::ReplayRefused(
-      PveCentralReplayRefusal::DuplicateEventDigest(evidence.input.digest.0),
+    @central_replay.PveCentralReplayResult::ReplayRefused(
+      @central_replay.PveCentralReplayRefusal::DuplicateEventDigest(
+        evidence.input.digest.0,
+      ),
     ),
   )
 }
@@ -320,7 +322,7 @@ test "central PvE worker distinguishes valid signatures from kernel mismatch" {
   let fixture = pve_replay_fixture()
   let bundle = @wire.PveReplayBundle::{
     ..fixture.bundle,
-    config: { ..fixture.bundle.config, player_max_hp: 11 },
+    config: { ..fixture.bundle.config, player_max_hp: 11, },
   }
   match verify_fixture(fixture, @wire.encode_pve_replay_bundle(bundle)) {
     ReplayRefused(EncounterReplayRefused(_)) => ()

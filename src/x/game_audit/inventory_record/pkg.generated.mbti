@@ -26,8 +26,10 @@ pub(all) struct InventoryRecord {
   last_event : @converge_audit.Digest
   lineage_root : @converge_audit.Digest
 } derive(Eq, @debug.Debug)
+pub fn InventoryRecord::equal(Self, Self) -> Bool
+pub fn InventoryRecord::not_equal(Self, Self) -> Bool
+pub fn InventoryRecord::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

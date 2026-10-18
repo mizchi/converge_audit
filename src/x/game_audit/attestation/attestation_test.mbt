@@ -14,14 +14,14 @@ fn prepared(event_root? : String = "events") -> @checkpoint.PreparedCheckpoint {
 }
 
 ///|
-fn participant(id : String, signer : &@bft.Signer) -> Participant {
-  { id, key: signer.public_key() }
+fn participant(id : String, signer : &@bft.Signer) -> @attestation.Participant {
+  { id, key: signer.public_key(), }
 }
 
 ///|
 fn expect_rejection_kind(
-  result : EvidenceDeliveryResult,
-  expected : EvidenceAlertKind,
+  result : @attestation.EvidenceDeliveryResult,
+  expected : @attestation.EvidenceAlertKind,
 ) -> Unit raise Error {
   match result {
     Rejected(alert) => assert_eq(alert.kind, expected)
@@ -36,18 +36,24 @@ test "verified approvals become audit quorum evidence" {
   let alice = @bft.MockSigner::new("alice")
   let bob = @bft.MockSigner::new("bob")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-    participant("bob", bob),
-  ])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice), participant("bob", bob)],
+  )
   assert_true(collector.is_roster_valid())
   assert_eq(
-    collector.deliver(sign_attestation(hasher, alice, target, "alice", Approve)),
-    EvidenceDeliveryResult::Accepted,
+    collector.deliver(
+      @attestation.sign_attestation(hasher, alice, target, "alice", Approve),
+    ),
+    @attestation.EvidenceDeliveryResult::Accepted,
   )
   assert_eq(
-    collector.deliver(sign_attestation(hasher, bob, target, "bob", Approve)),
-    EvidenceDeliveryResult::Accepted,
+    collector.deliver(
+      @attestation.sign_attestation(hasher, bob, target, "bob", Approve),
+    ),
+    @attestation.EvidenceDeliveryResult::Accepted,
   )
   let evidence = collector.evidence()
   assert_true(evidence.approvals[0])
@@ -71,15 +77,21 @@ test "a verified challenge disables the quorum fast path" {
   let alice = @bft.MockSigner::new("alice")
   let bob = @bft.MockSigner::new("bob")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-    participant("bob", bob),
-  ])
-  ignore(
-    collector.deliver(sign_attestation(hasher, alice, target, "alice", Approve)),
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice), participant("bob", bob)],
   )
   ignore(
-    collector.deliver(sign_attestation(hasher, bob, target, "bob", Challenge)),
+    collector.deliver(
+      @attestation.sign_attestation(hasher, alice, target, "alice", Approve),
+    ),
+  )
+  ignore(
+    collector.deliver(
+      @attestation.sign_attestation(hasher, bob, target, "bob", Challenge),
+    ),
   )
   let evidence = collector.evidence()
   assert_true(evidence.approvals[0])
@@ -102,11 +114,20 @@ test "invalid signature cannot create a challenge" {
   let verifier = @bft.MockVerifier::new()
   let alice = @bft.MockSigner::new("alice")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-  ])
-  let signed = sign_attestation(hasher, alice, target, "alice", Challenge)
-  let tampered : SignedAttestation = {
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice)],
+  )
+  let signed = @attestation.sign_attestation(
+    hasher,
+    alice,
+    target,
+    "alice",
+    Challenge,
+  )
+  let tampered : @attestation.SignedAttestation = {
     attestation: signed.attestation,
     digest: signed.digest,
     signature: @bft.Signature("invalid"),
@@ -114,7 +135,7 @@ test "invalid signature cannot create a challenge" {
   }
   expect_rejection_kind(
     collector.deliver(tampered),
-    EvidenceAlertKind::InvalidSignature,
+    @attestation.EvidenceAlertKind::InvalidSignature,
   )
   assert_false(collector.evidence().challenged)
 }
@@ -126,14 +147,17 @@ test "a signer cannot claim another participant id" {
   let alice = @bft.MockSigner::new("alice")
   let mallory = @bft.MockSigner::new("mallory")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-  ])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice)],
+  )
   expect_rejection_kind(
     collector.deliver(
-      sign_attestation(hasher, mallory, target, "alice", Approve),
+      @attestation.sign_attestation(hasher, mallory, target, "alice", Approve),
     ),
-    EvidenceAlertKind::SignerKeyMismatch,
+    @attestation.EvidenceAlertKind::SignerKeyMismatch,
   )
   assert_false(collector.evidence().approvals[0])
 }
@@ -145,25 +169,34 @@ test "content tampering and unknown participants are rejected" {
   let alice = @bft.MockSigner::new("alice")
   let mallory = @bft.MockSigner::new("mallory")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-  ])
-  let signed = sign_attestation(hasher, alice, target, "alice", Approve)
-  let tampered : SignedAttestation = {
-    attestation: { ..signed.attestation, choice: Challenge },
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice)],
+  )
+  let signed = @attestation.sign_attestation(
+    hasher,
+    alice,
+    target,
+    "alice",
+    Approve,
+  )
+  let tampered : @attestation.SignedAttestation = {
+    attestation: { ..signed.attestation, choice: Challenge, },
     digest: signed.digest,
     signature: signed.signature,
     signer_key: signed.signer_key,
   }
   expect_rejection_kind(
     collector.deliver(tampered),
-    EvidenceAlertKind::HashMismatch,
+    @attestation.EvidenceAlertKind::HashMismatch,
   )
   expect_rejection_kind(
     collector.deliver(
-      sign_attestation(hasher, mallory, target, "mallory", Approve),
+      @attestation.sign_attestation(hasher, mallory, target, "mallory", Approve),
     ),
-    EvidenceAlertKind::UnknownParticipant,
+    @attestation.EvidenceAlertKind::UnknownParticipant,
   )
 }
 
@@ -174,12 +207,17 @@ test "an authenticated vote for another checkpoint is rejected" {
   let alice = @bft.MockSigner::new("alice")
   let target = prepared()
   let other = prepared(event_root="other-events")
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-  ])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice)],
+  )
   expect_rejection_kind(
-    collector.deliver(sign_attestation(hasher, alice, other, "alice", Approve)),
-    EvidenceAlertKind::WrongCheckpoint,
+    collector.deliver(
+      @attestation.sign_attestation(hasher, alice, other, "alice", Approve),
+    ),
+    @attestation.EvidenceAlertKind::WrongCheckpoint,
   )
 }
 
@@ -189,12 +227,27 @@ test "duplicate delivery is idempotent" {
   let verifier = @bft.MockVerifier::new()
   let alice = @bft.MockSigner::new("alice")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-  ])
-  let signed = sign_attestation(hasher, alice, target, "alice", Approve)
-  assert_eq(collector.deliver(signed), EvidenceDeliveryResult::Accepted)
-  assert_eq(collector.deliver(signed), EvidenceDeliveryResult::Duplicate)
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice)],
+  )
+  let signed = @attestation.sign_attestation(
+    hasher,
+    alice,
+    target,
+    "alice",
+    Approve,
+  )
+  assert_eq(
+    collector.deliver(signed),
+    @attestation.EvidenceDeliveryResult::Accepted,
+  )
+  assert_eq(
+    collector.deliver(signed),
+    @attestation.EvidenceDeliveryResult::Duplicate,
+  )
   assert_true(collector.evidence().approvals[0])
 }
 
@@ -204,17 +257,22 @@ test "conflicting signed choices revoke approval and raise challenge" {
   let verifier = @bft.MockVerifier::new()
   let alice = @bft.MockSigner::new("alice")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-  ])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice)],
+  )
   ignore(
-    collector.deliver(sign_attestation(hasher, alice, target, "alice", Approve)),
+    collector.deliver(
+      @attestation.sign_attestation(hasher, alice, target, "alice", Approve),
+    ),
   )
   expect_rejection_kind(
     collector.deliver(
-      sign_attestation(hasher, alice, target, "alice", Challenge),
+      @attestation.sign_attestation(hasher, alice, target, "alice", Challenge),
     ),
-    EvidenceAlertKind::Equivocation,
+    @attestation.EvidenceAlertKind::Equivocation,
   )
   let evidence = collector.evidence()
   assert_false(evidence.approvals[0])
@@ -227,40 +285,47 @@ test "duplicate participant ids or shared keys invalidate the roster" {
   let verifier = @bft.MockVerifier::new()
   let alice = @bft.MockSigner::new("alice")
   let target = prepared()
-  let duplicate_id = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-    participant("alice", alice),
-  ])
+  let duplicate_id = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice), participant("alice", alice)],
+  )
   assert_false(duplicate_id.is_roster_valid())
   expect_rejection_kind(
     duplicate_id.deliver(
-      sign_attestation(hasher, alice, target, "alice", Approve),
+      @attestation.sign_attestation(hasher, alice, target, "alice", Approve),
     ),
-    EvidenceAlertKind::InvalidRoster,
+    @attestation.EvidenceAlertKind::InvalidRoster,
   )
-  let shared_key = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-    participant("alice-alt", alice),
-  ])
+  let shared_key = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice), participant("alice-alt", alice)],
+  )
   assert_false(shared_key.is_roster_valid())
 }
 
 ///|
 test "canonical attestation serialization separates string boundaries" {
   let target = prepared()
-  let left : Attestation = {
+  let left : @attestation.Attestation = {
     checkpoint_digest: target.digest(),
     participant_id: "a:b",
     purpose: CheckpointApproval,
     choice: Approve,
   }
-  let right : Attestation = {
+  let right : @attestation.Attestation = {
     checkpoint_digest: target.digest(),
     participant_id: "a",
     purpose: CheckpointApproval,
     choice: Challenge,
   }
-  assert_not_eq(serialize_attestation(left), serialize_attestation(right))
+  assert_not_eq(
+    @attestation.serialize_attestation(left),
+    @attestation.serialize_attestation(right),
+  )
 }
 
 ///|
@@ -268,7 +333,12 @@ test "one-to-many mode needs authority replay when no participant quorum exists"
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let (target, _, replay_match) = authority_replay_fixture()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [],
+  )
   assert_true(collector.is_roster_valid())
   assert_eq(
     collector.decide(
@@ -297,12 +367,28 @@ test "conflicting choices converge regardless of delivery order" {
   let alice = @bft.MockSigner::new("alice")
   let target = prepared()
   let roster = [participant("alice", alice)]
-  let approve = sign_attestation(hasher, alice, target, "alice", Approve)
-  let challenge = sign_attestation(hasher, alice, target, "alice", Challenge)
-  let left = EvidenceCollector::new(hasher, verifier, target, roster)
+  let approve = @attestation.sign_attestation(
+    hasher,
+    alice,
+    target,
+    "alice",
+    Approve,
+  )
+  let challenge = @attestation.sign_attestation(
+    hasher,
+    alice,
+    target,
+    "alice",
+    Challenge,
+  )
+  let left = @attestation.EvidenceCollector::new(
+    hasher, verifier, target, roster,
+  )
   ignore(left.deliver(approve))
   ignore(left.deliver(challenge))
-  let right = EvidenceCollector::new(hasher, verifier, target, roster)
+  let right = @attestation.EvidenceCollector::new(
+    hasher, verifier, target, roster,
+  )
   ignore(right.deliver(challenge))
   ignore(right.deliver(approve))
   let left_evidence = left.evidence()
@@ -402,9 +488,9 @@ fn authority_replay_fixture() -> (
           initial_x: 0,
         },
       ],
-      attacks=[{ attack, damage: 1 }],
+      attacks=[{ attack, damage: 1, }],
       transcripts=[
-        { attack_id: attack.attack_id, telegraph, dodge_evidence: [] },
+        { attack_id: attack.attack_id, telegraph, dodge_evidence: [], },
       ],
     ) {
     CandidateReady(candidate) => candidate
@@ -445,11 +531,16 @@ test "only matching verified checkpoint and audit evidence create finalization c
   let verifier = @bft.MockVerifier::new()
   let alice = @bft.MockSigner::new("alice")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-  ])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice)],
+  )
   ignore(
-    collector.deliver(sign_attestation(hasher, alice, target, "alice", Approve)),
+    collector.deliver(
+      @attestation.sign_attestation(hasher, alice, target, "alice", Approve),
+    ),
   )
   match collector.finalize(verified_checkpoint(target), 1, replay_match=None) {
     Ready(finalized) => assert_eq(finalized.digest(), target.digest())
@@ -463,7 +554,12 @@ test "a verified but different checkpoint cannot finalize this evidence" {
   let verifier = @bft.MockVerifier::new()
   let (target, _, replay_match) = authority_replay_fixture()
   let other = prepared(event_root="other-events")
-  let collector = EvidenceCollector::new(hasher, verifier, target, [])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [],
+  )
   match
     collector.finalize(
       verified_checkpoint(other),
@@ -481,7 +577,12 @@ test "replay evidence for a different checkpoint cannot authorize fallback" {
   let verifier = @bft.MockVerifier::new()
   let (_, _, replay_match) = authority_replay_fixture()
   let target = prepared(event_root="different-replay-root")
-  let collector = EvidenceCollector::new(hasher, verifier, target, [])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [],
+  )
   match
     collector.finalize(
       verified_checkpoint(target),
@@ -498,7 +599,12 @@ test "authority replay can create finalization capability without peer quorum" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let (target, verified, replay_match) = authority_replay_fixture()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [],
+  )
   match collector.finalize(verified, 0, replay_match=Some(replay_match)) {
     Ready(finalized) =>
       assert_eq(finalized.checkpoint().session_id, "dungeon-42")
@@ -511,7 +617,12 @@ test "encounter replay capability is bound to the verified authority key" {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let (target, _, replay_match) = authority_replay_fixture()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [],
+  )
   match
     collector.finalize(
       verified_checkpoint_by(target, "impostor-authority"),
@@ -529,12 +640,15 @@ test "an unresolved signed challenge cannot create finalization capability" {
   let verifier = @bft.MockVerifier::new()
   let alice = @bft.MockSigner::new("alice")
   let target = prepared()
-  let collector = EvidenceCollector::new(hasher, verifier, target, [
-    participant("alice", alice),
-  ])
+  let collector = @attestation.EvidenceCollector::new(
+    hasher,
+    verifier,
+    target,
+    [participant("alice", alice)],
+  )
   ignore(
     collector.deliver(
-      sign_attestation(hasher, alice, target, "alice", Challenge),
+      @attestation.sign_attestation(hasher, alice, target, "alice", Challenge),
     ),
   )
   match collector.finalize(verified_checkpoint(target), 1, replay_match=None) {

@@ -65,6 +65,10 @@ prove:
   nix develop path:. --command moon prove src/audit/quorum/vote
   nix develop path:. --command moon prove src/x/game_audit/audit
 
+# Check the experimental Lean arbitration model and its positive/negative examples
+prove-lean:
+  cd formal/lean && lake build
+
 # Prove the multiplayer audit policy only
 prove-game-audit:
   nix develop path:. --command moon prove src/x/game_audit/audit
@@ -168,6 +172,94 @@ check-node-audit-runtime:
 # Test player-local SQLite restart and transaction atomicity
 test-node-audit-runtime:
   pnpm --dir examples/node-audit-runtime test
+
+# Verify bounded raw-payload storage, restart, rollback, and real browser tabs
+test-player-local-payload:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/bounded-payload-queue.node-test.ts test/payload-pool.node-test.ts test/payload-reservation.node-test.ts test/payload-closure.node-test.ts
+  pnpm --dir examples/cf-game-audit test:payload-browser
+
+# Global/per-queue budgets, bounded metadata, rollback and actual browser tabs
+test-payload-pool:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/payload-pool.node-test.ts test/payload-reservation.node-test.ts test/payload-closure.node-test.ts test/encounter-lifecycle.node-test.ts test/encounter-api.node-test.ts
+  pnpm --dir examples/cf-game-audit test:payload-browser
+
+# Actual Chromium IndexedDB transactions; crypto and network excluded
+bench-payload-pool:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec playwright test --config playwright.payload-bench.config.ts
+
+# One bounded encounter from local logs to market receipt and authorized pruning
+test-encounter-lifecycle:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/encounter-lifecycle.node-test.ts test/encounter-api.node-test.ts test/payload-reservation.node-test.ts test/payload-closure.node-test.ts test/termination-policy.node-test.ts
+  pnpm --dir examples/cf-game-audit exec vitest run test/encounter-ledger.test.ts test/encounter-api.test.ts
+  pnpm --dir examples/cf-game-audit test:payload-browser
+
+# Local service/crypto cost; excludes network, disk fsync and Worker scheduling
+bench-encounter:
+  pnpm --dir examples/cf-game-audit exec node scripts/bench-encounter.ts
+
+# Bounded receipt aggregation and original-receipt lookup; no network or fsync
+bench-encounter-inventory:
+  pnpm --dir examples/cf-game-audit exec node scripts/bench-encounter-inventory.ts
+
+# Bounded epoch rollover with real origins and released archive tombstones
+bench-encounter-generation:
+  pnpm --dir examples/cf-game-audit exec node scripts/bench-encounter-generation.ts
+
+# Signed forfeiture recovery release and repeated generations with no origin growth
+bench-encounter-recovery:
+  pnpm --dir examples/cf-game-audit exec node scripts/bench-encounter-recovery.ts
+
+# Batched empty-receipt retirement, merged ordinal ranges and verified v2 heads
+bench-encounter-empty-inventory:
+  pnpm --dir examples/cf-game-audit exec node scripts/bench-encounter-empty-inventory.ts
+
+# Existing signed case service -> encounter market/retention, multi-case and CAS
+test-encounter-cases:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/encounter-evidence.node-test.ts test/encounter-lifecycle.node-test.ts test/encounter-api.node-test.ts
+  pnpm --dir examples/cf-game-audit exec vitest run test/encounter-evidence.test.ts test/encounter-ledger.test.ts test/encounter-api.test.ts
+
+# Signed archive custody, local release, retained cases and real browser handoff
+test-encounter-archive:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/encounter-archive.node-test.ts test/encounter-session.node-test.ts
+  pnpm --dir examples/cf-game-audit exec vitest run test/encounter-evidence.test.ts
+  pnpm --dir examples/cf-game-audit exec playwright test e2e/encounter-session.spec.ts --grep 'archive handoff'
+
+# Sixteen-receipt compaction, durable recovery, paged inventory and old-item market
+test-encounter-inventory:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/encounter-session.node-test.ts test/encounter-session-store.node-test.ts
+  pnpm --dir examples/cf-game-audit exec vitest run test/encounter-evidence.test.ts
+  pnpm --dir examples/cf-game-audit exec playwright test e2e/encounter-session.spec.ts --grep 'receipt compaction'
+
+# Epoch rollover, stale requests, shared-transaction rollback and 1025 real games
+test-encounter-generation:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/encounter-generation.node-test.ts test/encounter-session.node-test.ts test/encounter-archive.node-test.ts
+  pnpm --dir examples/cf-game-audit exec vitest run test/encounter-generation.test.ts test/encounter-evidence.test.ts
+
+# Owner release, lost responses, deletion without tombstones, and real DO eviction
+test-encounter-recovery:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/encounter-generation.node-test.ts test/encounter-session.node-test.ts
+  pnpm --dir examples/cf-game-audit exec vitest run test/encounter-generation.test.ts
+
+# Sparse inventory, durable client intent, exact retry after deletion and DO eviction
+test-encounter-empty-inventory:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/encounter-empty-inventory.node-test.ts test/encounter-session.node-test.ts
+  pnpm --dir examples/cf-game-audit exec vitest run test/encounter-empty-inventory.test.ts
+
+# Default game UI: bounded control state, public preview, recovery and real Worker
+test-encounter-ui:
+  moon build --target js --release
+  pnpm --dir examples/cf-game-audit exec node --test test/encounter-session.node-test.ts test/encounter-session-store.node-test.ts test/encounter-preview.node-test.ts test/local-encounter-config.node-test.ts test/encounter-api.node-test.ts
+  pnpm --dir examples/cf-game-audit test:e2e
 
 # Validate the deploy bundle without mutating Cloudflare
 build-cf-game-audit:

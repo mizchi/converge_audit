@@ -1,6 +1,8 @@
 ///|
-fn verified_policy(mode : GameAuditMode) -> @audit.VerifiedCheckpointPolicy {
-  match checkpoint_policy_for_mode(mode) {
+fn verified_policy(
+  mode : @policy.GameAuditMode,
+) -> @audit.VerifiedCheckpointPolicy {
+  match @policy.checkpoint_policy_for_mode(mode) {
     @audit.CheckpointPolicyOpenResult::Opened(policy) => policy
     @audit.CheckpointPolicyOpenResult::Refused(_) =>
       abort("game checkpoint policy must be valid")

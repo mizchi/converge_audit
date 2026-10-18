@@ -35,7 +35,7 @@ fn open_world_central_replay_fixture(
     let id = "observer-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
     observer_signers.push(signer)
-    observers.push({ id, key: signer.public_key() })
+    observers.push({ id, key: signer.public_key(), })
   }
   let observer_manifest_digest = @open_world.open_world_observer_manifest(
     hasher,
@@ -125,7 +125,7 @@ fn open_world_central_replay_fixture(
       players~,
       attacks=[attack],
       transcripts=[
-        { attack_id: attack.attack.attack_id, telegraph, dodge_evidence: [] },
+        { attack_id: attack.attack.attack_id, telegraph, dodge_evidence: [], },
       ],
     ) {
     CandidateReady(value) => value
@@ -335,7 +335,7 @@ fn open_world_central_replay_fixture(
             dodge_evidence: [],
           },
         ],
-        asset_effects: [{ source: signed_loot, effect: loot_effect }],
+        asset_effects: [{ source: signed_loot, effect: loot_effect, }],
       },
     },
   }
@@ -371,8 +371,8 @@ fn open_world_missing_slot_bundle(
 fn verify_open_world_missing_slot_fixture(
   fixture : OpenWorldCentralReplayFixture,
   source : @wire.OpenWorldMissingSlotEvidence,
-) -> OpenWorldMissingSlotConflictResult raise Error {
-  verify_open_world_missing_slot_conflict_bundle(
+) -> @central_replay.OpenWorldMissingSlotConflictResult raise Error {
+  @central_replay.verify_open_world_missing_slot_conflict_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     @wire.encode_open_world_missing_slot_conflict_bundle(
@@ -394,8 +394,8 @@ fn verify_open_world_missing_slot_fixture(
 ///|
 fn verify_open_world_fixture(
   fixture : OpenWorldCentralReplayFixture,
-) -> OpenWorldPveCentralReplayResult {
-  verify_open_world_pve_replay_bundle(
+) -> @central_replay.OpenWorldPveCentralReplayResult {
+  @central_replay.verify_open_world_pve_replay_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     @wire.encode_open_world_pve_replay_bundle(fixture.bundle),
@@ -442,8 +442,10 @@ test "open-world central replay rejects under-quorum observers" {
   let fixture = open_world_central_replay_fixture(observation_count=2)
   assert_eq(
     verify_open_world_fixture(fixture),
-    OpenWorldPveCentralReplayResult::OpenWorldPveReplayRefused(
-      OpenWorldPveCentralReplayRefusal::OpenWorldObserverQuorumPending(2, 3),
+    @central_replay.OpenWorldPveCentralReplayResult::OpenWorldPveReplayRefused(
+      @central_replay.OpenWorldPveCentralReplayRefusal::OpenWorldObserverQuorumPending(
+        2, 3,
+      ),
     ),
   )
 }
@@ -452,7 +454,7 @@ test "open-world central replay rejects under-quorum observers" {
 test "open-world central replay rejects untrusted plan and seal substitutions" {
   let fixture = open_world_central_replay_fixture()
   let bytes = @wire.encode_open_world_pve_replay_bundle(fixture.bundle)
-  let result = verify_open_world_pve_replay_bundle(
+  let result = @central_replay.verify_open_world_pve_replay_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     bytes,
@@ -469,8 +471,8 @@ test "open-world central replay rejects untrusted plan and seal substitutions" {
   )
   assert_eq(
     result,
-    OpenWorldPveCentralReplayResult::OpenWorldPveReplayRefused(
-      OpenWorldPveCentralReplayRefusal::OpenWorldExpectedAuditCheckpointMismatch,
+    @central_replay.OpenWorldPveCentralReplayResult::OpenWorldPveReplayRefused(
+      @central_replay.OpenWorldPveCentralReplayRefusal::OpenWorldExpectedAuditCheckpointMismatch,
     ),
   )
 }
@@ -478,7 +480,7 @@ test "open-world central replay rejects untrusted plan and seal substitutions" {
 ///|
 test "open-world central replay rejects an untrusted transparency head" {
   let fixture = open_world_central_replay_fixture()
-  let result = verify_open_world_pve_replay_bundle(
+  let result = @central_replay.verify_open_world_pve_replay_bundle(
     @bft.FnvHasher::new(),
     @bft.MockVerifier::new(),
     @wire.encode_open_world_pve_replay_bundle(fixture.bundle),
@@ -495,8 +497,8 @@ test "open-world central replay rejects an untrusted transparency head" {
   )
   assert_eq(
     result,
-    OpenWorldPveCentralReplayResult::OpenWorldPveReplayRefused(
-      OpenWorldPveCentralReplayRefusal::OpenWorldAuditTransparencyRefused(
+    @central_replay.OpenWorldPveCentralReplayResult::OpenWorldPveReplayRefused(
+      @central_replay.OpenWorldPveCentralReplayRefusal::OpenWorldAuditTransparencyRefused(
         @open_world.OpenWorldAuditTransparencyRefusal::AuditTransparencyExpectedCheckpointMismatch,
       ),
     ),

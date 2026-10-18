@@ -6,7 +6,7 @@ fn peer_route(
   failures? : Int = 0,
   available? : Bool = true,
   quarantined? : Bool = false,
-) -> PeerRouteState {
+) -> @runtime.PeerRouteState {
   {
     peer_id,
     available,
@@ -27,7 +27,7 @@ test "peer delivery selects a bounded fair batch and reports backpressure" {
     peer_route("quarantined", 0, quarantined=true),
   ]
   debug_inspect(
-    select_peer_delivery_batch(
+    @runtime.select_peer_delivery_batch(
       routes,
       now_ms=100,
       in_flight_count=1,
@@ -37,7 +37,7 @@ test "peer delivery selects a bounded fair batch and reports backpressure" {
     content="PeerDeliverySelected([1, 2])",
   )
   debug_inspect(
-    select_peer_delivery_batch(
+    @runtime.select_peer_delivery_batch(
       routes,
       now_ms=100,
       in_flight_count=3,
@@ -51,7 +51,7 @@ test "peer delivery selects a bounded fair batch and reports backpressure" {
 ///|
 test "peer delivery rejects duplicate identities and invalid limits" {
   debug_inspect(
-    select_peer_delivery_batch(
+    @runtime.select_peer_delivery_batch(
       [peer_route("peer", 0), peer_route("peer", 1)],
       now_ms=0,
       in_flight_count=0,
@@ -61,7 +61,7 @@ test "peer delivery rejects duplicate identities and invalid limits" {
     content="PeerDeliveryRefused(DuplicatePeerRoute)",
   )
   debug_inspect(
-    select_peer_delivery_batch(
+    @runtime.select_peer_delivery_batch(
       [],
       now_ms=-1,
       in_flight_count=0,
@@ -76,7 +76,7 @@ test "peer delivery rejects duplicate identities and invalid limits" {
 test "peer response selection ignores unauthenticated data and surfaces signed forks" {
   let expected = @commitment.AuditDigest("checkpoint")
   debug_inspect(
-    select_peer_checkpoint_response(
+    @runtime.select_peer_checkpoint_response(
       [
         {
           peer_id: "slow",
@@ -102,7 +102,7 @@ test "peer response selection ignores unauthenticated data and surfaces signed f
     content="PeerCheckpointResponseAccepted(2)",
   )
   debug_inspect(
-    select_peer_checkpoint_response(
+    @runtime.select_peer_checkpoint_response(
       [
         {
           peer_id: "honest",
@@ -127,7 +127,7 @@ test "peer response selection ignores unauthenticated data and surfaces signed f
 test "peer retry transition persists bounded exponential backoff and resets on success" {
   let initial = peer_route("peer", 0)
   let first = match
-    record_peer_delivery_failure(
+    @runtime.record_peer_delivery_failure(
       initial,
       now_ms=100,
       attempt_order=1,
@@ -146,7 +146,7 @@ test "peer retry transition persists bounded exponential backoff and resets on s
     last_attempt_order: 1,
   })
   let second = match
-    record_peer_delivery_failure(
+    @runtime.record_peer_delivery_failure(
       first,
       now_ms=110,
       attempt_order=2,
@@ -158,7 +158,7 @@ test "peer retry transition persists bounded exponential backoff and resets on s
   }
   inspect(second.next_retry_at_ms, content="130")
   debug_inspect(
-    record_peer_delivery_success(second, attempt_order=3),
+    @runtime.record_peer_delivery_success(second, attempt_order=3),
     content=(
       #|PeerRouteUpdated(
       #|  {

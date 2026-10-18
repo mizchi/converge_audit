@@ -1,0 +1,152 @@
+///|
+predicate encounter_recovery_release_allowed_post(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+  result : Bool,
+) {
+  if forfeited && retention_released && hold_clear && without_assets {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma released_encounter_recovery_requires_every_guard(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+) where {
+  proof_require: encounter_recovery_release_allowed_post(
+    forfeited, retention_released, hold_clear, without_assets, true,
+  ),
+  proof_ensure: forfeited == true,
+  proof_ensure: retention_released == true,
+  proof_ensure: hold_clear == true,
+  proof_ensure: without_assets == true,
+} {
+}
+
+///|
+pub lemma unforfeited_encounter_recovery_cannot_be_released(
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+) where {
+  proof_ensure: encounter_recovery_release_allowed_post(
+    false, retention_released, hold_clear, without_assets, false,
+  ),
+} {
+}
+
+///|
+pub lemma retained_encounter_recovery_cannot_be_released(
+  forfeited : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+) where {
+  proof_ensure: encounter_recovery_release_allowed_post(
+    forfeited, false, hold_clear, without_assets, false,
+  ),
+} {
+}
+
+///|
+pub lemma held_encounter_recovery_cannot_be_released(
+  forfeited : Bool,
+  retention_released : Bool,
+  without_assets : Bool,
+) where {
+  proof_ensure: encounter_recovery_release_allowed_post(
+    forfeited, retention_released, false, without_assets, false,
+  ),
+} {
+}
+
+///|
+pub lemma asset_bearing_encounter_recovery_cannot_be_released(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+) where {
+  proof_ensure: encounter_recovery_release_allowed_post(
+    forfeited, retention_released, hold_clear, false, false,
+  ),
+} {
+}
+
+///|
+predicate encounter_recovery_forget_allowed_post(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+  owner_released : Bool,
+  old_generation : Bool,
+  result : Bool,
+) {
+  if forfeited && retention_released && hold_clear && without_assets &&
+    owner_released && old_generation {
+    result == true
+  } else {
+    result == false
+  }
+}
+
+///|
+pub lemma forgotten_encounter_recovery_requires_release_owner_and_old_generation(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+  owner_released : Bool,
+  old_generation : Bool,
+) where {
+  proof_require: encounter_recovery_forget_allowed_post(
+    forfeited, retention_released, hold_clear, without_assets, owner_released,
+    old_generation, true,
+  ),
+  proof_ensure: forfeited == true,
+  proof_ensure: retention_released == true,
+  proof_ensure: hold_clear == true,
+  proof_ensure: without_assets == true,
+  proof_ensure: owner_released == true,
+  proof_ensure: old_generation == true,
+  proof_ensure: encounter_recovery_release_allowed_post(
+    forfeited, retention_released, hold_clear, without_assets, true,
+  ),
+} {
+}
+
+///|
+pub lemma owner_retained_encounter_recovery_cannot_be_forgotten(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+  old_generation : Bool,
+) where {
+  proof_ensure: encounter_recovery_forget_allowed_post(
+    forfeited, retention_released, hold_clear, without_assets, false,
+    old_generation, false,
+  ),
+} {
+}
+
+///|
+pub lemma current_generation_encounter_recovery_cannot_be_forgotten(
+  forfeited : Bool,
+  retention_released : Bool,
+  hold_clear : Bool,
+  without_assets : Bool,
+  owner_released : Bool,
+) where {
+  proof_ensure: encounter_recovery_forget_allowed_post(
+    forfeited, retention_released, hold_clear, without_assets, owner_released,
+    false, false,
+  ),
+} {
+}

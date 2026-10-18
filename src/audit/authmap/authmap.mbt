@@ -72,7 +72,7 @@ fn append_field(buffer : StringBuilder, value : String) -> Unit {
 
 ///|
 fn tagged_preimage(tag : String, fields : Array[String]) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, tag)
   for field in fields {
     append_field(buffer, field)
@@ -527,7 +527,7 @@ fn collect_absence_proof(
   path : Array[AuthMapStep],
 ) -> AuthMapAbsenceProof? {
   match node {
-    Empty => Some(AuthMapAbsenceProof::{ key, entry_count, path })
+    Empty => Some(AuthMapAbsenceProof::{ key, entry_count, path, })
     Branch(node_key, value, _, _, left, right) => {
       let order = key.compare(node_key)
       if order == 0 {
@@ -612,14 +612,14 @@ fn dependent_statement_segments(
   dependency_digest : @bft.Digest,
   fields_after : Array[String],
 ) -> Array[String] {
-  let prefix = StringBuilder::new()
+  let prefix = StringBuilder()
   append_field(prefix, tag)
   for field in fields_before {
     append_field(prefix, field)
   }
   prefix.write_string(dependency_digest.0.length().to_string())
   prefix.write_char(':')
-  let suffix = StringBuilder::new()
+  let suffix = StringBuilder()
   for field in fields_after {
     append_field(suffix, field)
   }
@@ -692,7 +692,7 @@ fn authmap_hash_verification_plan(
     dependency_check_indices: [dependency_index],
     expected_digest: current,
   })
-  { checks, root_check_index: checks.length() - 1 }
+  { checks, root_check_index: checks.length() - 1, }
 }
 
 ///|

@@ -24,6 +24,13 @@ They apply DTOs returned by `MoonBitCheckpointPolicy.prepareWriteSet` in a CAS
 transaction. `conformance.node.ts` runs the same restart, fault rollback, stale
 revision, and ACK-capacity reuse suite against both implementations.
 
+`payload-budget.ts` wraps the MoonBit byte/item admission and retention guards
+for the independent browser raw-payload queue. The queue uses atomic durable
+counters, bounded batches and authenticated contiguous-prefix deletion; it does
+not replace the existing audit-metadata adapter. See the
+[privacy and bounded-storage design](../../docs/private-views-and-bounded-storage-ja.md)
+and run `just test-player-local-payload` for Node and real-browser checks.
+
 Current adapters:
 
 - `examples/node-audit-runtime`: Node 24 `node:sqlite`

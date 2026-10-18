@@ -28,8 +28,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          version: 0.10.5+5e7afb0c0
-          core-version: 0.10.5+5e7afb0c0
+          version: 0.10.14+7d59c7ec9
+          core-version: 0.10.14+7d59c7ec9
       - name: Resolve MoonBit dependencies
         run: |
           moon update
@@ -59,8 +59,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          version: 0.10.5+5e7afb0c0
-          core-version: 0.10.5+5e7afb0c0
+          version: 0.10.14+7d59c7ec9
+          core-version: 0.10.14+7d59c7ec9
       - name: Resolve MoonBit dependencies
         run: |
           moon update
@@ -116,8 +116,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          version: 0.10.5+5e7afb0c0
-          core-version: 0.10.5+5e7afb0c0
+          version: 0.10.14+7d59c7ec9
+          core-version: 0.10.14+7d59c7ec9
       - name: Resolve MoonBit dependencies
         run: |
           moon update
@@ -155,8 +155,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          version: 0.10.5+5e7afb0c0
-          core-version: 0.10.5+5e7afb0c0
+          version: 0.10.14+7d59c7ec9
+          core-version: 0.10.14+7d59c7ec9
       - name: Resolve MoonBit dependencies
         run: |
           moon update

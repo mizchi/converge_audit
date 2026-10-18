@@ -177,7 +177,7 @@ fn bench_observer_registration_fixture() -> (
   for index in 0..<4 {
     let id = "benchmark-observer-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
-    observers.push({ id, key: signer.public_key() })
+    observers.push({ id, key: signer.public_key(), })
   }
   let observer_manifest = open_world_observer_manifest(
     hasher,

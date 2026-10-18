@@ -24,6 +24,14 @@ pub fn audit_player_local_evidence_poll_lease_expiry(Int, Int, Int) -> Int
 
 pub fn audit_player_local_evidence_poll_next_retry_at(Int, Int, Int, Int, Int) -> Int
 
+pub fn audit_player_local_payload_admission_allowed(Int, Int, Int, Int, Int, Int, Int) -> Bool
+
+pub fn audit_player_local_payload_prunable(Bool, Bool, Bool, Bool) -> Bool
+
+pub fn audit_player_local_payload_reservation_allowed(Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Bool
+
+pub fn audit_player_local_payload_scope_registration_allowed(Int, Int) -> Bool
+
 pub fn audit_prepare_atomic_checkpoint_seal(Int, String, String, String, String, Int, String, String, String, Int, String, Bool, Bool, Bool, Bool, Int, Int, Int, Int, String, String, String, Array[String]) -> String
 
 pub fn audit_record_peer_delivery_failure(String, Bool, Bool, Int, Int, Int, Int, Int, Int, Int) -> String
@@ -41,4 +49,3 @@ pub fn audit_select_peer_delivery_batch(Array[String], Array[Bool], Array[Bool],
 // Type aliases
 
 // Traits
-

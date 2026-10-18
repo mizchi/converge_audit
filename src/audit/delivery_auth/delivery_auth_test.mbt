@@ -1,5 +1,5 @@
 ///|
-fn generic_delivery_statement() -> CheckpointDeliveryStatement {
+fn generic_delivery_statement() -> @delivery_auth.CheckpointDeliveryStatement {
   {
     boundary: {
       protocol_version: 1,
@@ -23,24 +23,24 @@ test "delivery authentication is independent of application payload semantics" {
   let producer = @bft.MockSigner::new("producer")
   let witness = @bft.MockSigner::new("witness")
   let statement = generic_delivery_statement()
-  let signed = sign_checkpoint_delivery(
+  let signed = @delivery_auth.sign_checkpoint_delivery(
     hasher, producer, "producer-1", statement,
   )
-  let approval = sign_checkpoint_delivery_approval(
+  let approval = @delivery_auth.sign_checkpoint_delivery_approval(
     hasher,
     witness,
     "witness-1",
     signed.digest,
   )
   match
-    open_authenticated_checkpoint_delivery(
+    @delivery_auth.open_authenticated_checkpoint_delivery(
       hasher,
       verifier,
       {
         producer_id: "producer-1",
         producer_key: producer.public_key(),
         witnesses: [
-          { witness_id: "witness-1", witness_key: witness.public_key() },
+          { witness_id: "witness-1", witness_key: witness.public_key(), },
         ],
         required_approvals: 1,
       },

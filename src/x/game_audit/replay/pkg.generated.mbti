@@ -81,6 +81,9 @@ pub(all) enum AssetEffect {
   Create(asset_id~ : String, recipient_id~ : String, item_type~ : String, quantity~ : Int, output_index~ : Int)
   Transfer(asset_id~ : String, from_owner~ : String, to_owner~ : String, expected_version~ : Int)
 } derive(Eq, @debug.Debug)
+pub fn AssetEffect::equal(Self, Self) -> Bool
+pub fn AssetEffect::not_equal(Self, Self) -> Bool
+pub fn AssetEffect::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AssetEffectValidation {
   EffectValid
@@ -93,12 +96,17 @@ pub(all) enum AssetEffectValidation {
   SameOwner
   InvalidExpectedVersion
 } derive(Eq, @debug.Debug)
+pub fn AssetEffectValidation::equal(Self, Self) -> Bool
+pub fn AssetEffectValidation::not_equal(Self, Self) -> Bool
+pub fn AssetEffectValidation::to_repr(Self) -> @debug.Repr
 
 pub struct CanonicalAssetKernel {
   manifest : @converge_audit.Digest
   effect_author : @converge_audit.PublicKey
 }
+pub fn CanonicalAssetKernel::manifest_digest(Self) -> @converge_audit.Digest
 pub fn CanonicalAssetKernel::new(&@converge_audit.Hasher, effect_author~ : @converge_audit.PublicKey) -> Self
+pub fn CanonicalAssetKernel::replay(Self, @converge_audit.AuthenticatedEvent, AssetEffect) -> Bool
 pub impl AssetReplayKernel for CanonicalAssetKernel
 
 pub struct CheckpointReplayMatch {
@@ -107,6 +115,9 @@ pub struct CheckpointReplayMatch {
 } derive(Eq, @debug.Debug)
 pub fn CheckpointReplayMatch::authority_key(Self) -> @converge_audit.PublicKey
 pub fn CheckpointReplayMatch::checkpoint_digest(Self) -> @converge_audit.Digest
+pub fn CheckpointReplayMatch::equal(Self, Self) -> Bool
+pub fn CheckpointReplayMatch::not_equal(Self, Self) -> Bool
+pub fn CheckpointReplayMatch::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DodgeEvidence {
   input : @converge_audit.AuthenticatedEvent
@@ -114,6 +125,9 @@ pub(all) struct DodgeEvidence {
   intent : DodgeIntent
   observed : DodgeReceipt
 } derive(Eq, @debug.Debug)
+pub fn DodgeEvidence::equal(Self, Self) -> Bool
+pub fn DodgeEvidence::not_equal(Self, Self) -> Bool
+pub fn DodgeEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DodgeIntent {
   attack_id : String
@@ -122,22 +136,34 @@ pub(all) struct DodgeIntent {
   client_tick : Int
   to_x : Int
 } derive(Eq, @debug.Debug)
+pub fn DodgeIntent::equal(Self, Self) -> Bool
+pub fn DodgeIntent::not_equal(Self, Self) -> Bool
+pub fn DodgeIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DodgeReceipt {
   input_digest : @converge_audit.Digest
   received_tick : Int
 } derive(Eq, @debug.Debug)
+pub fn DodgeReceipt::equal(Self, Self) -> Bool
+pub fn DodgeReceipt::not_equal(Self, Self) -> Bool
+pub fn DodgeReceipt::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DungeonAttackTranscript {
   attack_id : String
   telegraph : @converge_audit.AuthenticatedEvent
   dodge_evidence : Array[DodgeEvidence]
 } derive(Eq, @debug.Debug)
+pub fn DungeonAttackTranscript::equal(Self, Self) -> Bool
+pub fn DungeonAttackTranscript::not_equal(Self, Self) -> Bool
+pub fn DungeonAttackTranscript::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DungeonEncounterAttack {
   attack : TelegraphedAttack
   damage : Int
 } derive(Eq, @debug.Debug)
+pub fn DungeonEncounterAttack::equal(Self, Self) -> Bool
+pub fn DungeonEncounterAttack::not_equal(Self, Self) -> Bool
+pub fn DungeonEncounterAttack::to_repr(Self) -> @debug.Repr
 
 pub struct DungeonEncounterCandidate {
   session : String
@@ -154,25 +180,37 @@ pub struct DungeonEncounterCandidate {
   accepted_dodges : Int
   cleared : Bool
 } derive(Eq, @debug.Debug)
+pub fn DungeonEncounterCandidate::equal(Self, Self) -> Bool
 pub fn DungeonEncounterCandidate::event_root(Self) -> @converge_audit.Digest
 pub fn DungeonEncounterCandidate::manifest_digest(Self) -> @converge_audit.Digest
+pub fn DungeonEncounterCandidate::not_equal(Self, Self) -> Bool
 pub fn DungeonEncounterCandidate::public_state_root(Self) -> @converge_audit.Digest
+pub fn DungeonEncounterCandidate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DungeonEncounterCandidateResult {
   CandidateReady(DungeonEncounterCandidate)
   Refused(DungeonEncounterRefusal)
 } derive(Eq, @debug.Debug)
+pub fn DungeonEncounterCandidateResult::equal(Self, Self) -> Bool
+pub fn DungeonEncounterCandidateResult::not_equal(Self, Self) -> Bool
+pub fn DungeonEncounterCandidateResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DungeonEncounterConfig {
   encounter_id : String
   player_max_hp : Int
   attack_rules : TelegraphDungeonConfig
 } derive(Eq, @debug.Debug)
+pub fn DungeonEncounterConfig::equal(Self, Self) -> Bool
+pub fn DungeonEncounterConfig::not_equal(Self, Self) -> Bool
+pub fn DungeonEncounterConfig::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DungeonEncounterFinalizeResult {
   EncounterFinalized(DungeonEncounterResolution)
   Refused(DungeonEncounterRefusal)
 } derive(Eq, @debug.Debug)
+pub fn DungeonEncounterFinalizeResult::equal(Self, Self) -> Bool
+pub fn DungeonEncounterFinalizeResult::not_equal(Self, Self) -> Bool
+pub fn DungeonEncounterFinalizeResult::to_repr(Self) -> @debug.Repr
 
 pub struct DungeonEncounterLootKernel {
   session : String
@@ -182,6 +220,8 @@ pub struct DungeonEncounterLootKernel {
   manifest : @converge_audit.Digest
   eligible : Map[String, Bool]
 }
+pub fn DungeonEncounterLootKernel::manifest_digest(Self) -> @converge_audit.Digest
+pub fn DungeonEncounterLootKernel::replay(Self, @converge_audit.AuthenticatedEvent, AssetEffect) -> Bool
 pub impl AssetReplayKernel for DungeonEncounterLootKernel
 
 pub(all) struct DungeonEncounterPlayerState {
@@ -189,6 +229,9 @@ pub(all) struct DungeonEncounterPlayerState {
   position_x : Int
   hp : Int
 } derive(Eq, @debug.Debug)
+pub fn DungeonEncounterPlayerState::equal(Self, Self) -> Bool
+pub fn DungeonEncounterPlayerState::not_equal(Self, Self) -> Bool
+pub fn DungeonEncounterPlayerState::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DungeonEncounterRefusal {
   InvalidEncounterConfiguration
@@ -204,6 +247,9 @@ pub(all) enum DungeonEncounterRefusal {
   CheckpointEventRootMismatch
   CheckpointPublicStateRootMismatch
 } derive(Eq, @debug.Debug)
+pub fn DungeonEncounterRefusal::equal(Self, Self) -> Bool
+pub fn DungeonEncounterRefusal::not_equal(Self, Self) -> Bool
+pub fn DungeonEncounterRefusal::to_repr(Self) -> @debug.Repr
 
 pub struct DungeonEncounterResolution {
   candidate : DungeonEncounterCandidate
@@ -212,14 +258,17 @@ pub struct DungeonEncounterResolution {
 pub fn DungeonEncounterResolution::accepted_dodge_count(Self) -> Int
 pub fn DungeonEncounterResolution::cleared(Self) -> Bool
 pub fn DungeonEncounterResolution::defeated_ids(Self) -> Array[String]
+pub fn DungeonEncounterResolution::equal(Self, Self) -> Bool
 pub fn DungeonEncounterResolution::equivocator_ids(Self) -> Array[String]
 pub fn DungeonEncounterResolution::loot_effect(Self, String) -> AssetEffect?
 pub fn DungeonEncounterResolution::loot_kernel(Self) -> DungeonEncounterLootKernel
 pub fn DungeonEncounterResolution::manifest_digest(Self) -> @converge_audit.Digest
+pub fn DungeonEncounterResolution::not_equal(Self, Self) -> Bool
 pub fn DungeonEncounterResolution::player_states(Self) -> Array[DungeonEncounterPlayerState]
 pub fn DungeonEncounterResolution::public_state_root(Self) -> @converge_audit.Digest
 pub fn DungeonEncounterResolution::replay_match(Self) -> CheckpointReplayMatch
 pub fn DungeonEncounterResolution::survivor_ids(Self) -> Array[String]
+pub fn DungeonEncounterResolution::to_repr(Self) -> @debug.Repr
 
 pub struct DungeonLootKernel {
   session : String
@@ -229,6 +278,8 @@ pub struct DungeonLootKernel {
   manifest : @converge_audit.Digest
   eligible : Map[String, Bool]
 }
+pub fn DungeonLootKernel::manifest_digest(Self) -> @converge_audit.Digest
+pub fn DungeonLootKernel::replay(Self, @converge_audit.AuthenticatedEvent, AssetEffect) -> Bool
 pub impl AssetReplayKernel for DungeonLootKernel
 
 pub(all) struct DungeonPlayer {
@@ -236,6 +287,9 @@ pub(all) struct DungeonPlayer {
   public_key : @converge_audit.PublicKey
   initial_x : Int
 } derive(Eq, @debug.Debug)
+pub fn DungeonPlayer::equal(Self, Self) -> Bool
+pub fn DungeonPlayer::not_equal(Self, Self) -> Bool
+pub fn DungeonPlayer::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DungeonPlayerAttackEvidence {
   input : @converge_audit.AuthenticatedEvent
@@ -243,17 +297,26 @@ pub(all) struct DungeonPlayerAttackEvidence {
   intent : DungeonPlayerAttackIntent
   observed : DungeonPlayerAttackReceipt
 } derive(Eq, @debug.Debug)
+pub fn DungeonPlayerAttackEvidence::equal(Self, Self) -> Bool
+pub fn DungeonPlayerAttackEvidence::not_equal(Self, Self) -> Bool
+pub fn DungeonPlayerAttackEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DungeonPlayerAttackIntent {
   encounter_id : String
   player_id : String
   tick : Int
 } derive(Eq, @debug.Debug)
+pub fn DungeonPlayerAttackIntent::equal(Self, Self) -> Bool
+pub fn DungeonPlayerAttackIntent::not_equal(Self, Self) -> Bool
+pub fn DungeonPlayerAttackIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DungeonPlayerAttackReceipt {
   input_digest : @converge_audit.Digest
   received_tick : Int
 } derive(Eq, @debug.Debug)
+pub fn DungeonPlayerAttackReceipt::equal(Self, Self) -> Bool
+pub fn DungeonPlayerAttackReceipt::not_equal(Self, Self) -> Bool
+pub fn DungeonPlayerAttackReceipt::to_repr(Self) -> @debug.Repr
 
 pub struct DungeonRaidCandidate {
   defense : DungeonEncounterCandidate
@@ -269,19 +332,28 @@ pub fn DungeonRaidCandidate::accepted_player_attack_count(Self) -> Int
 pub fn DungeonRaidCandidate::boss_hp(Self) -> Int
 pub fn DungeonRaidCandidate::cleared(Self) -> Bool
 pub fn DungeonRaidCandidate::cooldown_violator_ids(Self) -> Array[String]
+pub fn DungeonRaidCandidate::equal(Self, Self) -> Bool
 pub fn DungeonRaidCandidate::event_root(Self) -> @converge_audit.Digest
 pub fn DungeonRaidCandidate::manifest_digest(Self) -> @converge_audit.Digest
+pub fn DungeonRaidCandidate::not_equal(Self, Self) -> Bool
 pub fn DungeonRaidCandidate::public_state_root(Self) -> @converge_audit.Digest
+pub fn DungeonRaidCandidate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DungeonRaidCandidateResult {
   RaidCandidateReady(DungeonRaidCandidate)
   RaidCandidateRefused(DungeonRaidRefusal)
 } derive(Eq, @debug.Debug)
+pub fn DungeonRaidCandidateResult::equal(Self, Self) -> Bool
+pub fn DungeonRaidCandidateResult::not_equal(Self, Self) -> Bool
+pub fn DungeonRaidCandidateResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DungeonRaidFinalizeResult {
   RaidFinalized(DungeonRaidResolution)
   RaidFinalizeRefused(DungeonRaidRefusal)
 } derive(Eq, @debug.Debug)
+pub fn DungeonRaidFinalizeResult::equal(Self, Self) -> Bool
+pub fn DungeonRaidFinalizeResult::not_equal(Self, Self) -> Bool
+pub fn DungeonRaidFinalizeResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DungeonRaidRefusal {
   InvalidRaidRules
@@ -296,6 +368,9 @@ pub(all) enum DungeonRaidRefusal {
   RaidCheckpointPublicStateRootMismatch
   RaidCheckpointHiddenStatePresent
 } derive(Eq, @debug.Debug)
+pub fn DungeonRaidRefusal::equal(Self, Self) -> Bool
+pub fn DungeonRaidRefusal::not_equal(Self, Self) -> Bool
+pub fn DungeonRaidRefusal::to_repr(Self) -> @debug.Repr
 
 pub struct DungeonRaidResolution {
   candidate : DungeonRaidCandidate
@@ -304,7 +379,10 @@ pub struct DungeonRaidResolution {
 pub fn DungeonRaidResolution::boss_hp(Self) -> Int
 pub fn DungeonRaidResolution::checkpoint_digest(Self) -> @converge_audit.Digest
 pub fn DungeonRaidResolution::cleared(Self) -> Bool
+pub fn DungeonRaidResolution::equal(Self, Self) -> Bool
+pub fn DungeonRaidResolution::not_equal(Self, Self) -> Bool
 pub fn DungeonRaidResolution::survivor_ids(Self) -> Array[String]
+pub fn DungeonRaidResolution::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DungeonRaidRules {
   boss_max_hp : Int
@@ -313,6 +391,9 @@ pub(all) struct DungeonRaidRules {
   damage_phase_start_tick : Int
   enrage_tick : Int
 } derive(Eq, @debug.Debug)
+pub fn DungeonRaidRules::equal(Self, Self) -> Bool
+pub fn DungeonRaidRules::not_equal(Self, Self) -> Bool
+pub fn DungeonRaidRules::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DungeonReplayRefusal {
   InvalidConfiguration
@@ -324,11 +405,17 @@ pub(all) enum DungeonReplayRefusal {
   CheckpointManifestMismatch
   CheckpointEventRootMismatch
 } derive(Eq, @debug.Debug)
+pub fn DungeonReplayRefusal::equal(Self, Self) -> Bool
+pub fn DungeonReplayRefusal::not_equal(Self, Self) -> Bool
+pub fn DungeonReplayRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum DungeonReplayResult {
   Resolved(DungeonResolution)
   Refused(DungeonReplayRefusal)
 } derive(Eq, @debug.Debug)
+pub fn DungeonReplayResult::equal(Self, Self) -> Bool
+pub fn DungeonReplayResult::not_equal(Self, Self) -> Bool
+pub fn DungeonReplayResult::to_repr(Self) -> @debug.Repr
 
 pub struct DungeonResolution {
   session : String
@@ -342,12 +429,15 @@ pub struct DungeonResolution {
   accepted_dodges : Int
 } derive(Eq, @debug.Debug)
 pub fn DungeonResolution::accepted_dodge_count(Self) -> Int
+pub fn DungeonResolution::equal(Self, Self) -> Bool
 pub fn DungeonResolution::equivocator_ids(Self) -> Array[String]
 pub fn DungeonResolution::hit_ids(Self) -> Array[String]
 pub fn DungeonResolution::loot_effect(Self, String) -> AssetEffect?
 pub fn DungeonResolution::loot_kernel(Self) -> DungeonLootKernel
 pub fn DungeonResolution::manifest_digest(Self) -> @converge_audit.Digest
+pub fn DungeonResolution::not_equal(Self, Self) -> Bool
 pub fn DungeonResolution::survivor_ids(Self) -> Array[String]
+pub fn DungeonResolution::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpCommandEvidence {
   input : @converge_audit.AuthenticatedEvent
@@ -355,6 +445,9 @@ pub(all) struct PvpCommandEvidence {
   intent : PvpCommandIntent
   observed : PvpCommandReceipt
 } derive(Eq, @debug.Debug)
+pub fn PvpCommandEvidence::equal(Self, Self) -> Bool
+pub fn PvpCommandEvidence::not_equal(Self, Self) -> Bool
+pub fn PvpCommandEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpCommandIntent {
   match_id : String
@@ -365,11 +458,17 @@ pub(all) struct PvpCommandIntent {
   move_to_x : Int
   attack_target_id : String?
 } derive(Eq, @debug.Debug)
+pub fn PvpCommandIntent::equal(Self, Self) -> Bool
+pub fn PvpCommandIntent::not_equal(Self, Self) -> Bool
+pub fn PvpCommandIntent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpCommandReceipt {
   command_digest : @converge_audit.Digest
   received_tick : Int
 } derive(Eq, @debug.Debug)
+pub fn PvpCommandReceipt::equal(Self, Self) -> Bool
+pub fn PvpCommandReceipt::not_equal(Self, Self) -> Bool
+pub fn PvpCommandReceipt::to_repr(Self) -> @debug.Repr
 
 pub struct PvpEpochCandidate {
   session : String
@@ -387,15 +486,21 @@ pub struct PvpEpochCandidate {
   accepted_commands : Int
 } derive(Eq, @debug.Debug)
 pub fn PvpEpochCandidate::asset_delta_root(Self) -> @converge_audit.Digest
+pub fn PvpEpochCandidate::equal(Self, Self) -> Bool
 pub fn PvpEpochCandidate::event_root(Self) -> @converge_audit.Digest
 pub fn PvpEpochCandidate::game_manifest_digest(Self) -> @converge_audit.Digest
 pub fn PvpEpochCandidate::manifest_digest(Self) -> @converge_audit.Digest
+pub fn PvpEpochCandidate::not_equal(Self, Self) -> Bool
 pub fn PvpEpochCandidate::public_state_root(Self) -> @converge_audit.Digest
+pub fn PvpEpochCandidate::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PvpEpochCandidateResult {
   PvpCandidateReady(PvpEpochCandidate)
   PvpCandidateRefused(PvpEpochRefusal)
 } derive(Eq, @debug.Debug)
+pub fn PvpEpochCandidateResult::equal(Self, Self) -> Bool
+pub fn PvpEpochCandidateResult::not_equal(Self, Self) -> Bool
+pub fn PvpEpochCandidateResult::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpEpochConfig {
   match_id : String
@@ -411,11 +516,17 @@ pub(all) struct PvpEpochConfig {
   attack_damage : Int
   score_per_elimination : Int
 } derive(Eq, @debug.Debug)
+pub fn PvpEpochConfig::equal(Self, Self) -> Bool
+pub fn PvpEpochConfig::not_equal(Self, Self) -> Bool
+pub fn PvpEpochConfig::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PvpEpochFinalizeResult {
   PvpEpochFinalized(PvpEpochResolution)
   PvpFinalizeRefused(PvpEpochRefusal)
 } derive(Eq, @debug.Debug)
+pub fn PvpEpochFinalizeResult::equal(Self, Self) -> Bool
+pub fn PvpEpochFinalizeResult::not_equal(Self, Self) -> Bool
+pub fn PvpEpochFinalizeResult::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PvpEpochRefusal {
   InvalidEpochConfiguration
@@ -436,6 +547,9 @@ pub(all) enum PvpEpochRefusal {
   CheckpointAssetDeltaRootMismatch
   CheckpointHiddenStatePresent
 } derive(Eq, @debug.Debug)
+pub fn PvpEpochRefusal::equal(Self, Self) -> Bool
+pub fn PvpEpochRefusal::not_equal(Self, Self) -> Bool
+pub fn PvpEpochRefusal::to_repr(Self) -> @debug.Repr
 
 pub struct PvpEpochResolution {
   candidate : PvpEpochCandidate
@@ -443,17 +557,23 @@ pub struct PvpEpochResolution {
 } derive(Eq, @debug.Debug)
 pub fn PvpEpochResolution::accepted_command_count(Self) -> Int
 pub fn PvpEpochResolution::cooldown_violator_ids(Self) -> Array[String]
+pub fn PvpEpochResolution::equal(Self, Self) -> Bool
 pub fn PvpEpochResolution::equivocator_ids(Self) -> Array[String]
 pub fn PvpEpochResolution::game_manifest_digest(Self) -> @converge_audit.Digest
+pub fn PvpEpochResolution::not_equal(Self, Self) -> Bool
 pub fn PvpEpochResolution::player_states(Self) -> Array[PvpPlayerState]
 pub fn PvpEpochResolution::replay_match(Self) -> CheckpointReplayMatch
 pub fn PvpEpochResolution::team_states(Self) -> Array[PvpTeamState]
+pub fn PvpEpochResolution::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpObjectiveRule {
   center_x : Int
   radius : Int
   score_per_tick : Int
 } derive(Eq, @debug.Debug)
+pub fn PvpObjectiveRule::equal(Self, Self) -> Bool
+pub fn PvpObjectiveRule::not_equal(Self, Self) -> Bool
+pub fn PvpObjectiveRule::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpPlayer {
   player_id : String
@@ -462,6 +582,9 @@ pub(all) struct PvpPlayer {
   initial_x : Int
   initial_hp : Int
 } derive(Eq, @debug.Debug)
+pub fn PvpPlayer::equal(Self, Self) -> Bool
+pub fn PvpPlayer::not_equal(Self, Self) -> Bool
+pub fn PvpPlayer::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpPlayerState {
   player_id : String
@@ -469,16 +592,25 @@ pub(all) struct PvpPlayerState {
   position_x : Int
   hp : Int
 } derive(Eq, @debug.Debug)
+pub fn PvpPlayerState::equal(Self, Self) -> Bool
+pub fn PvpPlayerState::not_equal(Self, Self) -> Bool
+pub fn PvpPlayerState::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpTeam {
   team_id : String
   initial_score : Int
 } derive(Eq, @debug.Debug)
+pub fn PvpTeam::equal(Self, Self) -> Bool
+pub fn PvpTeam::not_equal(Self, Self) -> Bool
+pub fn PvpTeam::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpTeamState {
   team_id : String
   score : Int
 } derive(Eq, @debug.Debug)
+pub fn PvpTeamState::equal(Self, Self) -> Bool
+pub fn PvpTeamState::not_equal(Self, Self) -> Bool
+pub fn PvpTeamState::to_repr(Self) -> @debug.Repr
 
 pub struct ReplayEngine {
   session : String
@@ -493,11 +625,17 @@ pub(all) enum ReplayRefusal {
   InvalidManifest
   KernelRejected
 } derive(Eq, @debug.Debug)
+pub fn ReplayRefusal::equal(Self, Self) -> Bool
+pub fn ReplayRefusal::not_equal(Self, Self) -> Bool
+pub fn ReplayRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum ReplayResult {
   Replayed(ReplayedAssetEffect)
   Refused(ReplayRefusal)
 } derive(Eq, @debug.Debug)
+pub fn ReplayResult::equal(Self, Self) -> Bool
+pub fn ReplayResult::not_equal(Self, Self) -> Bool
+pub fn ReplayResult::to_repr(Self) -> @debug.Repr
 
 pub struct ReplayedAssetEffect {
   source : @converge_audit.AuthenticatedEvent
@@ -505,10 +643,13 @@ pub struct ReplayedAssetEffect {
   effect : AssetEffect
 } derive(Eq, @debug.Debug)
 pub fn ReplayedAssetEffect::effect(Self) -> AssetEffect
+pub fn ReplayedAssetEffect::equal(Self, Self) -> Bool
 pub fn ReplayedAssetEffect::manifest_digest(Self) -> @converge_audit.Digest
 pub fn ReplayedAssetEffect::matches(Self, session_id~ : String, manifest_digest~ : @converge_audit.Digest, source_digest~ : @converge_audit.Digest, effect~ : AssetEffect) -> Bool
+pub fn ReplayedAssetEffect::not_equal(Self, Self) -> Bool
 pub fn ReplayedAssetEffect::session_id(Self) -> String
 pub fn ReplayedAssetEffect::source_digest(Self) -> @converge_audit.Digest
+pub fn ReplayedAssetEffect::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TelegraphDungeonConfig {
   min_reaction_ticks : Int
@@ -518,6 +659,9 @@ pub(all) struct TelegraphDungeonConfig {
   arena_max_x : Int
   loot_item_type : String
 } derive(Eq, @debug.Debug)
+pub fn TelegraphDungeonConfig::equal(Self, Self) -> Bool
+pub fn TelegraphDungeonConfig::not_equal(Self, Self) -> Bool
+pub fn TelegraphDungeonConfig::to_repr(Self) -> @debug.Repr
 
 pub(all) struct TelegraphedAttack {
   attack_id : String
@@ -526,6 +670,9 @@ pub(all) struct TelegraphedAttack {
   center_x : Int
   radius : Int
 } derive(Eq, @debug.Debug)
+pub fn TelegraphedAttack::equal(Self, Self) -> Bool
+pub fn TelegraphedAttack::not_equal(Self, Self) -> Bool
+pub fn TelegraphedAttack::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
@@ -534,4 +681,3 @@ pub trait AssetReplayKernel {
   fn manifest_digest(Self) -> @converge_audit.Digest
   fn replay(Self, @converge_audit.AuthenticatedEvent, AssetEffect) -> Bool
 }
-

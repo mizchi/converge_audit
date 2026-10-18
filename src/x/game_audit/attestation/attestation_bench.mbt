@@ -20,7 +20,7 @@ fn bench_roster(size : Int) -> (Array[@bft.MockSigner], Array[Participant]) {
     let id = "peer-" + i.to_string()
     let signer = @bft.MockSigner::new(id)
     signers.push(signer)
-    roster.push({ id, key: signer.public_key() })
+    roster.push({ id, key: signer.public_key(), })
   }
   (signers, roster)
 }

@@ -40,17 +40,25 @@ fn published_anchor_for_head_test(
   log_session_id : String,
   epoch : Int,
   previous_checkpoint : @bft.Digest,
-  anchor : OpenWorldObserverSigningAnchor,
-) -> PublishedOpenWorldObserverSigningAnchor raise Error {
+  anchor : @open_world.OpenWorldObserverSigningAnchor,
+) -> @open_world.PublishedOpenWorldObserverSigningAnchor raise Error {
   let anchor_map = @authmap.AuthenticatedMap::new(hasher)
-  let key = open_world_observer_signing_anchor_key(anchor)
-  ignore(anchor_map.put(key, open_world_observer_signing_anchor_value(anchor)))
+  let key = @open_world.open_world_observer_signing_anchor_key(anchor)
+  ignore(
+    anchor_map.put(
+      key,
+      @open_world.open_world_observer_signing_anchor_value(anchor),
+    ),
+  )
   let checkpoint = signing_anchor_checkpoint(
     hasher,
     verifier,
     authority,
     log_session_id,
-    open_world_observer_signing_anchor_log_manifest(hasher, log_session_id~),
+    @open_world.open_world_observer_signing_anchor_log_manifest(
+      hasher,
+      log_session_id~,
+    ),
     anchor_map.root(),
     epoch~,
     previous_checkpoint~,
@@ -60,7 +68,7 @@ fn published_anchor_for_head_test(
     None => fail("expected signing anchor head proof")
   }
   match
-    open_published_open_world_observer_signing_anchor(
+    @open_world.open_published_open_world_observer_signing_anchor(
       hasher,
       checkpoint,
       log_session_id~,
@@ -78,9 +86,9 @@ test "authority checkpoint publishes anchor used for exact restore and rollback 
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("observer-anchor-authority")
   let signer = @bft.MockSigner::new("published-observer-key")
-  let store = OpenWorldInMemoryObserverSigningStore::new(hasher)
+  let store = @open_world.OpenWorldInMemoryObserverSigningStore::new(hasher)
   let ledger = match
-    OpenWorldObserverSigningLedger::new_with_store(
+    @open_world.OpenWorldObserverSigningLedger::new_with_store(
       hasher,
       signer,
       observer_id="published-observer",
@@ -102,8 +110,8 @@ test "authority checkpoint publishes anchor used for exact restore and rollback 
   ignore(anchor_map.put("another-observer-key", "another-observer-anchor"))
   ignore(
     anchor_map.put(
-      open_world_observer_signing_anchor_key(anchor),
-      open_world_observer_signing_anchor_value(anchor),
+      @open_world.open_world_observer_signing_anchor_key(anchor),
+      @open_world.open_world_observer_signing_anchor_value(anchor),
     ),
   )
   let checkpoint = signing_anchor_checkpoint(
@@ -111,16 +119,19 @@ test "authority checkpoint publishes anchor used for exact restore and rollback 
     verifier,
     authority,
     log_session_id,
-    open_world_observer_signing_anchor_log_manifest(hasher, log_session_id~),
+    @open_world.open_world_observer_signing_anchor_log_manifest(
+      hasher,
+      log_session_id~,
+    ),
     anchor_map.root(),
   )
   let proof = match
-    anchor_map.proof(open_world_observer_signing_anchor_key(anchor)) {
+    anchor_map.proof(@open_world.open_world_observer_signing_anchor_key(anchor)) {
     Some(proof) => proof
     None => fail("expected observer anchor membership proof")
   }
   let published = match
-    open_published_open_world_observer_signing_anchor(
+    @open_world.open_published_open_world_observer_signing_anchor(
       hasher,
       checkpoint,
       log_session_id~,
@@ -141,7 +152,7 @@ test "authority checkpoint publishes anchor used for exact restore and rollback 
   assert_eq(published.log_session_id(), log_session_id)
   assert_eq(published.log_epoch(), 41)
   match
-    OpenWorldObserverSigningLedger::new_with_published_anchor(
+    @open_world.OpenWorldObserverSigningLedger::new_with_published_anchor(
       hasher,
       signer,
       observer_id="published-observer",
@@ -151,9 +162,11 @@ test "authority checkpoint publishes anchor used for exact restore and rollback 
     ObserverSigningLedgerReady(_) => ()
     _ => fail("expected exact published anchor restore")
   }
-  let rolled_back_store = OpenWorldInMemoryObserverSigningStore::new(hasher)
+  let rolled_back_store = @open_world.OpenWorldInMemoryObserverSigningStore::new(
+    hasher,
+  )
   assert_true(
-    OpenWorldObserverSigningLedger::new_with_published_anchor(
+    @open_world.OpenWorldObserverSigningLedger::new_with_published_anchor(
       hasher,
       signer,
       observer_id="published-observer",
@@ -170,7 +183,7 @@ test "observer signing anchor publication rejects invalid boundaries and proofs"
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("observer-anchor-authority")
   let log_session_id = "world-1:observer-signing-anchors"
-  let anchor = OpenWorldObserverSigningAnchor::{
+  let anchor = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("observer-root-1"),
@@ -179,8 +192,8 @@ test "observer signing anchor publication rejects invalid boundaries and proofs"
   let anchor_map = @authmap.AuthenticatedMap::new(hasher)
   ignore(
     anchor_map.put(
-      open_world_observer_signing_anchor_key(anchor),
-      open_world_observer_signing_anchor_value(anchor),
+      @open_world.open_world_observer_signing_anchor_key(anchor),
+      @open_world.open_world_observer_signing_anchor_value(anchor),
     ),
   )
   let checkpoint = signing_anchor_checkpoint(
@@ -188,36 +201,42 @@ test "observer signing anchor publication rejects invalid boundaries and proofs"
     verifier,
     authority,
     log_session_id,
-    open_world_observer_signing_anchor_log_manifest(hasher, log_session_id~),
+    @open_world.open_world_observer_signing_anchor_log_manifest(
+      hasher,
+      log_session_id~,
+    ),
     anchor_map.root(),
   )
   let proof = match
-    anchor_map.proof(open_world_observer_signing_anchor_key(anchor)) {
+    anchor_map.proof(@open_world.open_world_observer_signing_anchor_key(anchor)) {
     Some(proof) => proof
     None => fail("expected observer anchor proof")
   }
-  let invalid_anchor = OpenWorldObserverSigningAnchor::{ ..anchor, size: -1 }
+  let invalid_anchor = @open_world.OpenWorldObserverSigningAnchor::{
+    ..anchor,
+    size: -1,
+  }
   assert_eq(
-    open_published_open_world_observer_signing_anchor(
+    @open_world.open_published_open_world_observer_signing_anchor(
       hasher,
       checkpoint,
       log_session_id~,
       anchor=invalid_anchor,
       membership_proof=proof,
     ),
-    OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
+    @open_world.OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
       InvalidObserverSigningAnchor,
     ),
   )
   assert_eq(
-    open_published_open_world_observer_signing_anchor(
+    @open_world.open_published_open_world_observer_signing_anchor(
       hasher,
       checkpoint,
       log_session_id="world-2:observer-signing-anchors",
       anchor~,
       membership_proof=proof,
     ),
-    OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
+    @open_world.OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
       ObserverSigningAnchorLogSessionMismatch,
     ),
   )
@@ -230,44 +249,44 @@ test "observer signing anchor publication rejects invalid boundaries and proofs"
     anchor_map.root(),
   )
   assert_eq(
-    open_published_open_world_observer_signing_anchor(
+    @open_world.open_published_open_world_observer_signing_anchor(
       hasher,
       wrong_manifest,
       log_session_id~,
       anchor~,
       membership_proof=proof,
     ),
-    OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
+    @open_world.OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
       ObserverSigningAnchorLogManifestMismatch,
     ),
   )
-  let substituted = OpenWorldObserverSigningAnchor::{
+  let substituted = @open_world.OpenWorldObserverSigningAnchor::{
     ..anchor,
     root: @bft.Digest("substituted-observer-root"),
   }
   assert_eq(
-    open_published_open_world_observer_signing_anchor(
+    @open_world.open_published_open_world_observer_signing_anchor(
       hasher,
       checkpoint,
       log_session_id~,
       anchor=substituted,
       membership_proof=proof,
     ),
-    OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
+    @open_world.OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
       ObserverSigningAnchorMembershipProofInvalid,
     ),
   )
   let replaced_map = @authmap.AuthenticatedMap::new(hasher)
   ignore(
     replaced_map.put(
-      open_world_observer_signing_anchor_key(anchor),
-      open_world_observer_signing_anchor_value(anchor),
+      @open_world.open_world_observer_signing_anchor_key(anchor),
+      @open_world.open_world_observer_signing_anchor_value(anchor),
     ),
   )
   ignore(
     replaced_map.put(
-      open_world_observer_signing_anchor_key(substituted),
-      open_world_observer_signing_anchor_value(substituted),
+      @open_world.open_world_observer_signing_anchor_key(substituted),
+      @open_world.open_world_observer_signing_anchor_value(substituted),
     ),
   )
   assert_eq(replaced_map.size(), 1)
@@ -276,28 +295,33 @@ test "observer signing anchor publication rejects invalid boundaries and proofs"
     verifier,
     authority,
     log_session_id,
-    open_world_observer_signing_anchor_log_manifest(hasher, log_session_id~),
+    @open_world.open_world_observer_signing_anchor_log_manifest(
+      hasher,
+      log_session_id~,
+    ),
     replaced_map.root(),
   )
   let replaced_proof = match
-    replaced_map.proof(open_world_observer_signing_anchor_key(anchor)) {
+    replaced_map.proof(
+      @open_world.open_world_observer_signing_anchor_key(anchor),
+    ) {
     Some(proof) => proof
     None => fail("expected replaced observer anchor proof")
   }
   assert_eq(
-    open_published_open_world_observer_signing_anchor(
+    @open_world.open_published_open_world_observer_signing_anchor(
       hasher,
       replaced_checkpoint,
       log_session_id~,
       anchor~,
       membership_proof=replaced_proof,
     ),
-    OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
+    @open_world.OpenWorldObserverSigningAnchorPublicationResult::ObserverSigningAnchorPublicationRefused(
       ObserverSigningAnchorMembershipProofInvalid,
     ),
   )
   match
-    open_published_open_world_observer_signing_anchor(
+    @open_world.open_published_open_world_observer_signing_anchor(
       hasher,
       replaced_checkpoint,
       log_session_id~,
@@ -315,7 +339,7 @@ test "anchor head tracker advances one parent at a time and deduplicates history
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("head-authority")
   let session = "world-1:anchor-heads"
-  let anchor_41 = OpenWorldObserverSigningAnchor::{
+  let anchor_41 = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("root-41"),
@@ -330,7 +354,7 @@ test "anchor head tracker advances one parent at a time and deduplicates history
     @bft.Digest("head-40"),
     anchor_41,
   )
-  let anchor_42 = OpenWorldObserverSigningAnchor::{
+  let anchor_42 = @open_world.OpenWorldObserverSigningAnchor::{
     ..anchor_41,
     root: @bft.Digest("root-42"),
     size: 42,
@@ -344,12 +368,14 @@ test "anchor head tracker advances one parent at a time and deduplicates history
     head_41.publication_checkpoint_digest(),
     anchor_42,
   )
-  let tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_41)
+  let tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_41,
+  )
   assert_eq(tracker.log_session_id(), session)
   assert_eq(tracker.publisher_key(), authority.public_key())
   assert_eq(
     tracker.deliver(head_42),
-    OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadAdvanced,
+    @open_world.OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadAdvanced,
   )
   assert_eq(tracker.current_epoch(), 42)
   assert_eq(tracker.observed_checkpoint_count(), 2)
@@ -359,11 +385,11 @@ test "anchor head tracker advances one parent at a time and deduplicates history
   )
   assert_eq(
     tracker.deliver(head_42),
-    OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadDuplicate,
+    @open_world.OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadDuplicate,
   )
   assert_eq(
     tracker.deliver(head_41),
-    OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadDuplicate,
+    @open_world.OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadDuplicate,
   )
 }
 
@@ -373,7 +399,7 @@ test "anchor head tracker creates evidence for same-epoch and parent forks" {
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("fork-authority")
   let session = "world-1:fork-heads"
-  let base = OpenWorldObserverSigningAnchor::{
+  let base = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("base-root"),
@@ -395,7 +421,7 @@ test "anchor head tracker creates evidence for same-epoch and parent forks" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("fork-a"), size: 11 },
+    { ..base, root: @bft.Digest("fork-a"), size: 11, },
   )
   let fork_b = published_anchor_for_head_test(
     hasher,
@@ -404,9 +430,9 @@ test "anchor head tracker creates evidence for same-epoch and parent forks" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("fork-b"), size: 12 },
+    { ..base, root: @bft.Digest("fork-b"), size: 12, },
   )
-  let same_epoch_tracker = OpenWorldObserverSigningAnchorHeadTracker::new(
+  let same_epoch_tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
     fork_a,
   )
   match same_epoch_tracker.deliver(fork_b) {
@@ -434,9 +460,11 @@ test "anchor head tracker creates evidence for same-epoch and parent forks" {
     session,
     11,
     @bft.Digest("different-head-10"),
-    { ..base, root: @bft.Digest("wrong-parent"), size: 11 },
+    { ..base, root: @bft.Digest("wrong-parent"), size: 11, },
   )
-  let parent_tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_10)
+  let parent_tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_10,
+  )
   match parent_tracker.deliver(wrong_parent) {
     SigningAnchorHeadForkDetected(evidence) => {
       assert_eq(evidence.kind(), WrongParentSigningAnchorCheckpoint)
@@ -466,7 +494,7 @@ test "anchor head gaps stale checkpoints and foreign boundaries do not accuse" {
   let authority = @bft.MockSigner::new("boundary-authority")
   let foreign_authority = @bft.MockSigner::new("foreign-head-authority")
   let session = "world-1:boundary-heads"
-  let anchor = OpenWorldObserverSigningAnchor::{
+  let anchor = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("boundary-root"),
@@ -481,7 +509,9 @@ test "anchor head gaps stale checkpoints and foreign boundaries do not accuse" {
     @bft.Digest("head-9"),
     anchor,
   )
-  let tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_10)
+  let tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_10,
+  )
   let gap = published_anchor_for_head_test(
     hasher,
     verifier,
@@ -489,11 +519,13 @@ test "anchor head gaps stale checkpoints and foreign boundaries do not accuse" {
     session,
     13,
     @bft.Digest("head-12"),
-    { ..anchor, root: @bft.Digest("gap-root"), size: 13 },
+    { ..anchor, root: @bft.Digest("gap-root"), size: 13, },
   )
   assert_eq(
     tracker.deliver(gap),
-    OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadGap(11, 13),
+    @open_world.OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadGap(
+      11, 13,
+    ),
   )
   let stale = published_anchor_for_head_test(
     hasher,
@@ -502,11 +534,11 @@ test "anchor head gaps stale checkpoints and foreign boundaries do not accuse" {
     session,
     9,
     @bft.Digest("head-8"),
-    { ..anchor, root: @bft.Digest("stale-root"), size: 9 },
+    { ..anchor, root: @bft.Digest("stale-root"), size: 9, },
   )
   assert_eq(
     tracker.deliver(stale),
-    OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadStale,
+    @open_world.OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadStale,
   )
   let foreign_session = published_anchor_for_head_test(
     hasher,
@@ -519,7 +551,7 @@ test "anchor head gaps stale checkpoints and foreign boundaries do not accuse" {
   )
   assert_eq(
     tracker.deliver(foreign_session),
-    OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadBoundaryMismatch,
+    @open_world.OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadBoundaryMismatch,
   )
   let foreign_publisher = published_anchor_for_head_test(
     hasher,
@@ -532,7 +564,7 @@ test "anchor head gaps stale checkpoints and foreign boundaries do not accuse" {
   )
   assert_eq(
     tracker.deliver(foreign_publisher),
-    OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadBoundaryMismatch,
+    @open_world.OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadBoundaryMismatch,
   )
   assert_eq(tracker.current_epoch(), 10)
 }
@@ -543,7 +575,7 @@ test "anchor head batch fills a gap atomically and is idempotent" {
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("batch-authority")
   let session = "world-1:batch-heads"
-  let base = OpenWorldObserverSigningAnchor::{
+  let base = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("batch-root-10"),
@@ -565,7 +597,7 @@ test "anchor head batch fills a gap atomically and is idempotent" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("batch-root-11"), size: 11 },
+    { ..base, root: @bft.Digest("batch-root-11"), size: 11, },
   )
   let head_12 = published_anchor_for_head_test(
     hasher,
@@ -574,7 +606,7 @@ test "anchor head batch fills a gap atomically and is idempotent" {
     session,
     12,
     head_11.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("batch-root-12"), size: 12 },
+    { ..base, root: @bft.Digest("batch-root-12"), size: 12, },
   )
   let head_13 = published_anchor_for_head_test(
     hasher,
@@ -583,16 +615,20 @@ test "anchor head batch fills a gap atomically and is idempotent" {
     session,
     13,
     head_12.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("batch-root-13"), size: 13 },
+    { ..base, root: @bft.Digest("batch-root-13"), size: 13, },
   )
-  let tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_10)
+  let tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_10,
+  )
   assert_eq(
     tracker.deliver(head_13),
-    OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadGap(11, 13),
+    @open_world.OpenWorldObserverSigningAnchorHeadDelivery::SigningAnchorHeadGap(
+      11, 13,
+    ),
   )
   assert_eq(
     tracker.deliver_batch([head_11, head_12, head_13]),
-    OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchAdvanced(
+    @open_world.OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchAdvanced(
       3,
     ),
   )
@@ -600,11 +636,11 @@ test "anchor head batch fills a gap atomically and is idempotent" {
   assert_eq(tracker.observed_checkpoint_count(), 4)
   assert_eq(
     tracker.deliver_batch([head_11, head_12, head_13]),
-    OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchNoChange,
+    @open_world.OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchNoChange,
   )
   assert_eq(
     tracker.deliver_batch([]),
-    OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchNoChange,
+    @open_world.OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchNoChange,
   )
 }
 
@@ -614,7 +650,7 @@ test "invalid anchor head batches roll back every planned advance" {
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("batch-rollback-authority")
   let session = "world-1:batch-rollback-heads"
-  let base = OpenWorldObserverSigningAnchor::{
+  let base = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("rollback-root-10"),
@@ -636,7 +672,7 @@ test "invalid anchor head batches roll back every planned advance" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("rollback-root-11"), size: 11 },
+    { ..base, root: @bft.Digest("rollback-root-11"), size: 11, },
   )
   let wrong_parent_12 = published_anchor_for_head_test(
     hasher,
@@ -645,9 +681,11 @@ test "invalid anchor head batches roll back every planned advance" {
     session,
     12,
     @bft.Digest("wrong-head-11"),
-    { ..base, root: @bft.Digest("wrong-parent-root-12"), size: 12 },
+    { ..base, root: @bft.Digest("wrong-parent-root-12"), size: 12, },
   )
-  let tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_10)
+  let tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_10,
+  )
   match tracker.deliver_batch([head_11, wrong_parent_12]) {
     SigningAnchorHeadBatchForkDetected(index, evidence) => {
       assert_eq(index, 1)
@@ -664,11 +702,11 @@ test "invalid anchor head batches roll back every planned advance" {
     session,
     13,
     @bft.Digest("head-12"),
-    { ..base, root: @bft.Digest("gap-root-13"), size: 13 },
+    { ..base, root: @bft.Digest("gap-root-13"), size: 13, },
   )
   assert_eq(
     tracker.deliver_batch([head_11, head_13]),
-    OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchGap(
+    @open_world.OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchGap(
       1, 12, 13,
     ),
   )
@@ -680,11 +718,11 @@ test "invalid anchor head batches roll back every planned advance" {
     "world-2:batch-rollback-heads",
     12,
     head_11.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("foreign-root-12"), size: 12 },
+    { ..base, root: @bft.Digest("foreign-root-12"), size: 12, },
   )
   assert_eq(
     tracker.deliver_batch([head_11, foreign]),
-    OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchBoundaryMismatch(
+    @open_world.OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchBoundaryMismatch(
       1,
     ),
   )
@@ -696,11 +734,11 @@ test "invalid anchor head batches roll back every planned advance" {
     session,
     9,
     @bft.Digest("rollback-head-8"),
-    { ..base, root: @bft.Digest("rollback-stale-root-9"), size: 9 },
+    { ..base, root: @bft.Digest("rollback-stale-root-9"), size: 9, },
   )
   assert_eq(
     tracker.deliver_batch([stale]),
-    OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchStale(
+    @open_world.OpenWorldObserverSigningAnchorHeadBatchDelivery::SigningAnchorHeadBatchStale(
       0, 9,
     ),
   )
@@ -712,7 +750,7 @@ test "invalid anchor head batches roll back every planned advance" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("conflicting-root-11"), size: 111 },
+    { ..base, root: @bft.Digest("conflicting-root-11"), size: 111, },
   )
   match tracker.deliver_batch([head_11, conflicting_11]) {
     SigningAnchorHeadBatchForkDetected(index, evidence) => {

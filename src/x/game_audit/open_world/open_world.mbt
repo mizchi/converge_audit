@@ -19,7 +19,7 @@ pub fn open_world_audit_manifest(
   sample_numerator~ : Int,
   sample_denominator~ : Int,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-audit-manifest-v3")
   append_field(buffer, game_manifest_digest.0)
   append_field(buffer, observer_manifest_digest.0)
@@ -37,7 +37,7 @@ pub fn open_world_anchor_seal_manifest(
   audit_manifest_digest~ : @bft.Digest,
   registered_count~ : Int,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-anchor-seal-manifest-v2")
   append_field(buffer, audit_manifest_digest.0)
   append_field(buffer, registered_count.to_string())
@@ -52,7 +52,7 @@ pub fn open_world_encounter_anchor_payload(
   registration_index : Int,
   encounter_digest : @bft.Digest,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-encounter-anchor-v1")
   append_field(buffer, registration_index.to_string())
   append_field(buffer, encounter_digest.0)
@@ -64,7 +64,7 @@ pub fn open_world_encounter_anchor_payload(
 pub fn open_world_encounter_registration_key(
   registration_index : Int,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-encounter-registration-v1")
   append_field(buffer, registration_index.to_string())
   buffer.to_string()
@@ -78,7 +78,7 @@ pub fn open_world_audit_seed_commitment(
   epoch~ : Int,
   seed~ : String,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-audit-seed-v1")
   append_field(buffer, world_id)
   append_field(buffer, epoch.to_string())
@@ -248,7 +248,7 @@ pub fn RevealedOpenWorldAuditEpoch::selects_encounter(
   if self.sample_numerator == self.sample_denominator {
     return true
   }
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-audit-sample-v1")
   append_field(buffer, self.seed)
   append_field(buffer, self.world_id)

@@ -37,7 +37,7 @@ pub fn inventory_record_valid(record : InventoryRecord) -> Bool {
 
 ///|
 pub fn serialize_inventory_record(record : InventoryRecord) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "asset-record-v2")
   append_field(buffer, record.asset_id)
   append_field(buffer, record.owner_id)

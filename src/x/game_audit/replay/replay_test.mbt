@@ -1,6 +1,6 @@
 ///|
 fn authenticated_effect_event(
-  effect : AssetEffect,
+  effect : @replay.AssetEffect,
   session_id? : String = "dungeon-42",
   counter? : Int = 0,
   signer_name? : String = "game-server",
@@ -14,7 +14,7 @@ fn authenticated_effect_event(
   assert_true(
     adapter.register_peer(@types.PeerId(signer_name), signer.public_key()),
   )
-  let event = make_asset_effect_event(
+  let event = @replay.make_asset_effect_event(
     peer=@types.PeerId(signer_name),
     counter~,
     lamport=counter + 1,
@@ -32,8 +32,8 @@ fn create_effect(
   asset_id? : String = "asset-1",
   recipient_id? : String = "alice",
   quantity? : Int = 1,
-) -> AssetEffect {
-  AssetEffect::Create(
+) -> @replay.AssetEffect {
+  @replay.AssetEffect::Create(
     asset_id~,
     recipient_id~,
     item_type="rare-sword",
@@ -43,12 +43,12 @@ fn create_effect(
 }
 
 ///|
-fn replay_engine(session_id? : String = "dungeon-42") -> ReplayEngine {
-  let kernel = CanonicalAssetKernel::new(
+fn replay_engine(session_id? : String = "dungeon-42") -> @replay.ReplayEngine {
+  let kernel = @replay.CanonicalAssetKernel::new(
     @bft.FnvHasher::new(),
     effect_author=@bft.PublicKey("game-server"),
   )
-  ReplayEngine::new(kernel, session_id~)
+  @replay.ReplayEngine::new(kernel, session_id~)
 }
 
 ///|
@@ -67,11 +67,11 @@ impl @bft.Hasher for EmptyHasher with fn hash_string(
 ///|
 test "canonical kernel manifest binds the configured effect author" {
   let hasher = @bft.FnvHasher::new()
-  let alice = CanonicalAssetKernel::new(
+  let alice = @replay.CanonicalAssetKernel::new(
     hasher,
     effect_author=@bft.PublicKey("alice"),
   )
-  let bob = CanonicalAssetKernel::new(
+  let bob = @replay.CanonicalAssetKernel::new(
     hasher,
     effect_author=@bft.PublicKey("bob"),
   )
@@ -107,7 +107,7 @@ test "event payload cannot authorize a different effect" {
   let source = authenticated_effect_event(declared)
   assert_eq(
     replay_engine().replay(source, requested),
-    ReplayResult::Refused(ReplayRefusal::KernelRejected),
+    @replay.ReplayResult::Refused(@replay.ReplayRefusal::KernelRejected),
   )
 }
 
@@ -117,7 +117,7 @@ test "authenticated non-author event cannot mint an asset effect" {
   let source = authenticated_effect_event(effect, signer_name="mallory")
   assert_eq(
     replay_engine().replay(source, effect),
-    ReplayResult::Refused(ReplayRefusal::KernelRejected),
+    @replay.ReplayResult::Refused(@replay.ReplayRefusal::KernelRejected),
   )
 }
 
@@ -127,12 +127,12 @@ test "replay rejects a source authenticated for another session" {
   let source = authenticated_effect_event(effect, session_id="other-dungeon")
   assert_eq(
     replay_engine().replay(source, effect),
-    ReplayResult::Refused(ReplayRefusal::SessionMismatch),
+    @replay.ReplayResult::Refused(@replay.ReplayRefusal::SessionMismatch),
   )
   let empty_source = authenticated_effect_event(effect, session_id="")
   assert_eq(
     replay_engine(session_id="").replay(empty_source, effect),
-    ReplayResult::Refused(ReplayRefusal::SessionMismatch),
+    @replay.ReplayResult::Refused(@replay.ReplayRefusal::SessionMismatch),
   )
 }
 
@@ -142,27 +142,27 @@ test "invalid effect and empty kernel manifest fail closed" {
   let source = authenticated_effect_event(invalid)
   assert_eq(
     replay_engine().replay(source, invalid),
-    ReplayResult::Refused(ReplayRefusal::InvalidEffect),
+    @replay.ReplayResult::Refused(@replay.ReplayRefusal::InvalidEffect),
   )
   let valid = create_effect()
   let valid_source = authenticated_effect_event(valid)
-  let empty_manifest_kernel = CanonicalAssetKernel::new(
-    EmptyHasher::{  },
+  let empty_manifest_kernel = @replay.CanonicalAssetKernel::new(
+    EmptyHasher::{ },
     effect_author=@bft.PublicKey("game-server"),
   )
-  let empty_manifest_engine = ReplayEngine::new(
+  let empty_manifest_engine = @replay.ReplayEngine::new(
     empty_manifest_kernel,
     session_id="dungeon-42",
   )
   assert_eq(
     empty_manifest_engine.replay(valid_source, valid),
-    ReplayResult::Refused(ReplayRefusal::InvalidManifest),
+    @replay.ReplayResult::Refused(@replay.ReplayRefusal::InvalidManifest),
   )
 }
 
 ///|
 test "canonical transfer effect is deterministic and tamper evident" {
-  let effect = AssetEffect::Transfer(
+  let effect = @replay.AssetEffect::Transfer(
     asset_id="asset-1",
     from_owner="alice",
     to_owner="bob",
@@ -185,7 +185,7 @@ test "canonical transfer effect is deterministic and tamper evident" {
           session_id="dungeon-42",
           manifest_digest=manifest,
           source_digest=source.digest(),
-          effect=AssetEffect::Transfer(
+          effect=@replay.AssetEffect::Transfer(
             asset_id="asset-1",
             from_owner="mallory",
             to_owner="bob",

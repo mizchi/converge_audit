@@ -21,7 +21,7 @@ fn bytes_from_hex_for_test(value : String) -> Bytes {
 
 ///|
 test "experimental SHA-256 adapter matches the standard abc vector" {
-  let hasher = ExperimentalSha256Hasher::new()
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
   assert_eq(
     hasher.hash_string("abc"),
     @bft.Digest(
@@ -32,12 +32,12 @@ test "experimental SHA-256 adapter matches the standard abc vector" {
 
 ///|
 test "experimental Ed25519 adapter matches RFC 8032 empty-message vector" {
-  let signer = ExperimentalEd25519Signer::new(
+  let signer = @crypto.ExperimentalEd25519Signer::new(
     bytes_from_hex_for_test(
       "9d61b19deffd5a60ba844af492ec2cc4" + "4449c5697b326919703bac031cae7f60",
     ),
   )
-  let verifier = ExperimentalEd25519Verifier::new()
+  let verifier = @crypto.ExperimentalEd25519Verifier::new()
   assert_eq(
     signer.public_key(),
     @bft.PublicKey(
@@ -69,13 +69,13 @@ test "experimental Ed25519 adapter matches RFC 8032 empty-message vector" {
 
 ///|
 test "real-hash signed anchor survives wire decode and capability opening" {
-  let hasher = ExperimentalSha256Hasher::new()
-  let signer = ExperimentalEd25519Signer::new(
+  let hasher = @crypto.ExperimentalSha256Hasher::new()
+  let signer = @crypto.ExperimentalEd25519Signer::new(
     bytes_from_hex_for_test(
       "000102030405060708090a0b0c0d0e0f" + "101112131415161718191a1b1c1d1e1f",
     ),
   )
-  let verifier = ExperimentalEd25519Verifier::new()
+  let verifier = @crypto.ExperimentalEd25519Verifier::new()
   let session = "world-1:real-crypto-wire"
   let anchor = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "real-crypto-observer",

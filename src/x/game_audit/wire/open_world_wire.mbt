@@ -444,7 +444,7 @@ fn OpenWorldWireCborPreflight::scan_value(
 
 ///|
 fn preflight_cbor(input : Bytes) -> Unit raise OpenWorldAuditWireError {
-  let scanner = OpenWorldWireCborPreflight::{ input, position: 0 }
+  let scanner = OpenWorldWireCborPreflight::{ input, position: 0, }
   scanner.scan_value(0)
   if scanner.position != input.length() {
     raise WireMalformedCbor

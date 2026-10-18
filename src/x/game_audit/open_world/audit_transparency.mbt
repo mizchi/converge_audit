@@ -4,7 +4,7 @@ pub fn open_world_audit_transparency_log_manifest(
   hasher : &@bft.Hasher,
   log_session_id~ : String,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-audit-transparency-log-v1")
   append_field(buffer, log_session_id)
   hasher.hash_string(buffer.to_string())
@@ -15,7 +15,7 @@ pub fn open_world_audit_transparency_plan_key(
   world_id~ : String,
   audit_epoch~ : Int,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-audit-transparency-plan-key-v1")
   append_field(buffer, world_id)
   append_field(buffer, audit_epoch.to_string())
@@ -27,7 +27,7 @@ pub fn open_world_audit_transparency_seal_key(
   world_id~ : String,
   audit_epoch~ : Int,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-audit-transparency-seal-key-v1")
   append_field(buffer, world_id)
   append_field(buffer, audit_epoch.to_string())
@@ -38,7 +38,7 @@ pub fn open_world_audit_transparency_seal_key(
 pub fn open_world_audit_transparency_plan_value(
   audit_checkpoint_digest~ : @bft.Digest,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-audit-transparency-plan-value-v1")
   append_field(buffer, audit_checkpoint_digest.0)
   buffer.to_string()
@@ -49,7 +49,7 @@ pub fn open_world_audit_transparency_seal_value(
   audit_checkpoint_digest~ : @bft.Digest,
   seal_checkpoint_digest~ : @bft.Digest,
 ) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "open-world-audit-transparency-seal-value-v1")
   append_field(buffer, audit_checkpoint_digest.0)
   append_field(buffer, seal_checkpoint_digest.0)

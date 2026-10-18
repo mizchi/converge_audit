@@ -510,7 +510,7 @@ fn AssetDriver::apply(
   picks : Json,
 ) -> Result[AssetDriver, String] {
   match action {
-    "init" => Ok({ ..self, snapshot: initial_asset_snapshot() })
+    "init" => Ok({ ..self, snapshot: initial_asset_snapshot(), })
     "transferSome" => self.apply_transfer(picks)
     "listSome" => self.apply_list(picks)
     "cancelSome" => self.apply_cancel(picks)

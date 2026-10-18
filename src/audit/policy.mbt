@@ -71,7 +71,7 @@ pub fn open_checkpoint_policy(
     policy.macro_checkpoint_retention_ms,
   )
   if valid {
-    return Opened(VerifiedCheckpointPolicy::{ value: policy })
+    return Opened(VerifiedCheckpointPolicy::{ value: policy, })
   }
   if policy.event_interval_ms <= 0 {
     CheckpointPolicyOpenResult::Refused(NonPositiveEventInterval)

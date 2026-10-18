@@ -1,0 +1,53 @@
+{
+  "benchmark": "encounter-generation-v1",
+  "rounds": 20,
+  "warmup": 3,
+  "coldOriginsBeforeEachSample": 0,
+  "environment": {
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "storage": "SQLite :memory:",
+    "networkIncluded": false,
+    "fsyncIncluded": false,
+    "workerSchedulingIncluded": false
+  },
+  "results": [
+    {
+      "batchSize": 16,
+      "p50Ms": 0.6482079999999542,
+      "p95Ms": 1.0195420000000013,
+      "bytes": {
+        "hotBefore": 62125,
+        "coldOriginsAfter": 37765,
+        "seal": 540,
+        "reclaimedArchiveObjects": 16,
+        "archiveObjectsAfter": 0
+      }
+    },
+    {
+      "batchSize": 128,
+      "p50Ms": 3.7782909999999674,
+      "p95Ms": 4.998917000000006,
+      "bytes": {
+        "hotBefore": 498269,
+        "coldOriginsAfter": 302917,
+        "seal": 542,
+        "reclaimedArchiveObjects": 128,
+        "archiveObjectsAfter": 0
+      }
+    },
+    {
+      "batchSize": 1024,
+      "p50Ms": 44.41445799999997,
+      "p95Ms": 52.44554199999993,
+      "bytes": {
+        "hotBefore": 3036250,
+        "coldOriginsAfter": 2429876,
+        "seal": 544,
+        "reclaimedArchiveObjects": 128,
+        "archiveObjectsAfter": 0
+      }
+    }
+  ]
+}

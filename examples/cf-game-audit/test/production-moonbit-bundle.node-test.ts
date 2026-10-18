@@ -14,9 +14,9 @@ test("production MoonBit bridge exports no seed-backed producer", async () => {
   assert.deepEqual(forbidden, []);
 });
 
-test("production browser seals game checkpoints through the asynchronous digest API", async () => {
+test("legacy browser seals game checkpoints through the asynchronous digest API", async () => {
   const source = await readFile(
-    new URL("../web/src/main.ts", import.meta.url),
+    new URL("../web/src/legacy-main.ts", import.meta.url),
     "utf8",
   );
 

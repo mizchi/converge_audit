@@ -18,8 +18,10 @@ pub(all) struct ReplayWitnessIdentity {
   id : String
   key : @converge_audit.PublicKey
 } derive(Eq, @debug.Debug)
+pub fn ReplayWitnessIdentity::equal(Self, Self) -> Bool
+pub fn ReplayWitnessIdentity::not_equal(Self, Self) -> Bool
+pub fn ReplayWitnessIdentity::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

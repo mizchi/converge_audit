@@ -19,7 +19,7 @@ fn pvp_wire_signed_event(
     author_key: @bft.PublicKey("key:" + peer_id),
     dep_hashes: digest_dependencies,
     event: {
-      id: { peer: @types.PeerId(peer_id), counter },
+      id: { peer: @types.PeerId(peer_id), counter, },
       deps: event_dependencies,
       lamport: counter + 1,
       op: @types.RowOp::Insert(tbl="wire.pvp", row_id=digest, values=[
@@ -30,7 +30,7 @@ fn pvp_wire_signed_event(
 }
 
 ///|
-fn pvp_wire_bundle() -> PvpReplayBundle {
+fn pvp_wire_bundle() -> @wire.PvpReplayBundle {
   let session = "pvp:wire-v1"
   let input = pvp_wire_signed_event(session, "alice", 0, "command", [])
   let receipt = pvp_wire_signed_event(session, "referee", 0, "receipt", [
@@ -69,8 +69,8 @@ fn pvp_wire_bundle() -> PvpReplayBundle {
       score_per_elimination: 1,
     },
     teams: [
-      { team_id: "blue", initial_score: 2 },
-      { team_id: "orange", initial_score: 1 },
+      { team_id: "blue", initial_score: 2, },
+      { team_id: "orange", initial_score: 1, },
     ],
     players: [
       {
@@ -88,7 +88,7 @@ fn pvp_wire_bundle() -> PvpReplayBundle {
         initial_hp: 10,
       },
     ],
-    witnesses: [{ id: "witness-0", key: @bft.PublicKey("key:witness-0") }],
+    witnesses: [{ id: "witness-0", key: @bft.PublicKey("key:witness-0"), }],
     max_faults: 0,
     commands: [
       {
@@ -103,7 +103,7 @@ fn pvp_wire_bundle() -> PvpReplayBundle {
           move_to_x: 0,
           attack_target_id: Some("bob"),
         },
-        observed: { command_digest: input.digest, received_tick: 1 },
+        observed: { command_digest: input.digest, received_tick: 1, },
       },
     ],
     attestations: [
@@ -125,13 +125,16 @@ fn pvp_wire_bundle() -> PvpReplayBundle {
 ///|
 test "PvP replay bundle has a canonical versioned round trip" {
   let bundle = pvp_wire_bundle()
-  let encoded = encode_pvp_replay_bundle(bundle)
+  let encoded = @wire.encode_pvp_replay_bundle(bundle)
   let decoded = match
-    decode_pvp_replay_bundle(encoded, limits=PvpReplayWireLimits::default()) {
+    @wire.decode_pvp_replay_bundle(
+      encoded,
+      limits=@wire.PvpReplayWireLimits::default(),
+    ) {
     Ok(value) => value
     Err(_) => fail("expected PvP replay bundle decode")
   }
-  assert_eq(encode_pvp_replay_bundle(decoded), encoded)
+  assert_eq(@wire.encode_pvp_replay_bundle(decoded), encoded)
   assert_eq(decoded.referee_peer_id, bundle.referee_peer_id)
   assert_eq(decoded.signed_checkpoint, bundle.signed_checkpoint)
   assert_eq(decoded.config, bundle.config)
@@ -146,63 +149,72 @@ test "PvP replay bundle has a canonical versioned round trip" {
 
 ///|
 test "PvP replay decoder rejects unsupported and noncanonical versions" {
-  let encoded = encode_pvp_replay_bundle(pvp_wire_bundle())
+  let encoded = @wire.encode_pvp_replay_bundle(pvp_wire_bundle())
   match
-    decode_pvp_replay_bundle(
+    @wire.decode_pvp_replay_bundle(
       replace_canonical_version(encoded, b'\x02'),
-      limits=PvpReplayWireLimits::default(),
+      limits=@wire.PvpReplayWireLimits::default(),
     ) {
-    Err(PvpReplayWireError::PvpWireUnsupportedVersion(2)) => ()
+    Err(@wire.PvpReplayWireError::PvpWireUnsupportedVersion(2)) => ()
     _ => fail("expected unsupported PvP wire version refusal")
   }
   match
-    decode_pvp_replay_bundle(
+    @wire.decode_pvp_replay_bundle(
       make_noncanonical_version(encoded),
-      limits=PvpReplayWireLimits::default(),
+      limits=@wire.PvpReplayWireLimits::default(),
     ) {
-    Err(PvpReplayWireError::PvpWireNonCanonicalEncoding) => ()
+    Err(@wire.PvpReplayWireError::PvpWireNonCanonicalEncoding) => ()
     _ => fail("expected noncanonical PvP wire refusal")
   }
 }
 
 ///|
 test "PvP replay decoder enforces byte and collection budgets" {
-  let encoded = encode_pvp_replay_bundle(pvp_wire_bundle())
-  let defaults = PvpReplayWireLimits::default()
+  let encoded = @wire.encode_pvp_replay_bundle(pvp_wire_bundle())
+  let defaults = @wire.PvpReplayWireLimits::default()
   match
-    decode_pvp_replay_bundle(encoded, limits={
+    @wire.decode_pvp_replay_bundle(encoded, limits={
       ..defaults,
       max_bundle_bytes: encoded.length() - 1,
     }) {
-    Err(PvpReplayWireError::PvpWireInputTooLarge(actual, maximum)) => {
+    Err(@wire.PvpReplayWireError::PvpWireInputTooLarge(actual, maximum)) => {
       assert_eq(actual, encoded.length())
       assert_eq(maximum, encoded.length() - 1)
     }
     _ => fail("expected PvP byte-budget refusal")
   }
   match
-    decode_pvp_replay_bundle(encoded, limits={ ..defaults, max_players: 1 }) {
-    Err(PvpReplayWireError::PvpWirePlayersTooMany(2, 1)) => ()
+    @wire.decode_pvp_replay_bundle(encoded, limits={
+      ..defaults,
+      max_players: 1,
+    }) {
+    Err(@wire.PvpReplayWireError::PvpWirePlayersTooMany(2, 1)) => ()
     _ => fail("expected PvP player-budget refusal")
   }
   match
-    decode_pvp_replay_bundle(encoded, limits={ ..defaults, max_commands: 0 }) {
-    Err(PvpReplayWireError::PvpWireCommandsTooMany(1, 0)) => ()
+    @wire.decode_pvp_replay_bundle(encoded, limits={
+      ..defaults,
+      max_commands: 0,
+    }) {
+    Err(@wire.PvpReplayWireError::PvpWireCommandsTooMany(1, 0)) => ()
     _ => fail("expected PvP command-budget refusal")
   }
   match
-    decode_pvp_replay_bundle(encoded, limits={ ..defaults, max_attestations: 0 }) {
-    Err(PvpReplayWireError::PvpWireAttestationsTooMany(1, 0)) => ()
+    @wire.decode_pvp_replay_bundle(encoded, limits={
+      ..defaults,
+      max_attestations: 0,
+    }) {
+    Err(@wire.PvpReplayWireError::PvpWireAttestationsTooMany(1, 0)) => ()
     _ => fail("expected PvP attestation-budget refusal")
   }
   match
-    decode_pvp_replay_bundle(encoded, limits={
+    @wire.decode_pvp_replay_bundle(encoded, limits={
       ..defaults,
       max_dependencies_per_event: 0,
     }) {
     Err(
-      PvpReplayWireError::PvpWireCodecRefused(
-        PveReplayWireError::PveWireDependenciesTooMany(1, 0)
+      @wire.PvpReplayWireError::PvpWireCodecRefused(
+        @wire.PveReplayWireError::PveWireDependenciesTooMany(1, 0)
       )
     ) => ()
     _ => fail("expected PvP dependency-budget refusal")

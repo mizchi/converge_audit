@@ -61,6 +61,70 @@ pub fn audit_player_local_checkpoint_prunable(
 }
 
 ///|
+/// Primitive bridge for registering one bounded payload scope, even when its
+/// queue is empty. Registration and its count must use one storage transaction.
+pub fn audit_player_local_payload_scope_registration_allowed(
+  current_scopes : Int,
+  max_scopes : Int,
+) -> Bool {
+  @checkpoint_audit.player_local_payload_scope_registration_allowed(
+    current_scopes, max_scopes,
+  )
+}
+
+///|
+/// Primitive bridge for the payload budget guard. Counters must come from the
+/// same storage transaction as the prospective write.
+pub fn audit_player_local_payload_admission_allowed(
+  current_bytes : Int,
+  current_items : Int,
+  incoming_bytes : Int,
+  max_bytes : Int,
+  max_items : Int,
+  max_item_bytes : Int,
+  reserved_bytes : Int,
+) -> Bool {
+  @checkpoint_audit.player_local_payload_admission_allowed(
+    current_bytes, current_items, incoming_bytes, max_bytes, max_items, max_item_bytes,
+    reserved_bytes,
+  )
+}
+
+///|
+/// Primitive bridge for bulk payload capacity reservations. Outstanding
+/// reservations and protected headroom are separate byte budgets.
+pub fn audit_player_local_payload_reservation_allowed(
+  used_bytes : Int,
+  used_items : Int,
+  reserved_bytes : Int,
+  reserved_items : Int,
+  incoming_bytes : Int,
+  incoming_items : Int,
+  max_bytes : Int,
+  max_items : Int,
+  headroom_bytes : Int,
+) -> Bool {
+  @checkpoint_audit.player_local_payload_reservation_allowed(
+    used_bytes, used_items, reserved_bytes, reserved_items, incoming_bytes, incoming_items,
+    max_bytes, max_items, headroom_bytes,
+  )
+}
+
+///|
+/// Primitive bridge for trusted payload pruning facts. A transport ACK alone
+/// does not establish gameplay finality or authorize deletion.
+pub fn audit_player_local_payload_prunable(
+  delivery_acknowledged : Bool,
+  gameplay_finalized : Bool,
+  retention_closed : Bool,
+  unresolved_reference : Bool,
+) -> Bool {
+  @checkpoint_audit.player_local_payload_prunable(
+    delivery_acknowledged, gameplay_finalized, retention_closed, unresolved_reference,
+  )
+}
+
+///|
 /// Primitive bridge for authenticated durable evidence-hold admission.
 pub fn audit_player_local_evidence_hold_admission_allowed(
   boundary_matches : Bool,

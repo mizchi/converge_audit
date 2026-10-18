@@ -31,10 +31,10 @@ fn open_world_epoch_plan(
     session_id: "world-1",
     epoch: 10,
     previous_checkpoint: @bft.Digest("world-epoch-9"),
-    manifest_digest: open_world_audit_manifest(
+    manifest_digest: @open_world.open_world_audit_manifest(
       hasher,
       game_manifest_digest=@bft.Digest("open-world-kernel-v1"),
-      observer_manifest_digest=open_world_observer_manifest(
+      observer_manifest_digest=@open_world.open_world_observer_manifest(
         hasher,
         observers=[],
         max_faults=0,
@@ -46,7 +46,7 @@ fn open_world_epoch_plan(
     public_state_root: @bft.Digest("world-state-at-epoch-start"),
     asset_delta_root: @bft.Digest("no-assets"),
     hidden_state_commitment: Some(
-      open_world_audit_seed_commitment(
+      @open_world.open_world_audit_seed_commitment(
         hasher,
         world_id="world-1",
         epoch=10,
@@ -100,7 +100,7 @@ fn sealed_open_world_epoch(
     session_id: plan_checkpoint.session_id,
     epoch: plan_checkpoint.epoch + 1,
     previous_checkpoint: previous,
-    manifest_digest: open_world_anchor_seal_manifest(
+    manifest_digest: @open_world.open_world_anchor_seal_manifest(
       hasher,
       audit_manifest_digest=plan_checkpoint.manifest_digest,
       registered_count~,
@@ -122,14 +122,14 @@ fn reveal_epoch_with_root(
   sample_numerator : Int,
   sample_denominator : Int,
   seed? : String = "epoch-secret-seed",
-) -> RevealedOpenWorldAuditEpoch raise Error {
+) -> @open_world.RevealedOpenWorldAuditEpoch raise Error {
   match
-    reveal_open_world_audit_epoch(
+    @open_world.reveal_open_world_audit_epoch(
       hasher,
       plan,
       seal,
       game_manifest_digest=@bft.Digest("open-world-kernel-v1"),
-      observer_manifest_digest=open_world_observer_manifest(
+      observer_manifest_digest=@open_world.open_world_observer_manifest(
         hasher,
         observers=[],
         max_faults=0,
@@ -148,7 +148,7 @@ fn reveal_epoch_with_root(
 fn revealed_open_world_epoch(
   sample_numerator : Int,
   sample_denominator : Int,
-) -> RevealedOpenWorldAuditEpoch raise Error {
+) -> @open_world.RevealedOpenWorldAuditEpoch raise Error {
   let hasher = @bft.FnvHasher::new()
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("world-referee")
@@ -190,7 +190,10 @@ fn open_world_registry(
   let registry = @authmap.AuthenticatedMap::new(hasher)
   for entry in entries {
     ignore(
-      registry.put(open_world_encounter_registration_key(entry.0), entry.1.0),
+      registry.put(
+        @open_world.open_world_encounter_registration_key(entry.0),
+        entry.1.0,
+      ),
     )
   }
   registry
@@ -201,7 +204,7 @@ fn sparse_encounter_fixture(
   sample_numerator : Int,
   sample_denominator : Int,
 ) -> (
-  RevealedOpenWorldAuditEpoch,
+  @open_world.RevealedOpenWorldAuditEpoch,
   @checkpoint.VerifiedCheckpoint,
   @merkle.MerkleProof,
 ) raise Error {
@@ -219,7 +222,7 @@ fn sparse_encounter_fixture(
     @bft.Digest("public-encounter-kernel-v1"),
   )
   let eligible = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, encounter.digest()),
+    @open_world.open_world_encounter_anchor_payload(0, encounter.digest()),
   ])
   let registry = open_world_registry(hasher, [(0, encounter.digest())])
   let seal = sealed_open_world_epoch(
@@ -251,14 +254,14 @@ fn open_world_witness_roster() -> (
     let id = "encounter-witness-" + index.to_string()
     let signer = @bft.MockSigner::new(id)
     signers.push(signer)
-    roster.push({ id, key: signer.public_key() })
+    roster.push({ id, key: signer.public_key(), })
   }
   (signers, roster)
 }
 
 ///|
 fn witnessed_open_world_encounter() -> (
-  RevealedOpenWorldAuditEpoch,
+  @open_world.RevealedOpenWorldAuditEpoch,
   @checkpoint.VerifiedCheckpoint,
   @attestation.WitnessReplayCertificate,
   @merkle.MerkleProof,
@@ -284,7 +287,7 @@ fn witnessed_open_world_encounter() -> (
     manifest,
   )
   let eligible = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, encounter.digest()),
+    @open_world.open_world_encounter_anchor_payload(0, encounter.digest()),
   ])
   let registry = open_world_registry(hasher, [(0, encounter.digest())])
   let seal = sealed_open_world_epoch(
@@ -345,7 +348,10 @@ test "audit epoch reveal verifies committed policy seed and closed anchor set" {
     seed="correct-seed",
   )
   let eligible = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, @bft.Digest("encounter-anchor")),
+    @open_world.open_world_encounter_anchor_payload(
+      0,
+      @bft.Digest("encounter-anchor"),
+    ),
   ])
   let registry = open_world_registry(hasher, [
     (0, @bft.Digest("encounter-anchor")),
@@ -360,12 +366,12 @@ test "audit epoch reveal verifies committed policy seed and closed anchor set" {
     registered_count=1,
   )
   match
-    reveal_open_world_audit_epoch(
+    @open_world.reveal_open_world_audit_epoch(
       hasher,
       plan,
       seal,
       game_manifest_digest=@bft.Digest("open-world-kernel-v1"),
-      observer_manifest_digest=open_world_observer_manifest(
+      observer_manifest_digest=@open_world.open_world_observer_manifest(
         hasher,
         observers=[],
         max_faults=0,
@@ -379,12 +385,12 @@ test "audit epoch reveal verifies committed policy seed and closed anchor set" {
     _ => fail("wrong delayed audit seed was accepted")
   }
   match
-    reveal_open_world_audit_epoch(
+    @open_world.reveal_open_world_audit_epoch(
       hasher,
       plan,
       seal,
       game_manifest_digest=@bft.Digest("open-world-kernel-v1"),
-      observer_manifest_digest=open_world_observer_manifest(
+      observer_manifest_digest=@open_world.open_world_observer_manifest(
         hasher,
         observers=[],
         max_faults=0,
@@ -398,12 +404,12 @@ test "audit epoch reveal verifies committed policy seed and closed anchor set" {
     _ => fail("uncommitted audit sampling policy was accepted")
   }
   match
-    reveal_open_world_audit_epoch(
+    @open_world.reveal_open_world_audit_epoch(
       hasher,
       plan,
       seal,
       game_manifest_digest=@bft.Digest("open-world-kernel-v1"),
-      observer_manifest_digest=open_world_observer_manifest(
+      observer_manifest_digest=@open_world.open_world_observer_manifest(
         hasher,
         observers=[],
         max_faults=0,
@@ -427,12 +433,12 @@ test "audit epoch reveal verifies committed policy seed and closed anchor set" {
     previous_override=Some(@bft.Digest("different-plan")),
   )
   match
-    reveal_open_world_audit_epoch(
+    @open_world.reveal_open_world_audit_epoch(
       hasher,
       plan,
       bad_seal,
       game_manifest_digest=@bft.Digest("open-world-kernel-v1"),
-      observer_manifest_digest=open_world_observer_manifest(
+      observer_manifest_digest=@open_world.open_world_observer_manifest(
         hasher,
         observers=[],
         max_faults=0,
@@ -463,7 +469,7 @@ test "unsampled witnessed encounter finalizes without central replay" {
   let verifier = @bft.MockVerifier::new()
   let (epoch, encounter, certificate, proof) = witnessed_open_world_encounter()
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       epoch,
@@ -484,7 +490,7 @@ test "sampling sparse economics and high value outcomes escalate" {
   let verifier = @bft.MockVerifier::new()
   let (sampled_epoch, sampled, sampled_proof) = sparse_encounter_fixture(1, 1)
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       sampled_epoch,
@@ -497,7 +503,7 @@ test "sampling sparse economics and high value outcomes escalate" {
   }
   let (unsampled_epoch, sparse, sparse_proof) = sparse_encounter_fixture(0, 1)
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       unsampled_epoch,
@@ -509,7 +515,7 @@ test "sampling sparse economics and high value outcomes escalate" {
     _ => fail("unwitnessed durable result escaped replay")
   }
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       unsampled_epoch,
@@ -522,7 +528,7 @@ test "sampling sparse economics and high value outcomes escalate" {
   }
   let (valuable_epoch, valuable, certificate, valuable_proof) = witnessed_open_world_encounter()
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       valuable_epoch,
@@ -542,8 +548,11 @@ test "only encounters included before seed reveal are eligible" {
   let verifier = @bft.MockVerifier::new()
   let (epoch, encounter, _) = sparse_encounter_fixture(0, 1)
   let unrelated = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, @bft.Digest("not-this-encounter")),
-    open_world_encounter_anchor_payload(
+    @open_world.open_world_encounter_anchor_payload(
+      0,
+      @bft.Digest("not-this-encounter"),
+    ),
+    @open_world.open_world_encounter_anchor_payload(
       1,
       @bft.Digest("another-unrelated-encounter"),
     ),
@@ -552,13 +561,13 @@ test "only encounters included before seed reveal are eligible" {
   assert_false(
     @merkle.verify_inclusion(
       hasher,
-      open_world_encounter_anchor_payload(0, encounter.digest()),
+      @open_world.open_world_encounter_anchor_payload(0, encounter.digest()),
       epoch.eligible_anchor_root(),
       wrong_proof,
     ),
   )
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       epoch,
@@ -585,7 +594,7 @@ test "a signed participant challenge overrides the peer fast path" {
     hasher,
     verifier,
     prepared,
-    [{ id: "challenger", key: challenger.public_key() }],
+    [{ id: "challenger", key: challenger.public_key(), }],
   )
   ignore(
     evidence.deliver(
@@ -599,7 +608,7 @@ test "a signed participant challenge overrides the peer fast path" {
     ),
   )
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       epoch,
@@ -638,8 +647,8 @@ test "encounter authority parent and participant evidence stay epoch bound" {
     event_root="wrong-parent-events",
   )
   let eligible = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, wrong_authority.digest()),
-    open_world_encounter_anchor_payload(1, wrong_parent.digest()),
+    @open_world.open_world_encounter_anchor_payload(0, wrong_authority.digest()),
+    @open_world.open_world_encounter_anchor_payload(1, wrong_parent.digest()),
   ])
   let registry = open_world_registry(hasher, [
     (0, wrong_authority.digest()),
@@ -656,7 +665,7 @@ test "encounter authority parent and participant evidence stay epoch bound" {
   )
   let epoch = reveal_epoch_with_root(hasher, plan, seal, 2, 0, 1)
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       epoch,
@@ -668,7 +677,7 @@ test "encounter authority parent and participant evidence stay epoch bound" {
     _ => fail("encounter signed by another authority crossed audit epoch")
   }
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       epoch,
@@ -692,7 +701,7 @@ test "encounter authority parent and participant evidence stay epoch bound" {
     [],
   )
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       valid_epoch,
@@ -708,7 +717,7 @@ test "encounter authority parent and participant evidence stay epoch bound" {
 
 ///|
 fn central_replayed_open_world_encounter() -> (
-  RevealedOpenWorldAuditEpoch,
+  @open_world.RevealedOpenWorldAuditEpoch,
   @checkpoint.VerifiedCheckpoint,
   @replay.CheckpointReplayMatch,
   @merkle.MerkleProof,
@@ -765,7 +774,7 @@ fn central_replayed_open_world_encounter() -> (
           initial_x: 0,
         },
       ],
-      attacks=[{ attack, damage: 1 }],
+      attacks=[{ attack, damage: 1, }],
       transcripts=[
         {
           attack_id: attack.attack_id,
@@ -796,7 +805,7 @@ fn central_replayed_open_world_encounter() -> (
     _ => fail("expected checkpoint-bound central replay")
   }
   let eligible = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, encounter.digest()),
+    @open_world.open_world_encounter_anchor_payload(0, encounter.digest()),
   ])
   let registry = open_world_registry(hasher, [(0, encounter.digest())])
   let seal = sealed_open_world_epoch(
@@ -822,7 +831,7 @@ test "matching central replay resolves sampled and high value encounters" {
   let verifier = @bft.MockVerifier::new()
   let (epoch, encounter, replay_match, proof) = central_replayed_open_world_encounter()
   match
-    evaluate_open_world_encounter(
+    @open_world.evaluate_open_world_encounter(
       hasher,
       verifier,
       epoch,
@@ -853,7 +862,7 @@ test "signed slot beyond the committed registry count proves truncation" {
   )
   let registered = @bft.Digest("registered-slot-zero")
   let tree = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, registered),
+    @open_world.open_world_encounter_anchor_payload(0, registered),
   ])
   let registry = open_world_registry(hasher, [(0, registered)])
   let seal = sealed_open_world_epoch(
@@ -866,9 +875,12 @@ test "signed slot beyond the committed registry count proves truncation" {
     registered_count=1,
   )
   let epoch = reveal_epoch_with_root(hasher, plan, seal, 1, 0, 1)
-  match detect_open_world_seal_conflict(hasher, epoch, omitted) {
+  match @open_world.detect_open_world_seal_conflict(hasher, epoch, omitted) {
     SealConflictDetected(conflict) => {
-      assert_eq(conflict.kind(), OpenWorldSealConflictKind::TruncatedRegistry)
+      assert_eq(
+        conflict.kind(),
+        @open_world.OpenWorldSealConflictKind::TruncatedRegistry,
+      )
       assert_eq(conflict.encounter_digest(), omitted.digest())
       assert_eq(conflict.registration_index(), 2)
       assert_eq(conflict.sealed_encounter_digest(), None)
@@ -894,7 +906,7 @@ test "a different included digest at the signed slot proves substitution" {
   )
   let substituted = @bft.Digest("different-encounter-at-slot-zero")
   let tree = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, substituted),
+    @open_world.open_world_encounter_anchor_payload(0, substituted),
   ])
   let registry = open_world_registry(hasher, [(0, substituted)])
   let seal = sealed_open_world_epoch(
@@ -909,7 +921,7 @@ test "a different included digest at the signed slot proves substitution" {
   let epoch = reveal_epoch_with_root(hasher, plan, seal, 1, 0, 1)
   let proof = proof_or_fail(tree, 0)
   match
-    detect_open_world_seal_conflict(
+    @open_world.detect_open_world_seal_conflict(
       hasher,
       epoch,
       omitted,
@@ -917,7 +929,10 @@ test "a different included digest at the signed slot proves substitution" {
       conflicting_inclusion=proof,
     ) {
     SealConflictDetected(conflict) => {
-      assert_eq(conflict.kind(), OpenWorldSealConflictKind::SubstitutedSlot)
+      assert_eq(
+        conflict.kind(),
+        @open_world.OpenWorldSealConflictKind::SubstitutedSlot,
+      )
       assert_eq(conflict.registration_index(), 0)
       assert_eq(conflict.sealed_encounter_digest(), Some(substituted))
     }
@@ -940,7 +955,7 @@ test "invalid or matching inclusion evidence never accuses the seal" {
     registration_index=0,
   )
   let tree = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, encounter.digest()),
+    @open_world.open_world_encounter_anchor_payload(0, encounter.digest()),
   ])
   let registry = open_world_registry(hasher, [(0, encounter.digest())])
   let seal = sealed_open_world_epoch(
@@ -955,7 +970,7 @@ test "invalid or matching inclusion evidence never accuses the seal" {
   let epoch = reveal_epoch_with_root(hasher, plan, seal, 1, 0, 1)
   let proof = proof_or_fail(tree, 0)
   assert_true(
-    detect_open_world_seal_conflict(
+    @open_world.detect_open_world_seal_conflict(
       hasher,
       epoch,
       encounter,
@@ -965,7 +980,7 @@ test "invalid or matching inclusion evidence never accuses the seal" {
     is SealConflictNotFound,
   )
   assert_true(
-    detect_open_world_seal_conflict(
+    @open_world.detect_open_world_seal_conflict(
       hasher,
       epoch,
       encounter,
@@ -993,8 +1008,8 @@ test "authenticated non-membership proves an omitted in-range slot" {
   let slot_zero = @bft.Digest("registered-slot-zero")
   let slot_two = @bft.Digest("registered-slot-two")
   let tree = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, slot_zero),
-    open_world_encounter_anchor_payload(2, slot_two),
+    @open_world.open_world_encounter_anchor_payload(0, slot_zero),
+    @open_world.open_world_encounter_anchor_payload(2, slot_two),
   ])
   let registry = open_world_registry(hasher, [(0, slot_zero), (2, slot_two)])
   let seal = sealed_open_world_epoch(
@@ -1008,20 +1023,23 @@ test "authenticated non-membership proves an omitted in-range slot" {
   )
   let epoch = reveal_epoch_with_root(hasher, plan, seal, 3, 0, 1)
   let absence = registry
-    .absence_proof(open_world_encounter_registration_key(1))
+    .absence_proof(@open_world.open_world_encounter_registration_key(1))
     .unwrap()
   match
-    detect_open_world_seal_conflict(
+    @open_world.detect_open_world_seal_conflict(
       hasher,
       epoch,
       omitted,
       missing_registration=absence,
     ) {
     SealConflictDetected(conflict) => {
-      assert_eq(conflict.kind(), OpenWorldSealConflictKind::MissingSlot)
+      assert_eq(
+        conflict.kind(),
+        @open_world.OpenWorldSealConflictKind::MissingSlot,
+      )
       assert_eq(
         conflict.source(),
-        OpenWorldSealConflictSource::AuthoritySignedEncounter,
+        @open_world.OpenWorldSealConflictSource::AuthoritySignedEncounter,
       )
       assert_eq(conflict.registration_index(), 1)
       assert_eq(conflict.sealed_encounter_digest(), None)
@@ -1047,7 +1065,7 @@ test "tampered or ambiguous non-membership cannot accuse the seal" {
   )
   let substituted = @bft.Digest("registered-slot-zero")
   let tree = @merkle.MerkleTree::build(hasher, [
-    open_world_encounter_anchor_payload(0, substituted),
+    @open_world.open_world_encounter_anchor_payload(0, substituted),
   ])
   let registry = open_world_registry(hasher, [(0, substituted)])
   let seal = sealed_open_world_epoch(
@@ -1061,14 +1079,14 @@ test "tampered or ambiguous non-membership cannot accuse the seal" {
   )
   let epoch = reveal_epoch_with_root(hasher, plan, seal, 2, 0, 1)
   let absence = registry
-    .absence_proof(open_world_encounter_registration_key(1))
+    .absence_proof(@open_world.open_world_encounter_registration_key(1))
     .unwrap()
   let tampered : @authmap.AuthMapAbsenceProof = {
     ..absence,
-    key: open_world_encounter_registration_key(0),
+    key: @open_world.open_world_encounter_registration_key(0),
   }
   assert_true(
-    detect_open_world_seal_conflict(
+    @open_world.detect_open_world_seal_conflict(
       hasher,
       epoch,
       omitted,
@@ -1077,7 +1095,7 @@ test "tampered or ambiguous non-membership cannot accuse the seal" {
     is SealConflictEvidenceInvalid,
   )
   assert_true(
-    detect_open_world_seal_conflict(
+    @open_world.detect_open_world_seal_conflict(
       hasher,
       epoch,
       omitted,

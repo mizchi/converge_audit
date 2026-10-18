@@ -1,7 +1,7 @@
 ///|
 test "PvP commands fail closed outside the public epoch rules" {
   assert_true(
-    pvp_command_allowed(
+    @audit.pvp_command_allowed(
       actor_hp=10,
       equivocated=false,
       tick=3,
@@ -14,7 +14,7 @@ test "PvP commands fail closed outside the public epoch rules" {
     ),
   )
   assert_false(
-    pvp_command_allowed(
+    @audit.pvp_command_allowed(
       actor_hp=0,
       equivocated=false,
       tick=3,
@@ -27,7 +27,7 @@ test "PvP commands fail closed outside the public epoch rules" {
     ),
   )
   assert_false(
-    pvp_command_allowed(
+    @audit.pvp_command_allowed(
       actor_hp=10,
       equivocated=true,
       tick=3,
@@ -40,7 +40,7 @@ test "PvP commands fail closed outside the public epoch rules" {
     ),
   )
   assert_false(
-    pvp_command_allowed(
+    @audit.pvp_command_allowed(
       actor_hp=10,
       equivocated=false,
       tick=3,
@@ -57,7 +57,7 @@ test "PvP commands fail closed outside the public epoch rules" {
 ///|
 test "PvP score requires an enemy-caused alive-to-defeated transition" {
   assert_eq(
-    pvp_elimination_score_delta(
+    @audit.pvp_elimination_score_delta(
       target_hp_before=4,
       target_hp_after=0,
       enemy_damage=true,
@@ -66,7 +66,7 @@ test "PvP score requires an enemy-caused alive-to-defeated transition" {
     1,
   )
   assert_eq(
-    pvp_elimination_score_delta(
+    @audit.pvp_elimination_score_delta(
       target_hp_before=0,
       target_hp_after=0,
       enemy_damage=true,
@@ -75,7 +75,7 @@ test "PvP score requires an enemy-caused alive-to-defeated transition" {
     0,
   )
   assert_eq(
-    pvp_elimination_score_delta(
+    @audit.pvp_elimination_score_delta(
       target_hp_before=4,
       target_hp_after=0,
       enemy_damage=false,
@@ -84,7 +84,7 @@ test "PvP score requires an enemy-caused alive-to-defeated transition" {
     0,
   )
   assert_eq(
-    pvp_elimination_score_delta(
+    @audit.pvp_elimination_score_delta(
       target_hp_before=4,
       target_hp_after=1,
       enemy_damage=true,

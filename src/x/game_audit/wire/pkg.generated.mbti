@@ -67,6 +67,9 @@ pub suberror OpenWorldAuditWireError {
   WireInvalidShape
   WireIntegerOutOfRange
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldAuditWireError::equal(Self, Self) -> Bool
+pub fn OpenWorldAuditWireError::not_equal(Self, Self) -> Bool
+pub fn OpenWorldAuditWireError::to_repr(Self) -> @debug.Repr
 
 pub suberror OpenWorldMissingSlotConflictWireError {
   MissingSlotInputTooLarge(Int, Int)
@@ -76,6 +79,9 @@ pub suberror OpenWorldMissingSlotConflictWireError {
   MissingSlotUnsupportedVersion(Int)
   MissingSlotCodecRefused(OpenWorldAuditWireError)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldMissingSlotConflictWireError::equal(Self, Self) -> Bool
+pub fn OpenWorldMissingSlotConflictWireError::not_equal(Self, Self) -> Bool
+pub fn OpenWorldMissingSlotConflictWireError::to_repr(Self) -> @debug.Repr
 
 pub suberror OpenWorldPveReplayWireError {
   OpenWorldReplayInputTooLarge(Int, Int)
@@ -88,6 +94,9 @@ pub suberror OpenWorldPveReplayWireError {
   OpenWorldReplayMalformedCbor
   OpenWorldReplayPveCodecRefused(PveReplayWireError)
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldPveReplayWireError::equal(Self, Self) -> Bool
+pub fn OpenWorldPveReplayWireError::not_equal(Self, Self) -> Bool
+pub fn OpenWorldPveReplayWireError::to_repr(Self) -> @debug.Repr
 
 pub suberror PveReplayWireError {
   PveWireInputTooLarge(Int, Int)
@@ -105,6 +114,9 @@ pub suberror PveReplayWireError {
   PveWireInvalidShape
   PveWireIntegerOutOfRange
 } derive(Eq, @debug.Debug)
+pub fn PveReplayWireError::equal(Self, Self) -> Bool
+pub fn PveReplayWireError::not_equal(Self, Self) -> Bool
+pub fn PveReplayWireError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub(all) struct InventoryCheckpointProofBundle {
@@ -115,6 +127,9 @@ pub(all) struct InventoryCheckpointProofBundle {
   attestations : Array[@attestation.SignedAttestation]
   proofs : Array[@inventory.InventoryProof]
 } derive(Eq, @debug.Debug)
+pub fn InventoryCheckpointProofBundle::equal(Self, Self) -> Bool
+pub fn InventoryCheckpointProofBundle::not_equal(Self, Self) -> Bool
+pub fn InventoryCheckpointProofBundle::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InventoryCheckpointWireError {
   InventoryCheckpointWireInputTooLarge(Int, Int)
@@ -128,6 +143,9 @@ pub(all) enum InventoryCheckpointWireError {
   InventoryCheckpointWireMalformedCbor
   InventoryCheckpointWireCodecRefused(OpenWorldAuditWireError)
 } derive(Eq, @debug.Debug)
+pub fn InventoryCheckpointWireError::equal(Self, Self) -> Bool
+pub fn InventoryCheckpointWireError::not_equal(Self, Self) -> Bool
+pub fn InventoryCheckpointWireError::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InventoryCheckpointWireLimits {
   max_bundle_bytes : Int
@@ -138,11 +156,17 @@ pub(all) struct InventoryCheckpointWireLimits {
   max_proof_steps : Int
 } derive(Eq, @debug.Debug)
 pub fn InventoryCheckpointWireLimits::default() -> Self
+pub fn InventoryCheckpointWireLimits::equal(Self, Self) -> Bool
+pub fn InventoryCheckpointWireLimits::not_equal(Self, Self) -> Bool
+pub fn InventoryCheckpointWireLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InventoryLineageProofBundle {
   listing : InventoryListingProofBundle
   lineage : @inventory.AssetLineageSlice
 } derive(Eq, @debug.Debug)
+pub fn InventoryLineageProofBundle::equal(Self, Self) -> Bool
+pub fn InventoryLineageProofBundle::not_equal(Self, Self) -> Bool
+pub fn InventoryLineageProofBundle::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InventoryLineageWireError {
   InventoryLineageWireInputTooLarge(Int, Int)
@@ -154,6 +178,9 @@ pub(all) enum InventoryLineageWireError {
   InventoryLineageWireCodecRefused(OpenWorldAuditWireError)
   InventoryLineageWireListingRefused(InventoryListingWireError)
 } derive(Eq, @debug.Debug)
+pub fn InventoryLineageWireError::equal(Self, Self) -> Bool
+pub fn InventoryLineageWireError::not_equal(Self, Self) -> Bool
+pub fn InventoryLineageWireError::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InventoryLineageWireLimits {
   max_bundle_bytes : Int
@@ -162,6 +189,9 @@ pub(all) struct InventoryLineageWireLimits {
   listing_limits : InventoryListingWireLimits
 } derive(Eq, @debug.Debug)
 pub fn InventoryLineageWireLimits::default() -> Self
+pub fn InventoryLineageWireLimits::equal(Self, Self) -> Bool
+pub fn InventoryLineageWireLimits::not_equal(Self, Self) -> Bool
+pub fn InventoryLineageWireLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InventoryListingProofBundle {
   signed_checkpoint : @checkpoint.SignedCheckpoint
@@ -171,6 +201,9 @@ pub(all) struct InventoryListingProofBundle {
   attestations : Array[@attestation.SignedAttestation]
   proof : @inventory.InventoryProof
 } derive(Eq, @debug.Debug)
+pub fn InventoryListingProofBundle::equal(Self, Self) -> Bool
+pub fn InventoryListingProofBundle::not_equal(Self, Self) -> Bool
+pub fn InventoryListingProofBundle::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InventoryListingWireError {
   InventoryWireInputTooLarge(Int, Int)
@@ -181,6 +214,9 @@ pub(all) enum InventoryListingWireError {
   InventoryWireMalformedCbor
   InventoryWireCodecRefused(OpenWorldAuditWireError)
 } derive(Eq, @debug.Debug)
+pub fn InventoryListingWireError::equal(Self, Self) -> Bool
+pub fn InventoryListingWireError::not_equal(Self, Self) -> Bool
+pub fn InventoryListingWireError::to_repr(Self) -> @debug.Repr
 
 pub(all) struct InventoryListingWireLimits {
   max_bundle_bytes : Int
@@ -190,6 +226,9 @@ pub(all) struct InventoryListingWireLimits {
   max_proof_steps : Int
 } derive(Eq, @debug.Debug)
 pub fn InventoryListingWireLimits::default() -> Self
+pub fn InventoryListingWireLimits::equal(Self, Self) -> Bool
+pub fn InventoryListingWireLimits::not_equal(Self, Self) -> Bool
+pub fn InventoryListingWireLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldAuditWireLimits {
   max_envelope_bytes : Int
@@ -200,6 +239,9 @@ pub(all) struct OpenWorldAuditWireLimits {
   max_gap_response_items : Int
 } derive(Eq, @debug.Debug)
 pub fn OpenWorldAuditWireLimits::default() -> Self
+pub fn OpenWorldAuditWireLimits::equal(Self, Self) -> Bool
+pub fn OpenWorldAuditWireLimits::not_equal(Self, Self) -> Bool
+pub fn OpenWorldAuditWireLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldMissingSlotConflictBundle {
   signed_audit_checkpoint : @checkpoint.SignedCheckpoint
@@ -215,6 +257,9 @@ pub(all) struct OpenWorldMissingSlotConflictBundle {
   source : OpenWorldMissingSlotEvidence
   missing_registration : @authmap.AuthMapAbsenceProof
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldMissingSlotConflictBundle::equal(Self, Self) -> Bool
+pub fn OpenWorldMissingSlotConflictBundle::not_equal(Self, Self) -> Bool
+pub fn OpenWorldMissingSlotConflictBundle::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldMissingSlotConflictWireLimits {
   max_bundle_bytes : Int
@@ -225,11 +270,17 @@ pub(all) struct OpenWorldMissingSlotConflictWireLimits {
   max_transparency_proof_steps : Int
 } derive(Eq, @debug.Debug)
 pub fn OpenWorldMissingSlotConflictWireLimits::default() -> Self
+pub fn OpenWorldMissingSlotConflictWireLimits::equal(Self, Self) -> Bool
+pub fn OpenWorldMissingSlotConflictWireLimits::not_equal(Self, Self) -> Bool
+pub fn OpenWorldMissingSlotConflictWireLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) enum OpenWorldMissingSlotEvidence {
   AuthoritySignedEncounter(@checkpoint.SignedCheckpoint)
   ObserverQuorum(Int, @converge_audit.Digest, Array[@open_world.SignedOpenWorldRegistrationObservation])
 } derive(Eq, @debug.Debug)
+pub fn OpenWorldMissingSlotEvidence::equal(Self, Self) -> Bool
+pub fn OpenWorldMissingSlotEvidence::not_equal(Self, Self) -> Bool
+pub fn OpenWorldMissingSlotEvidence::to_repr(Self) -> @debug.Repr
 
 pub(all) struct OpenWorldPveReplayBundle {
   signed_audit_checkpoint : @checkpoint.SignedCheckpoint
@@ -256,6 +307,9 @@ pub(all) struct OpenWorldPveReplayWireLimits {
   pve : PveReplayWireLimits
 } derive(Eq, @debug.Debug)
 pub fn OpenWorldPveReplayWireLimits::default() -> Self
+pub fn OpenWorldPveReplayWireLimits::equal(Self, Self) -> Bool
+pub fn OpenWorldPveReplayWireLimits::not_equal(Self, Self) -> Bool
+pub fn OpenWorldPveReplayWireLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PveReplayAssetEffectEvidence {
   source : @converge_audit.SignedEvent
@@ -297,6 +351,9 @@ pub(all) struct PveReplayWireLimits {
   max_values_per_operation : Int
 } derive(Eq, @debug.Debug)
 pub fn PveReplayWireLimits::default() -> Self
+pub fn PveReplayWireLimits::equal(Self, Self) -> Bool
+pub fn PveReplayWireLimits::not_equal(Self, Self) -> Bool
+pub fn PveReplayWireLimits::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpReplayBundle {
   referee_peer_id : String
@@ -329,6 +386,9 @@ pub(all) enum PvpReplayWireError {
   PvpWireMalformedCbor
   PvpWireCodecRefused(PveReplayWireError)
 } derive(Eq, @debug.Debug)
+pub fn PvpReplayWireError::equal(Self, Self) -> Bool
+pub fn PvpReplayWireError::not_equal(Self, Self) -> Bool
+pub fn PvpReplayWireError::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PvpReplayWireLimits {
   max_bundle_bytes : Int
@@ -342,8 +402,10 @@ pub(all) struct PvpReplayWireLimits {
   max_values_per_operation : Int
 } derive(Eq, @debug.Debug)
 pub fn PvpReplayWireLimits::default() -> Self
+pub fn PvpReplayWireLimits::equal(Self, Self) -> Bool
+pub fn PvpReplayWireLimits::not_equal(Self, Self) -> Bool
+pub fn PvpReplayWireLimits::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

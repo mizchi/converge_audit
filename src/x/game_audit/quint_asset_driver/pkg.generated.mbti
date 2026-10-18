@@ -27,6 +27,9 @@ pub(all) enum AssetListingNonce {
   N2
   N3
 } derive(Eq, @debug.Debug)
+pub fn AssetListingNonce::equal(Self, Self) -> Bool
+pub fn AssetListingNonce::not_equal(Self, Self) -> Bool
+pub fn AssetListingNonce::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AssetListingStatus {
   NeverListed
@@ -34,12 +37,18 @@ pub(all) enum AssetListingStatus {
   Canceled
   Quarantined
 } derive(Eq, @debug.Debug)
+pub fn AssetListingStatus::equal(Self, Self) -> Bool
+pub fn AssetListingStatus::not_equal(Self, Self) -> Bool
+pub fn AssetListingStatus::to_repr(Self) -> @debug.Repr
 
 pub(all) enum AssetOwner {
   O1
   O2
   O3
 } derive(Eq, @debug.Debug)
+pub fn AssetOwner::equal(Self, Self) -> Bool
+pub fn AssetOwner::not_equal(Self, Self) -> Bool
+pub fn AssetOwner::to_repr(Self) -> @debug.Repr
 
 pub(all) struct AssetSnapshot {
   owner : AssetOwner
@@ -62,8 +71,10 @@ pub(all) struct AssetSnapshot {
   last_lineage_parent_matches : Bool
   last_lineage_terminal_matches : Bool
 } derive(Eq, @debug.Debug)
+pub fn AssetSnapshot::equal(Self, Self) -> Bool
+pub fn AssetSnapshot::not_equal(Self, Self) -> Bool
+pub fn AssetSnapshot::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

@@ -107,7 +107,10 @@ test "Quint asset lineage registration trace matches the MoonBit audit policy" {
     state_path: ["state"],
     nondet_path: [],
   }).unwrap()
-  let summary = replay_asset_ownership(trace, new_asset_driver()).unwrap()
+  let summary = @quint_asset_driver.replay_asset_ownership(
+    trace,
+    @quint_asset_driver.new_asset_driver(),
+  ).unwrap()
   assert_eq(summary.states_checked, 3)
 }
 
@@ -118,9 +121,9 @@ test "Quint Connect detects an implementation that skips lineage retention" {
     nondet_path: [],
   }).unwrap()
   match
-    replay_asset_ownership(
+    @quint_asset_driver.replay_asset_ownership(
       trace,
-      new_asset_driver(broken_lineage_registration=true),
+      @quint_asset_driver.new_asset_driver(broken_lineage_registration=true),
     ) {
     Err(StateDiverged(2, "registerLineageSome", expected, actual)) => {
       assert_true(expected.contains("retained_anchor_version: 1"))

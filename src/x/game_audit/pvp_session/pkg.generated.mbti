@@ -39,14 +39,19 @@ pub(all) enum PvpReplayWitnessSessionRefusal {
   RefereeIsWitness
   WitnessManifestMismatch
 } derive(Eq, @debug.Debug)
+pub fn PvpReplayWitnessSessionRefusal::equal(Self, Self) -> Bool
+pub fn PvpReplayWitnessSessionRefusal::not_equal(Self, Self) -> Bool
+pub fn PvpReplayWitnessSessionRefusal::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PvpReplayWitnessSigningResult {
   PvpReplayWitnessSigned(@attestation.SignedAttestation)
   PvpReplayWitnessCheckpointMismatch
   PvpReplayWitnessRefereeMismatch
 } derive(Eq, @debug.Debug)
+pub fn PvpReplayWitnessSigningResult::equal(Self, Self) -> Bool
+pub fn PvpReplayWitnessSigningResult::not_equal(Self, Self) -> Bool
+pub fn PvpReplayWitnessSigningResult::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

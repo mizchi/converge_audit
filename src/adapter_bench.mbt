@@ -13,7 +13,7 @@ test "bench: AuditAdapter sign 1000 events" (b : @bench.T) {
   let events : Array[@types.Event] = []
   for i in 0..<1000 {
     events.push({
-      id: { peer: @types.PeerId("alice"), counter: i },
+      id: { peer: @types.PeerId("alice"), counter: i, },
       deps: [],
       lamport: i + 1,
       op: @types.RowOp::Insert(tbl="t", row_id="r" + i.to_string(), values=[
@@ -41,7 +41,7 @@ test "bench: AuditAdapter deliver 1000 events (linear)" (b : @bench.T) {
     let deps : Array[@types.EventId] = if i == 0 {
       []
     } else {
-      [{ peer: @types.PeerId("alice"), counter: i - 1 }]
+      [{ peer: @types.PeerId("alice"), counter: i - 1, }]
     }
     let dep_hashes : Array[Digest] = if i == 0 {
       []
@@ -49,7 +49,7 @@ test "bench: AuditAdapter deliver 1000 events (linear)" (b : @bench.T) {
       [signed_events[i - 1].digest]
     }
     let event : @types.Event = {
-      id: { peer: @types.PeerId("alice"), counter: i },
+      id: { peer: @types.PeerId("alice"), counter: i, },
       deps,
       lamport: i + 1,
       op: @types.RowOp::Insert(tbl="t", row_id="r" + i.to_string(), values=[
@@ -77,7 +77,7 @@ test "bench: AuditAdapter deliver 1000 events (no deps)" (b : @bench.T) {
   let signed_events : Array[SignedEvent] = []
   for i in 0..<1000 {
     let event : @types.Event = {
-      id: { peer: @types.PeerId("alice"), counter: i },
+      id: { peer: @types.PeerId("alice"), counter: i, },
       deps: [],
       lamport: i + 1,
       op: @types.RowOp::Insert(tbl="t", row_id="r" + i.to_string(), values=[
@@ -107,7 +107,7 @@ test "bench: AuditAdapter causal flush 100 buffered" (b : @bench.T) {
     let deps : Array[@types.EventId] = if i == 0 {
       []
     } else {
-      [{ peer: @types.PeerId("alice"), counter: i - 1 }]
+      [{ peer: @types.PeerId("alice"), counter: i - 1, }]
     }
     let dep_hashes : Array[Digest] = if i == 0 {
       []
@@ -115,7 +115,7 @@ test "bench: AuditAdapter causal flush 100 buffered" (b : @bench.T) {
       [signed_events[i - 1].digest]
     }
     let event : @types.Event = {
-      id: { peer: @types.PeerId("alice"), counter: i },
+      id: { peer: @types.PeerId("alice"), counter: i, },
       deps,
       lamport: i + 1,
       op: @types.RowOp::Insert(tbl="t", row_id="r" + i.to_string(), values=[

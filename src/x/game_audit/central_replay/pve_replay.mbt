@@ -320,7 +320,7 @@ fn open_pve_asset_receipts(
       Some(value) => value
       None => return Err(AssetDeltaRootMismatch)
     }
-    opened.push({ proof, replayed: replayed_effects[index] })
+    opened.push({ proof, replayed: replayed_effects[index], })
   }
   Ok(opened)
 }
@@ -387,7 +387,7 @@ fn open_decoded_pve_replay_bundle(
         Ok(value) => value
         Err(reason) => return Err(reason)
       }
-      Ok({ checkpoint, resolution, asset_receipts })
+      Ok({ checkpoint, resolution, asset_receipts, })
     }
     Refused(reason) => Err(EncounterReplayRefused(reason))
   }

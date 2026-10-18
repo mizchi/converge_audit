@@ -44,7 +44,7 @@ fn serialize_optional_target(buffer : StringBuilder, target : String?) -> Unit {
 
 ///|
 pub fn serialize_pvp_command(intent : PvpCommandIntent) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "pvp-command-v1")
   append_field(buffer, intent.match_id)
   append_int_field(buffer, intent.epoch)
@@ -58,7 +58,7 @@ pub fn serialize_pvp_command(intent : PvpCommandIntent) -> String {
 
 ///|
 pub fn serialize_pvp_command_receipt(receipt : PvpCommandReceipt) -> String {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "pvp-command-receipt-v1")
   append_field(buffer, receipt.command_digest.0)
   append_int_field(buffer, receipt.received_tick)
@@ -74,7 +74,7 @@ pub fn make_pvp_command_event(
   intent~ : PvpCommandIntent,
 ) -> @types.Event {
   {
-    id: { peer, counter },
+    id: { peer, counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(
@@ -100,7 +100,7 @@ pub fn make_pvp_command_receipt_event(
   receipt~ : PvpCommandReceipt,
 ) -> @types.Event {
   {
-    id: { peer, counter },
+    id: { peer, counter, },
     deps,
     lamport,
     op: @types.RowOp::Insert(
@@ -232,7 +232,7 @@ pub fn pvp_epoch_game_manifest(
   attack_cooldown_ticks? : Int = 0,
   objective_rule? : PvpObjectiveRule? = None,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   let extended_rules = attack_cooldown_ticks > 0 || objective_rule is Some(_)
   append_field(
     buffer,
@@ -386,7 +386,7 @@ fn pvp_public_state_root(
   attack_cooldown_ticks : Int,
   objective_rule : PvpObjectiveRule?,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   let extended_rules = attack_cooldown_ticks > 0 || objective_rule is Some(_)
   append_field(
     buffer,
@@ -472,7 +472,7 @@ fn pvp_no_asset_delta_root(
   session_id : String,
   config : PvpEpochConfig,
 ) -> @bft.Digest {
-  let buffer = StringBuilder::new()
+  let buffer = StringBuilder()
   append_field(buffer, "public-pvp-no-asset-delta-v1")
   append_field(buffer, session_id)
   append_field(buffer, config.match_id)

@@ -27,10 +27,12 @@ pub(all) enum ParticipantVote {
   ChallengeVote
   EquivocatedVote
 } derive(Eq, @debug.Debug)
+pub fn ParticipantVote::equal(Self, Self) -> Bool
 pub fn ParticipantVote::is_approval(Self) -> Bool
 pub fn ParticipantVote::is_challenge(Self) -> Bool
+pub fn ParticipantVote::not_equal(Self, Self) -> Bool
+pub fn ParticipantVote::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 
 // Traits
-

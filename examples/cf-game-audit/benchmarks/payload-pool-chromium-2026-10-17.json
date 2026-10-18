@@ -1,0 +1,60 @@
+{
+  "benchmark": "indexeddb-shared-payload-pool-v1",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36",
+  "environment": {
+    "browserContext": "ephemeral",
+    "networkIncluded": false,
+    "cryptographicVerificationIncluded": false,
+    "physicalDiskDurabilityMeasured": false
+  },
+  "warmupQueues": 8,
+  "measuredQueues": 64,
+  "poolLimits": {
+    "maxBytes": 1048576,
+    "reservedBytes": 131072,
+    "maxItems": 256,
+    "maxItemBytes": 4096
+  },
+  "maxQueues": 128,
+  "full": {
+    "usedBytes": 524288,
+    "itemCount": 128,
+    "queueCount": 64,
+    "revision": 232
+  },
+  "timings": {
+    "registerQueue": {
+      "samples": 64,
+      "p50Ms": 0.20000004768371582,
+      "p95Ms": 0.3000001907348633
+    },
+    "append4096Bytes": {
+      "samples": 128,
+      "p50Ms": 0.20000004768371582,
+      "p95Ms": 0.3000001907348633
+    },
+    "prune8192Bytes": {
+      "samples": 64,
+      "p50Ms": 0.2999999523162842,
+      "p95Ms": 0.9000000953674316
+    },
+    "releaseMetadata": {
+      "samples": 64,
+      "p50Ms": 0.20000004768371582,
+      "p95Ms": 0.39999985694885254
+    }
+  },
+  "reopenAndValidateMs": 4,
+  "afterRelease": {
+    "usedBytes": 0,
+    "itemCount": 0,
+    "queueCount": 0,
+    "revision": 360
+  },
+  "browserVersion": "151.0.7922.34",
+  "host": {
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  }
+}

@@ -5,16 +5,21 @@ fn signing_anchor_envelope_for_transport_test(
   log_session_id : String,
   epoch : Int,
   previous_checkpoint : @bft.Digest,
-  anchor : OpenWorldObserverSigningAnchor,
-) -> OpenWorldObserverSigningAnchorEnvelope raise Error {
+  anchor : @open_world.OpenWorldObserverSigningAnchor,
+) -> @open_world.OpenWorldObserverSigningAnchorEnvelope raise Error {
   let anchor_map = @authmap.AuthenticatedMap::new(hasher)
-  let key = open_world_observer_signing_anchor_key(anchor)
-  ignore(anchor_map.put(key, open_world_observer_signing_anchor_value(anchor)))
+  let key = @open_world.open_world_observer_signing_anchor_key(anchor)
+  ignore(
+    anchor_map.put(
+      key,
+      @open_world.open_world_observer_signing_anchor_value(anchor),
+    ),
+  )
   let signed_checkpoint = @checkpoint.sign_checkpoint(hasher, authority, {
     session_id: log_session_id,
     epoch,
     previous_checkpoint,
-    manifest_digest: open_world_observer_signing_anchor_log_manifest(
+    manifest_digest: @open_world.open_world_observer_signing_anchor_log_manifest(
       hasher,
       log_session_id~,
     ),
@@ -27,7 +32,7 @@ fn signing_anchor_envelope_for_transport_test(
     Some(proof) => proof
     None => fail("expected observer signing anchor membership proof")
   }
-  { signed_checkpoint, anchor, membership_proof }
+  { signed_checkpoint, anchor, membership_proof, }
 }
 
 ///|
@@ -36,10 +41,10 @@ fn open_anchor_envelope_for_transport_test(
   verifier : &@bft.Verifier,
   authority : &@bft.Signer,
   log_session_id : String,
-  envelope : OpenWorldObserverSigningAnchorEnvelope,
-) -> PublishedOpenWorldObserverSigningAnchor raise Error {
+  envelope : @open_world.OpenWorldObserverSigningAnchorEnvelope,
+) -> @open_world.PublishedOpenWorldObserverSigningAnchor raise Error {
   match
-    open_open_world_observer_signing_anchor_envelope(
+    @open_world.open_open_world_observer_signing_anchor_envelope(
       hasher,
       verifier,
       authority.public_key(),
@@ -58,7 +63,7 @@ test "wire anchor envelope opens only after authority and membership verificatio
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("anchor-envelope-authority")
   let session = "world-1:anchor-envelope"
-  let anchor = OpenWorldObserverSigningAnchor::{
+  let anchor = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("observer-root-7"),
@@ -73,7 +78,7 @@ test "wire anchor envelope opens only after authority and membership verificatio
     anchor,
   )
   match
-    open_open_world_observer_signing_anchor_envelope(
+    @open_world.open_open_world_observer_signing_anchor_envelope(
       hasher,
       verifier,
       authority.public_key(),
@@ -90,15 +95,15 @@ test "wire anchor envelope opens only after authority and membership verificatio
       fail("expected valid anchor envelope to open")
   }
   assert_eq(
-    open_open_world_observer_signing_anchor_envelope(
+    @open_world.open_open_world_observer_signing_anchor_envelope(
       hasher,
       verifier,
       @bft.PublicKey("another-authority"),
       log_session_id=session,
       envelope,
     ),
-    OpenWorldObserverSigningAnchorEnvelopeOpenResult::ObserverSigningAnchorEnvelopeRefused(
-      OpenWorldObserverSigningAnchorEnvelopeRefusal::ObserverSigningAnchorEnvelopeCheckpointRefused(
+    @open_world.OpenWorldObserverSigningAnchorEnvelopeOpenResult::ObserverSigningAnchorEnvelopeRefused(
+      @open_world.OpenWorldObserverSigningAnchorEnvelopeRefusal::ObserverSigningAnchorEnvelopeCheckpointRefused(
         @checkpoint.CheckpointVerification::WrongAuthority,
       ),
     ),
@@ -111,7 +116,7 @@ test "wire anchor envelope rejects checkpoint and membership tampering" {
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("anchor-envelope-tamper-authority")
   let session = "world-1:anchor-envelope-tamper"
-  let anchor = OpenWorldObserverSigningAnchor::{
+  let anchor = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("observer-root-8"),
@@ -125,7 +130,7 @@ test "wire anchor envelope rejects checkpoint and membership tampering" {
     @bft.Digest("anchor-envelope-7"),
     anchor,
   )
-  let tampered_checkpoint : OpenWorldObserverSigningAnchorEnvelope = {
+  let tampered_checkpoint : @open_world.OpenWorldObserverSigningAnchorEnvelope = {
     ..envelope,
     signed_checkpoint: {
       ..envelope.signed_checkpoint,
@@ -133,34 +138,34 @@ test "wire anchor envelope rejects checkpoint and membership tampering" {
     },
   }
   assert_eq(
-    open_open_world_observer_signing_anchor_envelope(
+    @open_world.open_open_world_observer_signing_anchor_envelope(
       hasher,
       verifier,
       authority.public_key(),
       log_session_id=session,
       tampered_checkpoint,
     ),
-    OpenWorldObserverSigningAnchorEnvelopeOpenResult::ObserverSigningAnchorEnvelopeRefused(
-      OpenWorldObserverSigningAnchorEnvelopeRefusal::ObserverSigningAnchorEnvelopeCheckpointRefused(
+    @open_world.OpenWorldObserverSigningAnchorEnvelopeOpenResult::ObserverSigningAnchorEnvelopeRefused(
+      @open_world.OpenWorldObserverSigningAnchorEnvelopeRefusal::ObserverSigningAnchorEnvelopeCheckpointRefused(
         @checkpoint.CheckpointVerification::InvalidSignature,
       ),
     ),
   )
-  let tampered_anchor : OpenWorldObserverSigningAnchorEnvelope = {
+  let tampered_anchor : @open_world.OpenWorldObserverSigningAnchorEnvelope = {
     ..envelope,
-    anchor: { ..anchor, size: 9 },
+    anchor: { ..anchor, size: 9, },
   }
   assert_eq(
-    open_open_world_observer_signing_anchor_envelope(
+    @open_world.open_open_world_observer_signing_anchor_envelope(
       hasher,
       verifier,
       authority.public_key(),
       log_session_id=session,
       tampered_anchor,
     ),
-    OpenWorldObserverSigningAnchorEnvelopeOpenResult::ObserverSigningAnchorEnvelopeRefused(
-      OpenWorldObserverSigningAnchorEnvelopeRefusal::ObserverSigningAnchorEnvelopePublicationRefused(
-        OpenWorldObserverSigningAnchorPublicationRefusal::ObserverSigningAnchorMembershipProofInvalid,
+    @open_world.OpenWorldObserverSigningAnchorEnvelopeOpenResult::ObserverSigningAnchorEnvelopeRefused(
+      @open_world.OpenWorldObserverSigningAnchorEnvelopeRefusal::ObserverSigningAnchorEnvelopePublicationRefused(
+        @open_world.OpenWorldObserverSigningAnchorPublicationRefusal::ObserverSigningAnchorMembershipProofInvalid,
       ),
     ),
   )
@@ -172,7 +177,7 @@ test "in-memory gap transport recovers an authenticated chain page by page" {
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("anchor-gap-authority")
   let session = "world-1:anchor-gap"
-  let base = OpenWorldObserverSigningAnchor::{
+  let base = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("gap-root-10"),
@@ -195,7 +200,7 @@ test "in-memory gap transport recovers an authenticated chain page by page" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("gap-root-11"), size: 11 },
+    { ..base, root: @bft.Digest("gap-root-11"), size: 11, },
   )
   let head_11 = open_anchor_envelope_for_transport_test(
     hasher, verifier, authority, session, envelope_11,
@@ -206,7 +211,7 @@ test "in-memory gap transport recovers an authenticated chain page by page" {
     session,
     12,
     head_11.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("gap-root-12"), size: 12 },
+    { ..base, root: @bft.Digest("gap-root-12"), size: 12, },
   )
   let head_12 = open_anchor_envelope_for_transport_test(
     hasher, verifier, authority, session, envelope_12,
@@ -217,12 +222,15 @@ test "in-memory gap transport recovers an authenticated chain page by page" {
     session,
     13,
     head_12.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("gap-root-13"), size: 13 },
+    { ..base, root: @bft.Digest("gap-root-13"), size: 13, },
   )
-  let transport = OpenWorldInMemoryObserverSigningAnchorGapTransport::new([
-    envelope_13, envelope_11, envelope_12,
-  ])
-  let tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_10)
+  let transport = @open_world.OpenWorldInMemoryObserverSigningAnchorGapTransport::new([
+      envelope_13, envelope_11, envelope_12,
+    ],
+  )
+  let tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_10,
+  )
   assert_eq(
     tracker.recover_gap(
       hasher,
@@ -231,7 +239,7 @@ test "in-memory gap transport recovers an authenticated chain page by page" {
       target_epoch=13,
       max_items=2,
     ),
-    OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryAdvanced(
+    @open_world.OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryAdvanced(
       2, true,
     ),
   )
@@ -244,7 +252,7 @@ test "in-memory gap transport recovers an authenticated chain page by page" {
       target_epoch=13,
       max_items=2,
     ),
-    OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryAdvanced(
+    @open_world.OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryAdvanced(
       1, false,
     ),
   )
@@ -254,14 +262,14 @@ test "in-memory gap transport recovers an authenticated chain page by page" {
 
 ///|
 struct FixedObserverSigningAnchorGapTransport {
-  result : OpenWorldObserverSigningAnchorGapFetchResult
+  result : @open_world.OpenWorldObserverSigningAnchorGapFetchResult
 }
 
 ///|
 impl OpenWorldObserverSigningAnchorGapTransport for FixedObserverSigningAnchorGapTransport with fn fetch(
   self,
   _request,
-) -> OpenWorldObserverSigningAnchorGapFetchResult {
+) -> @open_world.OpenWorldObserverSigningAnchorGapFetchResult {
   self.result
 }
 
@@ -271,7 +279,7 @@ test "gap recovery authenticates the complete page before mutating the tracker" 
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("anchor-gap-atomic-authority")
   let session = "world-1:anchor-gap-atomic"
-  let base = OpenWorldObserverSigningAnchor::{
+  let base = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("atomic-root-10"),
@@ -294,7 +302,7 @@ test "gap recovery authenticates the complete page before mutating the tracker" 
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("atomic-root-11"), size: 11 },
+    { ..base, root: @bft.Digest("atomic-root-11"), size: 11, },
   )
   let head_11 = open_anchor_envelope_for_transport_test(
     hasher, verifier, authority, session, envelope_11,
@@ -305,9 +313,9 @@ test "gap recovery authenticates the complete page before mutating the tracker" 
     session,
     12,
     head_11.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("atomic-root-12"), size: 12 },
+    { ..base, root: @bft.Digest("atomic-root-12"), size: 12, },
   )
-  let invalid_12 : OpenWorldObserverSigningAnchorEnvelope = {
+  let invalid_12 : @open_world.OpenWorldObserverSigningAnchorEnvelope = {
     ..envelope_12,
     signed_checkpoint: {
       ..envelope_12.signed_checkpoint,
@@ -319,7 +327,9 @@ test "gap recovery authenticates the complete page before mutating the tracker" 
       envelopes: [envelope_11, invalid_12],
     }),
   }
-  let tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_10)
+  let tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_10,
+  )
   assert_eq(
     tracker.recover_gap(
       hasher,
@@ -328,9 +338,9 @@ test "gap recovery authenticates the complete page before mutating the tracker" 
       target_epoch=12,
       max_items=2,
     ),
-    OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryEnvelopeRefused(
+    @open_world.OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryEnvelopeRefused(
       1,
-      OpenWorldObserverSigningAnchorEnvelopeRefusal::ObserverSigningAnchorEnvelopeCheckpointRefused(
+      @open_world.OpenWorldObserverSigningAnchorEnvelopeRefusal::ObserverSigningAnchorEnvelopeCheckpointRefused(
         @checkpoint.CheckpointVerification::InvalidSignature,
       ),
     ),
@@ -343,7 +353,7 @@ test "gap recovery authenticates the complete page before mutating the tracker" 
     session,
     12,
     @bft.Digest("wrong-atomic-checkpoint-11"),
-    { ..base, root: @bft.Digest("wrong-atomic-root-12"), size: 12 },
+    { ..base, root: @bft.Digest("wrong-atomic-root-12"), size: 12, },
   )
   let invalid_chain = FixedObserverSigningAnchorGapTransport::{
     result: ObserverSigningAnchorGapFetched({
@@ -376,7 +386,7 @@ test "gap recovery rejects invalid requests and oversized peer responses" {
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("anchor-gap-bounds-authority")
   let session = "world-1:anchor-gap-bounds"
-  let base = OpenWorldObserverSigningAnchor::{
+  let base = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("bounds-root-10"),
@@ -399,14 +409,16 @@ test "gap recovery rejects invalid requests and oversized peer responses" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("bounds-root-11"), size: 11 },
+    { ..base, root: @bft.Digest("bounds-root-11"), size: 11, },
   )
   let oversized = FixedObserverSigningAnchorGapTransport::{
     result: ObserverSigningAnchorGapFetched({
       envelopes: [envelope_11, envelope_11],
     }),
   }
-  let tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_10)
+  let tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_10,
+  )
   assert_eq(
     tracker.recover_gap(
       hasher,
@@ -415,7 +427,7 @@ test "gap recovery rejects invalid requests and oversized peer responses" {
       target_epoch=11,
       max_items=1,
     ),
-    OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryMalformedResponse,
+    @open_world.OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryMalformedResponse,
   )
   assert_eq(
     tracker.recover_gap(
@@ -425,7 +437,7 @@ test "gap recovery rejects invalid requests and oversized peer responses" {
       target_epoch=10,
       max_items=1,
     ),
-    OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryInvalidRequest,
+    @open_world.OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoveryInvalidRequest,
   )
   assert_eq(tracker.current_epoch(), 10)
   assert_eq(tracker.observed_checkpoint_count(), 1)
@@ -437,7 +449,7 @@ test "gap source ambiguity is not mistaken for authority fork evidence" {
   let verifier = @bft.MockVerifier::new()
   let authority = @bft.MockSigner::new("anchor-gap-ambiguous-authority")
   let session = "world-1:anchor-gap-ambiguous"
-  let base = OpenWorldObserverSigningAnchor::{
+  let base = @open_world.OpenWorldObserverSigningAnchor::{
     observer_id: "observer-1",
     signer_key: @bft.PublicKey("observer-key-1"),
     root: @bft.Digest("ambiguous-root-10"),
@@ -460,7 +472,7 @@ test "gap source ambiguity is not mistaken for authority fork evidence" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("ambiguous-left-root-11"), size: 11 },
+    { ..base, root: @bft.Digest("ambiguous-left-root-11"), size: 11, },
   )
   let right_11 = signing_anchor_envelope_for_transport_test(
     hasher,
@@ -468,12 +480,15 @@ test "gap source ambiguity is not mistaken for authority fork evidence" {
     session,
     11,
     head_10.publication_checkpoint_digest(),
-    { ..base, root: @bft.Digest("ambiguous-right-root-11"), size: 11 },
+    { ..base, root: @bft.Digest("ambiguous-right-root-11"), size: 11, },
   )
-  let transport = OpenWorldInMemoryObserverSigningAnchorGapTransport::new([
-    left_11, right_11,
-  ])
-  let tracker = OpenWorldObserverSigningAnchorHeadTracker::new(head_10)
+  let transport = @open_world.OpenWorldInMemoryObserverSigningAnchorGapTransport::new([
+      left_11, right_11,
+    ],
+  )
+  let tracker = @open_world.OpenWorldObserverSigningAnchorHeadTracker::new(
+    head_10,
+  )
   assert_eq(
     tracker.recover_gap(
       hasher,
@@ -482,7 +497,7 @@ test "gap source ambiguity is not mistaken for authority fork evidence" {
       target_epoch=11,
       max_items=2,
     ),
-    OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoverySourceAmbiguous(
+    @open_world.OpenWorldObserverSigningAnchorGapRecoveryResult::ObserverSigningAnchorGapRecoverySourceAmbiguous(
       2,
     ),
   )

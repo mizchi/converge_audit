@@ -1,7 +1,7 @@
 ///|
 test "open-world transparency requires every publication capability" {
   assert_true(
-    open_world_audit_transparency_allowed(
+    @audit.open_world_audit_transparency_allowed(
       trusted_publication_boundary=true,
       audit_checkpoint_authenticated=true,
       seal_checkpoint_authenticated=true,
@@ -11,7 +11,7 @@ test "open-world transparency requires every publication capability" {
     ),
   )
   assert_false(
-    open_world_audit_transparency_allowed(
+    @audit.open_world_audit_transparency_allowed(
       trusted_publication_boundary=false,
       audit_checkpoint_authenticated=true,
       seal_checkpoint_authenticated=true,
@@ -21,7 +21,7 @@ test "open-world transparency requires every publication capability" {
     ),
   )
   assert_false(
-    open_world_audit_transparency_allowed(
+    @audit.open_world_audit_transparency_allowed(
       trusted_publication_boundary=true,
       audit_checkpoint_authenticated=true,
       seal_checkpoint_authenticated=true,
